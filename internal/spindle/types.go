@@ -1,0 +1,91 @@
+package spindle
+
+import "time"
+
+// StatusResponse mirrors the payload returned by /api/status.
+type StatusResponse struct {
+	Running      bool               `json:"running"`
+	PID          int                `json:"pid"`
+	QueueDBPath  string             `json:"queueDbPath"`
+	LockFilePath string             `json:"lockFilePath"`
+	Workflow     WorkflowStatus     `json:"workflow"`
+	Dependencies []DependencyStatus `json:"dependencies"`
+}
+
+// WorkflowStatus aggregates queue stats and recent activity.
+type WorkflowStatus struct {
+	Running     bool           `json:"running"`
+	QueueStats  map[string]int `json:"queueStats"`
+	LastError   string         `json:"lastError"`
+	LastItem    *QueueItem     `json:"lastItem"`
+	StageHealth []StageHealth  `json:"stageHealth"`
+}
+
+// StageHealth reflects readiness indicators for workflow components.
+type StageHealth struct {
+	Name   string `json:"name"`
+	Ready  bool   `json:"ready"`
+	Detail string `json:"detail"`
+}
+
+// DependencyStatus reports an external dependency health check.
+type DependencyStatus struct {
+	Name        string `json:"name"`
+	Command     string `json:"command"`
+	Description string `json:"description"`
+	Optional    bool   `json:"optional"`
+	Available   bool   `json:"available"`
+	Detail      string `json:"detail"`
+}
+
+// QueueListResponse mirrors /api/queue.
+type QueueListResponse struct {
+	Items []QueueItem `json:"items"`
+}
+
+// QueueItem describes a queue entry in transport-friendly form.
+type QueueItem struct {
+	ID                int64         `json:"id"`
+	DiscTitle         string        `json:"discTitle"`
+	SourcePath        string        `json:"sourcePath"`
+	Status            string        `json:"status"`
+	ProcessingLane    string        `json:"processingLane"`
+	Progress          QueueProgress `json:"progress"`
+	ErrorMessage      string        `json:"errorMessage"`
+	CreatedAt         string        `json:"createdAt"`
+	UpdatedAt         string        `json:"updatedAt"`
+	DiscFingerprint   string        `json:"discFingerprint"`
+	RippedFile        string        `json:"rippedFile"`
+	EncodedFile       string        `json:"encodedFile"`
+	FinalFile         string        `json:"finalFile"`
+	BackgroundLogPath string        `json:"backgroundLogPath"`
+	NeedsReview       bool          `json:"needsReview"`
+	ReviewReason      string        `json:"reviewReason"`
+}
+
+// QueueProgress tracks stage progress for an item.
+type QueueProgress struct {
+	Stage   string  `json:"stage"`
+	Percent float64 `json:"percent"`
+	Message string  `json:"message"`
+}
+
+// ParsedCreatedAt returns the parsed CreatedAt timestamp.
+func (q QueueItem) ParsedCreatedAt() time.Time {
+	return parseTime(q.CreatedAt)
+}
+
+// ParsedUpdatedAt returns the parsed UpdatedAt timestamp.
+func (q QueueItem) ParsedUpdatedAt() time.Time {
+	return parseTime(q.UpdatedAt)
+}
+
+func parseTime(value string) time.Time {
+	layouts := []string{time.RFC3339Nano, time.RFC3339}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, value); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
