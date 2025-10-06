@@ -125,10 +125,13 @@ type viewModel struct {
 }
 
 func newViewModel(app *tview.Application, opts Options) *viewModel {
+	statusBar := tview.NewTextView().SetDynamicColors(true).SetWrap(true).SetWordWrap(true)
+	statusBar.SetTextAlign(tview.AlignLeft)
+
 	vm := &viewModel{
 		app:          app,
 		options:      opts,
-		statusBar:    tview.NewTextView().SetDynamicColors(true),
+		statusBar:    statusBar,
 		filterBar:    tview.NewTextView().SetDynamicColors(true),
 		table:        tview.NewTable(),
 		detail:       tview.NewTextView().SetDynamicColors(true).SetWrap(true),
@@ -159,7 +162,7 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 
 func (vm *viewModel) buildMainLayout() tview.Primitive {
 	headers := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(vm.statusBar, 1, 0, false).
+		AddItem(vm.statusBar, 2, 0, false).
 		AddItem(vm.filterBar, 1, 0, false)
 
 	body := tview.NewFlex().SetDirection(tview.FlexColumn).
@@ -187,6 +190,14 @@ func (vm *viewModel) update(snapshot state.Snapshot) {
 
 func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 	if !snapshot.HasStatus {
+		if snapshot.LastError != nil {
+			last := "soon"
+			if !snapshot.LastUpdated.IsZero() {
+				last = snapshot.LastUpdated.Format("15:04:05")
+			}
+			vm.statusBar.SetText(fmt.Sprintf("[red]spindle unavailable[-]\nRetrying (last attempt %s)", last))
+			return
+		}
 		vm.statusBar.SetText("[yellow]waiting for spindle status…[-]")
 		return
 	}
