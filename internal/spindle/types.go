@@ -2,6 +2,8 @@ package spindle
 
 import "time"
 
+const spindleTimestampLayout = "2006-01-02 15:04:05"
+
 // StatusResponse mirrors the payload returned by /api/status.
 type StatusResponse struct {
 	Running      bool               `json:"running"`
@@ -81,11 +83,16 @@ func (q QueueItem) ParsedUpdatedAt() time.Time {
 }
 
 func parseTime(value string) time.Time {
-	layouts := []string{time.RFC3339Nano, time.RFC3339}
-	for _, layout := range layouts {
+	if value == "" {
+		return time.Time{}
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
 		if t, err := time.Parse(layout, value); err == nil {
 			return t
 		}
+	}
+	if t, err := time.ParseInLocation(spindleTimestampLayout, value, time.Local); err == nil {
+		return t
 	}
 	return time.Time{}
 }
