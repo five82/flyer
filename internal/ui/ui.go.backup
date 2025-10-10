@@ -252,17 +252,11 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 }
 
 func (vm *viewModel) buildMainLayout() tview.Primitive {
-	// Create padding elements for the header (1 character padding on each side)
-	paddingLeft := tview.NewBox().SetBackgroundColor(tcell.ColorDefault)
-	paddingRight := tview.NewBox().SetBackgroundColor(tcell.ColorDefault)
-
-	// Create header with k9s-style proportions: padding (1), Status (30%), Commands (40%), Logo (30%), padding (1)
+	// Create header with k9s-style proportions: Status (40%), Commands (35%), Logo (25%)
 	vm.header = tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(paddingLeft, 1, 0, false).     // Left padding of 1 character
-		AddItem(vm.statusView, 0, 30, false).  // Status ~30% width
-		AddItem(vm.cmdView, 0, 40, false).     // Commands ~40% width
-		AddItem(vm.logoView, 0, 30, false).    // Logo ~30% width
-		AddItem(paddingRight, 1, 0, false)     // Right padding of 1 character
+		AddItem(vm.statusView, 0, 40, false).   // Status ~40% width
+		AddItem(vm.cmdView, 0, 35, false).      // Commands ~35% width
+		AddItem(vm.logoView, 0, 25, false).     // Logo ~25% width
 
 	// Create main content pages for different views
 	vm.mainContent = tview.NewPages()
@@ -314,6 +308,7 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 		fmt.Sprintf("[darkorange]Review[-]: [dodgerblue]%d[-]", stats["review"]),
 		fmt.Sprintf("[greenyellow]Completed[-]: [dodgerblue]%d[-]", stats["completed"]),
 	}
+	summary := strings.Join(counts, "  ")
 
 	// k9s-style daemon status with colors
 	daemonStatus := "[red]no[-]"
@@ -321,10 +316,10 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 		daemonStatus = "[greenyellow]yes[-]"
 	}
 
-	statusText := fmt.Sprintf("[fuchsia]Daemon:[-] %s\n[fuchsia]PID:[-] [dodgerblue]%d[-]\n[fuchsia]Updated:[-] [cadetblue]%s[-]\n%s",
-		daemonStatus, snapshot.Status.PID, snapshot.LastUpdated.Format("15:04:05"), strings.Join(counts, "\n"))
+	statusText := fmt.Sprintf("[fuchsia]Daemon:[-] %s  [fuchsia]PID:[-] [dodgerblue]%d[-]  [fuchsia]Updated:[-] [cadetblue]%s[-]\n%s",
+		daemonStatus, snapshot.Status.PID, snapshot.LastUpdated.Format("15:04:05"), summary)
 	if snapshot.LastError != nil {
-		statusText += fmt.Sprintf("\n[orangered]Error:[-] [red]%v[-]", snapshot.LastError)
+		statusText += fmt.Sprintf("  [orangered]Error:[-] [red]%v[-]", snapshot.LastError)
 	}
 	vm.statusView.SetText(statusText)
 }
