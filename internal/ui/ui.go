@@ -180,6 +180,14 @@ type viewModel struct {
 }
 
 func newViewModel(app *tview.Application, opts Options) *viewModel {
+	// Override focus borders to use single lines instead of double lines
+	tview.Borders.HorizontalFocus = tview.Borders.Horizontal
+	tview.Borders.VerticalFocus = tview.Borders.Vertical
+	tview.Borders.TopLeftFocus = tview.Borders.TopLeft
+	tview.Borders.TopRightFocus = tview.Borders.TopRight
+	tview.Borders.BottomLeftFocus = tview.Borders.BottomLeft
+	tview.Borders.BottomRightFocus = tview.Borders.BottomRight
+
 	// Header components (k9s-style)
 	statusView := tview.NewTextView().SetDynamicColors(true).SetWrap(true)
 	statusView.SetTextAlign(tview.AlignLeft)
@@ -249,22 +257,22 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 
 	// Main content components (k9s-style)
 	table := tview.NewTable()
-	table.SetBorder(true).SetTitle(" [aqua]Queue[-] ")
+	table.SetBorder(true).SetTitle(" [lightskyblue]Queue[-] ")
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
 	table.SetBackgroundColor(tcell.ColorBlack)
 	// k9s-style border color
-	table.SetBorderColor(tcell.ColorDodgerBlue)
+	table.SetBorderColor(tcell.ColorLightSkyBlue)
 
 	detail := tview.NewTextView().SetDynamicColors(true).SetWrap(true)
-	detail.SetBorder(true).SetTitle(" [aqua]Details[-] ")
+	detail.SetBorder(true).SetTitle(" [lightskyblue]Details[-] ")
 	detail.SetBackgroundColor(tcell.ColorBlack)
-	detail.SetBorderColor(tcell.ColorDodgerBlue)
+	detail.SetBorderColor(tcell.ColorLightSkyBlue)
 
 	logView := tview.NewTextView().SetDynamicColors(true)
-	logView.SetBorder(true).SetTitle(" [aqua]Daemon Log[-] ")
+	logView.SetBorder(true).SetTitle(" [lightskyblue]Daemon Log[-] ")
 	logView.SetBackgroundColor(tcell.ColorBlack)
-	logView.SetBorderColor(tcell.ColorDodgerBlue)
+	logView.SetBorderColor(tcell.ColorLightSkyBlue)
 	logView.ScrollToEnd()
 
 	vm := &viewModel{
@@ -285,21 +293,21 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 
 	// k9s-style focus handling to highlight active component
 	vm.table.SetFocusFunc(func() {
-		vm.table.SetBorderColor(tcell.ColorAqua)
-		vm.detail.SetBorderColor(tcell.ColorDodgerBlue)
-		vm.logView.SetBorderColor(tcell.ColorDodgerBlue)
+		vm.table.SetBorderColor(tcell.ColorLightSkyBlue)
+		vm.detail.SetBorderColor(tcell.ColorLightSkyBlue)
+		vm.logView.SetBorderColor(tcell.ColorLightSkyBlue)
 	})
 
 	vm.detail.SetFocusFunc(func() {
-		vm.table.SetBorderColor(tcell.ColorDodgerBlue)
-		vm.detail.SetBorderColor(tcell.ColorAqua)
-		vm.logView.SetBorderColor(tcell.ColorDodgerBlue)
+		vm.table.SetBorderColor(tcell.ColorLightSkyBlue)
+		vm.detail.SetBorderColor(tcell.ColorLightSkyBlue)
+		vm.logView.SetBorderColor(tcell.ColorLightSkyBlue)
 	})
 
 	vm.logView.SetFocusFunc(func() {
-		vm.table.SetBorderColor(tcell.ColorDodgerBlue)
-		vm.detail.SetBorderColor(tcell.ColorDodgerBlue)
-		vm.logView.SetBorderColor(tcell.ColorAqua)
+		vm.table.SetBorderColor(tcell.ColorLightSkyBlue)
+		vm.detail.SetBorderColor(tcell.ColorLightSkyBlue)
+		vm.logView.SetBorderColor(tcell.ColorLightSkyBlue)
 	})
 
 	vm.root = tview.NewPages()
@@ -532,7 +540,7 @@ func (vm *viewModel) showItemLogsView() {
 	vm.mainContent.SwitchToPage("logs")
 	// Force item log mode
 	vm.logMode = logSourceItem
-	vm.logView.SetTitle(" [aqua]Item Log[-] ")
+	vm.logView.SetTitle(" [lightskyblue]Item Log[-] ")
 	vm.lastLogPath = ""
 	vm.refreshLogs(true)
 	vm.app.SetFocus(vm.logView)
@@ -543,7 +551,7 @@ func (vm *viewModel) showDaemonLogsView() {
 	vm.mainContent.SwitchToPage("logs")
 	// Force daemon log mode
 	vm.logMode = logSourceDaemon
-	vm.logView.SetTitle(" [aqua]Daemon Log[-] ")
+	vm.logView.SetTitle(" [lightskyblue]Daemon Log[-] ")
 	vm.lastLogPath = ""
 	vm.refreshLogs(true)
 	vm.app.SetFocus(vm.logView)
@@ -649,10 +657,10 @@ func (vm *viewModel) toggleFocus() {
 func (vm *viewModel) toggleLogSource() {
 	if vm.logMode == logSourceDaemon {
 		vm.logMode = logSourceItem
-		vm.logView.SetTitle(" [aqua]Item Log[-] ")
+		vm.logView.SetTitle(" [lightskyblue]Item Log[-] ")
 	} else {
 		vm.logMode = logSourceDaemon
-		vm.logView.SetTitle(" [aqua]Daemon Log[-] ")
+		vm.logView.SetTitle(" [lightskyblue]Daemon Log[-] ")
 	}
 	vm.lastLogPath = ""
 	// Always show logs view when toggling log source
