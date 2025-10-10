@@ -23,27 +23,27 @@ func TestColorizeLine(t *testing.T) {
 		{
 			name:     "detail line",
 			input:    "    - Progress: 50%",
-			expected: "    [white]Progress: 50%[-]",
+			expected: "    [white:black]Progress: 50%[-:-]",
 		},
 		{
 			name:     "info log with component",
 			input:    "2025-10-08 21:01:05 INFO [encoder] – starting encoding",
-			expected: "[#666666]2025-10-08 21:01:05[-] [green:b]INFO[-] [#6495ED][encoder][-] [#AAAAAA]–[-] starting encoding",
+			expected: "[#808080:black]2025-10-08 21:01:05[-:-] [#5FD75F:black:b]INFO[-:-] [#87AFFF:black][encoder][-:-] [#666666:black]–[-:-] starting encoding",
 		},
 		{
 			name:     "error log with item",
 			input:    "2025-10-08 20:05:49 ERROR Item #5 (encoder) – encoding failed",
-			expected: "[#666666]2025-10-08 20:05:49[-] [red:b]ERROR[-] [#DA70D6]Item #5 (encoder)[-] [#AAAAAA]–[-] encoding failed",
+			expected: "[#808080:black]2025-10-08 20:05:49[-:-] [#FF6B6B:black:b]ERROR[-:-] [#D7AFFF:black]Item #5 (encoder)[-:-] [#666666:black]–[-:-] encoding failed",
 		},
 		{
 			name:     "warn log with component and item",
 			input:    "2025-10-08 21:01:05 WARN [encoder] Item #5 (encoder) – slow progress",
-			expected: "[#666666]2025-10-08 21:01:05[-] [yellow:b]WARN[-] [#6495ED][encoder][-] [#DA70D6]Item #5 (encoder)[-] [#AAAAAA]–[-] slow progress",
+			expected: "[#808080:black]2025-10-08 21:01:05[-:-] [#FFD700:black:b]WARN[-:-] [#87AFFF:black][encoder][-:-] [#D7AFFF:black]Item #5 (encoder)[-:-] [#666666:black]–[-:-] slow progress",
 		},
 		{
 			name:     "debug log",
 			input:    "2025-10-08 21:01:05 DEBUG – debug message",
-			expected: "[#666666]2025-10-08 21:01:05[-] [cyan:b]DEBUG[-] [#AAAAAA]–[-] debug message",
+			expected: "[#808080:black]2025-10-08 21:01:05[-:-] [#87CEEB:black:b]DEBUG[-:-] [#666666:black]–[-:-] debug message",
 		},
 	}
 
@@ -65,9 +65,9 @@ func TestColorizeLines(t *testing.T) {
 	}
 
 	expected := []string{
-		"[#666666]2025-10-08 21:01:05[-] [green:b]INFO[-] [#6495ED][encoder][-] [#AAAAAA]–[-] starting encoding",
-		"    [white]Progress: 50%[-]",
-		"[#666666]2025-10-08 21:01:06[-] [red:b]ERROR[-] [#DA70D6]Item #5 (encoder)[-] [#AAAAAA]–[-] encoding failed",
+		"[#808080:black]2025-10-08 21:01:05[-:-] [#5FD75F:black:b]INFO[-:-] [#87AFFF:black][encoder][-:-] [#666666:black]–[-:-] starting encoding",
+		"    [white:black]Progress: 50%[-:-]",
+		"[#808080:black]2025-10-08 21:01:06[-:-] [#FF6B6B:black:b]ERROR[-:-] [#D7AFFF:black]Item #5 (encoder)[-:-] [#666666:black]–[-:-] encoding failed",
 	}
 
 	result := ColorizeLines(input)
