@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -28,6 +29,46 @@ const (
 	maxLogLines       = 400
 	defaultUIInterval = time.Second
 )
+
+// createLogo generates the flyer logo using figlet or fallback
+func createLogo() string {
+	// Try to use figlet for ASCII art
+	cmd := exec.Command("figlet", "-f", "slant", "flyer")
+	output, err := cmd.Output()
+	if err == nil && len(output) > 0 {
+		// Apply blue color to figlet output
+		return applyBlueColor(string(output))
+	}
+
+	// Fallback: simple yellow FLYER text
+	return "[yellow]FLYER[-]"
+}
+
+// applyBlueColor applies blue color to text using tview color tags
+func applyBlueColor(text string) string {
+	color := "[blue]"
+	var result strings.Builder
+	lines := strings.Split(text, "\n")
+
+	for lineIdx, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		result.WriteString(color) // Start blue color for this line
+		for _, r := range line {
+			result.WriteRune(r)
+		}
+		result.WriteString("[-]") // End blue color for this line
+
+		if lineIdx < len(lines)-1 {
+			result.WriteString("\n")
+		}
+	}
+
+	return result.String()
+}
+
 
 type logSource int
 
@@ -81,13 +122,16 @@ func Run(ctx context.Context, opts Options) error {
 		case tcell.KeyRune:
 			switch event.Rune() {
 			case 'q':
+				model.showQueueView()
+				return nil
+			case 'e':
 				app.Stop()
+				return nil
+			case 'd':
+				model.showDetailView()
 				return nil
 			case 'l':
 				model.toggleLogSource()
-				return nil
-			case '/':
-				model.promptFilter()
 				return nil
 			case '?':
 				model.showHelp()
@@ -109,46 +153,69 @@ type viewModel struct {
 	app     *tview.Application
 	options Options
 
-	statusBar *tview.TextView
-	filterBar *tview.TextView
-	table     *tview.Table
-	detail    *tview.TextView
-	logView   *tview.TextView
-	root      *tview.Pages
+	// Header components (top 25%)
+	header     *tview.Flex
+	statusView *tview.TextView
+	cmdView    *tview.TextView
+	logoView   *tview.TextView
 
-	filteredItems []spindle.QueueItem
-	filterText    string
-	logMode       logSource
-	lastLogPath   string
-	lastLogSet    time.Time
-	focusOnTable  bool
+	// Main content pane (bottom 75%)
+	mainContent *tview.Pages
+	table       *tview.Table
+	detail      *tview.TextView
+	logView     *tview.TextView
+
+	root *tview.Pages
+
+	items       []spindle.QueueItem
+	logMode     logSource
+	lastLogPath string
+	lastLogSet  time.Time
+	currentView string // "queue", "detail", "logs"
 }
 
 func newViewModel(app *tview.Application, opts Options) *viewModel {
-	statusBar := tview.NewTextView().SetDynamicColors(true).SetWrap(true).SetWordWrap(true)
-	statusBar.SetTextAlign(tview.AlignLeft)
+	// Header components
+	statusView := tview.NewTextView().SetDynamicColors(true).SetWrap(true)
+	statusView.SetTextAlign(tview.AlignLeft)
+
+	cmdView := tview.NewTextView().SetDynamicColors(true)
+	cmdView.SetTextAlign(tview.AlignCenter)
+	cmdView.SetText("[::b]Commands:[-] q:Queue  d:Detail  l:Logs  Tab:Switch  ?:Help  e:Exit")
+
+	logoView := tview.NewTextView()
+	logoView.SetTextAlign(tview.AlignRight)
+	logoView.SetDynamicColors(true)
+	logoView.SetRegions(true)
+	logoView.SetText(createLogo())
+
+	// Main content components
+	table := tview.NewTable()
+	table.SetBorder(true).SetTitle(" Queue ")
+	table.SetSelectable(true, false)
+	table.SetFixed(1, 0)
+
+	detail := tview.NewTextView().SetDynamicColors(true).SetWrap(true)
+	detail.SetBorder(true).SetTitle(" Details ")
+
+	logView := tview.NewTextView().SetDynamicColors(true)
+	logView.SetBorder(true).SetTitle(" Daemon Log ")
+	logView.ScrollToEnd()
 
 	vm := &viewModel{
-		app:          app,
-		options:      opts,
-		statusBar:    statusBar,
-		filterBar:    tview.NewTextView().SetDynamicColors(true),
-		table:        tview.NewTable(),
-		detail:       tview.NewTextView().SetDynamicColors(true).SetWrap(true),
-		logView:      tview.NewTextView().SetDynamicColors(true),
-		focusOnTable: true,
+		app:         app,
+		options:     opts,
+		statusView:  statusView,
+		cmdView:     cmdView,
+		logoView:    logoView,
+		table:       table,
+		detail:      detail,
+		logView:     logView,
+		currentView: "queue",
 	}
 
-	vm.table.SetBorder(true).SetTitle(" Queue ")
-	vm.table.SetSelectable(true, false)
-	vm.table.SetFixed(1, 0)
-	vm.detail.SetBorder(true).SetTitle(" Details ")
-	vm.logView.SetBorder(true).SetTitle(" Daemon Log ")
-	vm.logView.ScrollToEnd()
-
 	vm.table.SetSelectedFunc(func(row, column int) {
-		vm.updateDetail(row)
-		vm.refreshLogs(true)
+		vm.showDetailView()
 	})
 
 	vm.root = tview.NewPages()
@@ -161,31 +228,41 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 }
 
 func (vm *viewModel) buildMainLayout() tview.Primitive {
-	headers := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(vm.statusBar, 2, 0, false).
-		AddItem(vm.filterBar, 1, 0, false)
+	// Create header with status (left), commands (center), logo (right), padding
+	// Using k9s-style fixed-width approach with proper right padding
+	vm.header = tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(vm.statusView, 50, 1, false).  // Fixed width for status
+		AddItem(vm.cmdView, 0, 1, false).      // Takes remaining space
+		AddItem(vm.logoView, 30, 1, false).    // Fixed width for logo
+		AddItem(nil, 2, 1, false)              // Fixed padding space on right
 
-	body := tview.NewFlex().SetDirection(tview.FlexColumn).
-		AddItem(vm.table, 0, 2, true).
-		AddItem(vm.detail, 0, 3, false)
+	// Create main content pages for different views
+	vm.mainContent = tview.NewPages()
+	vm.mainContent.AddPage("queue", vm.table, true, true)
+	vm.mainContent.AddPage("detail", vm.detail, true, false)
+	vm.mainContent.AddPage("logs", vm.logView, true, false)
 
+	// Main layout: header (25%) + main content (75%)
 	main := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(headers, 2, 0, false).
-		AddItem(body, 0, 5, true).
-		AddItem(vm.logView, 0, 3, false)
+		AddItem(vm.header, 0, 1, false).   // Top area ~25%
+		AddItem(vm.mainContent, 0, 3, true) // Main pane ~75%
 
 	return main
 }
 
 func (vm *viewModel) update(snapshot state.Snapshot) {
 	vm.renderStatus(snapshot)
-	vm.applyFilter(snapshot.Queue)
+	vm.items = snapshot.Queue
 	vm.renderTable()
 	vm.ensureSelection()
-	row, _ := vm.table.GetSelection()
-	vm.updateDetail(row)
-	vm.refreshLogs(false)
-	vm.renderFilter()
+
+	if vm.currentView == "detail" {
+		row, _ := vm.table.GetSelection()
+		vm.updateDetail(row)
+	}
+	if vm.currentView == "logs" {
+		vm.refreshLogs(false)
+	}
 }
 
 func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
@@ -195,10 +272,10 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 			if !snapshot.LastUpdated.IsZero() {
 				last = snapshot.LastUpdated.Format("15:04:05")
 			}
-			vm.statusBar.SetText(fmt.Sprintf("[red]spindle unavailable[-]\nRetrying (last attempt %s)", last))
+			vm.statusView.SetText(fmt.Sprintf("[red]spindle unavailable[-]\nRetrying (last attempt %s)", last))
 			return
 		}
-		vm.statusBar.SetText("[yellow]waiting for spindle status…[-]")
+		vm.statusView.SetText("[yellow]waiting for spindle status…[-]")
 		return
 	}
 	stats := snapshot.Status.Workflow.QueueStats
@@ -210,54 +287,14 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 		fmt.Sprintf("[green]Completed[-]: %d", stats["completed"]),
 	}
 	summary := strings.Join(counts, "  ")
-	statusText := fmt.Sprintf("[white]Daemon:[-] %s  [white]PID:[-] %d  [white]Updated:[-] %s  %s",
+	statusText := fmt.Sprintf("[white]Daemon:[-] %s  [white]PID:[-] %d  [white]Updated:[-] %s\n%s",
 		yesNo(snapshot.Status.Running), snapshot.Status.PID, snapshot.LastUpdated.Format("15:04:05"), summary)
 	if snapshot.LastError != nil {
 		statusText += fmt.Sprintf("  [red]Error:[-] %v", snapshot.LastError)
 	}
-	vm.statusBar.SetText(statusText)
+	vm.statusView.SetText(statusText)
 }
 
-func (vm *viewModel) applyFilter(items []spindle.QueueItem) {
-	if strings.TrimSpace(vm.filterText) == "" {
-		vm.filteredItems = cloneItems(items)
-		return
-	}
-	needle := strings.ToLower(vm.filterText)
-	filtered := make([]spindle.QueueItem, 0, len(items))
-	for _, item := range items {
-		if matchItem(item, needle) {
-			filtered = append(filtered, item)
-		}
-	}
-	vm.filteredItems = filtered
-}
-
-func matchItem(item spindle.QueueItem, needle string) bool {
-	fields := []string{
-		item.DiscTitle,
-		item.Status,
-		item.ProcessingLane,
-		item.Progress.Stage,
-		item.Progress.Message,
-		item.DiscFingerprint,
-	}
-	for _, field := range fields {
-		if strings.Contains(strings.ToLower(field), needle) {
-			return true
-		}
-	}
-	return false
-}
-
-func cloneItems(items []spindle.QueueItem) []spindle.QueueItem {
-	if len(items) == 0 {
-		return nil
-	}
-	dup := make([]spindle.QueueItem, len(items))
-	copy(dup, items)
-	return dup
-}
 
 func (vm *viewModel) renderTable() {
 	vm.table.Clear()
@@ -266,7 +303,7 @@ func (vm *viewModel) renderTable() {
 		vm.table.SetCell(0, col, tview.NewTableCell("[::b]"+label).SetSelectable(false))
 	}
 
-	rows := vm.filteredItems
+	rows := vm.items
 	sort.SliceStable(rows, func(i, j int) bool {
 		return rows[i].ID > rows[j].ID
 	})
@@ -344,7 +381,7 @@ func titleCase(value string) string {
 }
 
 func (vm *viewModel) ensureSelection() {
-	rows := len(vm.filteredItems)
+	rows := len(vm.items)
 	if rows == 0 {
 		vm.table.Select(0, 0)
 		vm.detail.SetText("Queue is empty")
@@ -359,12 +396,33 @@ func (vm *viewModel) ensureSelection() {
 	}
 }
 
+func (vm *viewModel) showDetailView() {
+	vm.currentView = "detail"
+	vm.mainContent.SwitchToPage("detail")
+	row, _ := vm.table.GetSelection()
+	vm.updateDetail(row)
+	vm.app.SetFocus(vm.detail)
+}
+
+func (vm *viewModel) showQueueView() {
+	vm.currentView = "queue"
+	vm.mainContent.SwitchToPage("queue")
+	vm.app.SetFocus(vm.table)
+}
+
+func (vm *viewModel) showLogsView() {
+	vm.currentView = "logs"
+	vm.mainContent.SwitchToPage("logs")
+	vm.refreshLogs(true)
+	vm.app.SetFocus(vm.logView)
+}
+
 func (vm *viewModel) updateDetail(row int) {
-	if row <= 0 || row-1 >= len(vm.filteredItems) {
+	if row <= 0 || row-1 >= len(vm.items) {
 		vm.detail.SetText("Select an item to view details")
 		return
 	}
-	item := vm.filteredItems[row-1]
+	item := vm.items[row-1]
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("[white]Title:[-] %s\n", composeTitle(item)))
 	builder.WriteString(fmt.Sprintf("[white]Status:[-] %s\n", strings.ToUpper(item.Status)))
@@ -434,20 +492,22 @@ func (vm *viewModel) refreshLogs(force bool) {
 
 func (vm *viewModel) selectedItem() *spindle.QueueItem {
 	row, _ := vm.table.GetSelection()
-	if row <= 0 || row-1 >= len(vm.filteredItems) {
+	if row <= 0 || row-1 >= len(vm.items) {
 		return nil
 	}
-	item := vm.filteredItems[row-1]
+	item := vm.items[row-1]
 	return &item
 }
 
 func (vm *viewModel) toggleFocus() {
-	if vm.focusOnTable {
-		vm.app.SetFocus(vm.logView)
-	} else {
-		vm.app.SetFocus(vm.table)
+	switch vm.currentView {
+	case "queue":
+		vm.showDetailView()
+	case "detail":
+		vm.showLogsView()
+	case "logs":
+		vm.showQueueView()
 	}
-	vm.focusOnTable = !vm.focusOnTable
 }
 
 func (vm *viewModel) toggleLogSource() {
@@ -459,56 +519,31 @@ func (vm *viewModel) toggleLogSource() {
 		vm.logView.SetTitle(" Daemon Log ")
 	}
 	vm.lastLogPath = ""
-	vm.refreshLogs(true)
+	// Always show logs view when toggling log source
+	vm.showLogsView()
 }
 
-func (vm *viewModel) promptFilter() {
-	form := tview.NewForm()
-	form.SetButtonsAlign(tview.AlignCenter)
-	form.AddInputField("Match", vm.filterText, 40, nil, nil)
-	form.AddButton("Apply", func() {
-		item := form.GetFormItemByLabel("Match")
-		ifield, ok := item.(*tview.InputField)
-		if ok {
-			vm.filterText = strings.TrimSpace(ifield.GetText())
-		}
-		vm.root.RemovePage("modal")
-		vm.app.SetFocus(vm.table)
-	})
-	form.AddButton("Clear", func() {
-		vm.filterText = ""
-		vm.root.RemovePage("modal")
-		vm.app.SetFocus(vm.table)
-	})
-	form.AddButton("Cancel", func() {
-		vm.root.RemovePage("modal")
-		vm.app.SetFocus(vm.table)
-	})
-	form.SetBorder(true).SetTitle(" Filter Queue ")
-
-	vm.root.RemovePage("modal")
-	modal := center(60, 7, form)
-	vm.root.AddPage("modal", modal, true, true)
-	vm.app.SetFocus(form)
-}
-
-func (vm *viewModel) renderFilter() {
-	if strings.TrimSpace(vm.filterText) == "" {
-		vm.filterBar.SetText(" ")
-		return
-	}
-	vm.filterBar.SetText(fmt.Sprintf("[white]Filter:[-] %s", vm.filterText))
-}
 
 func (vm *viewModel) showHelp() {
-	text := "q Quit  |  Tab Switch Focus  |  l Toggle Log  |  / Filter  |  ? Help"
+	text := "q Queue View  |  d Detail View  |  l Toggle Log Source  |  Tab Switch Views (Queue→Detail→Logs)  |  ? Help  |  e Exit  |  Ctrl+C Exit"
 	modal := tview.NewModal().SetText(text).AddButtons([]string{"Close"})
 	modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 		vm.root.RemovePage("modal")
-		vm.app.SetFocus(vm.table)
+		vm.returnToCurrentView()
 	})
 	vm.root.RemovePage("modal")
-	vm.root.AddPage("modal", center(50, 7, modal), true, true)
+	vm.root.AddPage("modal", center(75, 7, modal), true, true)
+}
+
+func (vm *viewModel) returnToCurrentView() {
+	switch vm.currentView {
+	case "queue":
+		vm.app.SetFocus(vm.table)
+	case "detail":
+		vm.app.SetFocus(vm.detail)
+	case "logs":
+		vm.app.SetFocus(vm.logView)
+	}
 }
 
 func center(width, height int, primitive tview.Primitive) tview.Primitive {
