@@ -233,7 +233,7 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		// k9s format with padding: " <key>  description " (line 132 in menu.go)
 		// Use %-Ns format to left-align and pad keys to same width
 		paddedKey := fmt.Sprintf("%-*s", maxKeyWidth[col], cmd.key)
-		cell := tview.NewTableCell(fmt.Sprintf(" [::b][dodgerblue]%s[white]  %s ", paddedKey, cmd.desc))
+		cell := tview.NewTableCell(fmt.Sprintf(" [::b][dodgerblue]%s[gray]  %s ", paddedKey, cmd.desc))
 		cell.SetBackgroundColor(tcell.ColorBlack)
 		cell.SetExpansion(1) // Make cells expand to fill available space
 
@@ -464,7 +464,7 @@ func (vm *viewModel) showHelp() {
 		row := i % maxRows
 		col := i / maxRows
 
-		text := fmt.Sprintf("[dodgerblue]<%s>[white] %s", cmd.key, cmd.desc)
+		text := fmt.Sprintf("[dodgerblue]<%s>[gray] %s", cmd.key, cmd.desc)
 		for len(helpLines) <= row {
 			helpLines = append(helpLines, "")
 		}
