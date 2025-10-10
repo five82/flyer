@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -111,6 +112,22 @@ func Run(ctx context.Context, opts Options) error {
 	}()
 
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Handle search mode
+		if model.searchMode {
+			switch event.Key() {
+			case tcell.KeyEnter:
+				model.performSearch()
+				return nil
+			case tcell.KeyESC:
+				model.cancelSearch()
+				return nil
+			case tcell.KeyCtrlC:
+				app.Stop()
+				return nil
+			}
+			return event
+		}
+
 		switch event.Key() {
 		case tcell.KeyCtrlC:
 			app.Stop()
@@ -123,6 +140,17 @@ func Run(ctx context.Context, opts Options) error {
 			return nil
 		case tcell.KeyRune:
 			switch event.Rune() {
+			case '/':
+				if model.currentView == "logs" {
+					model.startSearch()
+				}
+				return nil
+			case 'n':
+				model.nextSearchMatch()
+				return nil
+			case 'N':
+				model.previousSearchMatch()
+				return nil
 			case 'q':
 				model.showQueueView()
 				return nil
@@ -170,6 +198,14 @@ type viewModel struct {
 	detail      *tview.TextView
 	logView     *tview.TextView
 
+	// Search components
+	searchInput        *tview.InputField
+	searchStatus       *tview.TextView
+	searchRegex        *regexp.Regexp
+	searchMatches      []int
+	currentSearchMatch int
+	lastSearchPattern  string
+
 	root *tview.Pages
 
 	items       []spindle.QueueItem
@@ -177,6 +213,7 @@ type viewModel struct {
 	lastLogPath string
 	lastLogSet  time.Time
 	currentView string // "queue", "detail", "logs"
+	searchMode  bool   // true when in search input mode
 }
 
 func newViewModel(app *tview.Application, opts Options) *viewModel {
@@ -187,6 +224,12 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	tview.Borders.TopRightFocus = tview.Borders.TopRight
 	tview.Borders.BottomLeftFocus = tview.Borders.BottomLeft
 	tview.Borders.BottomRightFocus = tview.Borders.BottomRight
+
+	// Set default focus colors to be less intrusive
+	tview.Styles.PrimitiveBackgroundColor = tcell.ColorBlack
+	tview.Styles.ContrastBackgroundColor = tcell.ColorBlack
+	tview.Styles.MoreContrastBackgroundColor = tcell.ColorBlack
+	tview.Styles.PrimaryTextColor = tcell.ColorWhite
 
 	// Header components (k9s-style)
 	statusView := tview.NewTextView().SetDynamicColors(true).SetWrap(true)
@@ -275,16 +318,22 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	logView.SetBorderColor(tcell.ColorLightSkyBlue)
 	logView.ScrollToEnd()
 
+	// Search status bar (vim-style at bottom)
+	searchStatus := tview.NewTextView().SetDynamicColors(true)
+	searchStatus.SetBackgroundColor(tcell.ColorBlack)
+	searchStatus.SetTextColor(tcell.ColorWhite)
+
 	vm := &viewModel{
-		app:         app,
-		options:     opts,
-		statusView:  statusView,
-		cmdView:     cmdView,
-		logoView:    logoView,
-		table:       table,
-		detail:      detail,
-		logView:     logView,
-		currentView: "queue",
+		app:          app,
+		options:      opts,
+		statusView:   statusView,
+		cmdView:      cmdView,
+		logoView:     logoView,
+		table:        table,
+		detail:       detail,
+		logView:      logView,
+		searchStatus: searchStatus,
+		currentView:  "queue",
 	}
 
 	vm.table.SetSelectedFunc(func(row, column int) {
@@ -339,12 +388,19 @@ func (vm *viewModel) buildMainLayout() tview.Primitive {
 		AddItem(vm.logoView, logoWidth, 1, false).     // FIXED 30 chars
 		AddItem(nil, 1, 1, false)                      // Single space padding right
 
+	// Create log view container with search status
+	logContainer := tview.NewFlex().SetDirection(tview.FlexRow)
+	logContainer.SetBackgroundColor(tcell.ColorBlack)
+	logContainer.
+		AddItem(vm.logView, 0, 1, true).      // Main log content
+		AddItem(vm.searchStatus, 1, 0, false) // Search status bar at bottom
+
 	// Create main content pages for different views
 	vm.mainContent = tview.NewPages()
 	vm.mainContent.SetBackgroundColor(tcell.ColorBlack)
 	vm.mainContent.AddPage("queue", vm.table, true, true)
 	vm.mainContent.AddPage("detail", vm.detail, true, false)
-	vm.mainContent.AddPage("logs", vm.logView, true, false)
+	vm.mainContent.AddPage("logs", logContainer, true, false)
 
 	// Main layout: header (25%) + main content (75%) - k9s proportions
 	main := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -517,6 +573,7 @@ func (vm *viewModel) ensureSelection() {
 func (vm *viewModel) showDetailView() {
 	vm.currentView = "detail"
 	vm.mainContent.SwitchToPage("detail")
+	vm.clearSearch()
 	row, _ := vm.table.GetSelection()
 	vm.updateDetail(row)
 	vm.app.SetFocus(vm.detail)
@@ -525,6 +582,7 @@ func (vm *viewModel) showDetailView() {
 func (vm *viewModel) showQueueView() {
 	vm.currentView = "queue"
 	vm.mainContent.SwitchToPage("queue")
+	vm.clearSearch()
 	vm.app.SetFocus(vm.table)
 }
 
@@ -625,7 +683,8 @@ func (vm *viewModel) refreshLogs(force bool) {
 		vm.lastLogSet = time.Now()
 		return
 	}
-	vm.logView.SetText(strings.Join(lines, "\n"))
+	colorizedLines := logtail.ColorizeLines(lines)
+	vm.logView.SetText(strings.Join(colorizedLines, "\n"))
 	vm.lastLogPath = path
 	vm.lastLogSet = time.Now()
 }
@@ -674,6 +733,9 @@ func (vm *viewModel) showHelp() {
 		{"d", "Detail View"},
 		{"l", "Toggle Log Source"},
 		{"i", "Item Logs (Highlighted)"},
+		{"/", "Start New Search"},
+		{"n", "Next Search Match"},
+		{"N", "Previous Search Match"},
 		{"Tab", "Cycle Views (Queue→Detail→Daemon→Item)"},
 		{"ESC", "Return to Queue View"},
 		{"?", "Help"},
@@ -732,6 +794,163 @@ func center(width, height int, primitive tview.Primitive) tview.Primitive {
 			AddItem(primitive, width, 0, true).
 			AddItem(nil, 0, 1, false), height, 0, true).
 		AddItem(nil, 0, 1, false)
+}
+
+func (vm *viewModel) startSearch() {
+	if vm.currentView != "logs" {
+		return
+	}
+
+	vm.searchMode = true
+	vm.searchInput = tview.NewInputField()
+	vm.searchInput.SetLabel("/")
+	vm.searchInput.SetFieldWidth(40)
+	vm.searchInput.SetBackgroundColor(tcell.ColorBlack)
+	vm.searchInput.SetFieldTextColor(tcell.ColorWhite)
+
+	// Create a simple container for the search input
+	searchContainer := tview.NewFlex().SetDirection(tview.FlexRow)
+	searchContainer.SetBackgroundColor(tcell.ColorBlack)
+	searchContainer.AddItem(nil, 0, 1, false) // Push to bottom
+	searchContainer.AddItem(vm.searchInput, 1, 0, true)
+
+	vm.searchInput.SetDoneFunc(func(key tcell.Key) {
+		switch key {
+		case tcell.KeyEnter:
+			vm.performSearch()
+		case tcell.KeyESC:
+			vm.cancelSearch()
+		}
+	})
+
+	vm.root.AddPage("search", searchContainer, true, true)
+	vm.app.SetFocus(vm.searchInput)
+}
+
+func (vm *viewModel) performSearch() {
+	if vm.searchInput == nil {
+		return
+	}
+	searchText := strings.TrimSpace(vm.searchInput.GetText())
+	if searchText == "" {
+		vm.cancelSearch()
+		return
+	}
+
+	// Compile regex for case-insensitive search
+	regex, err := regexp.Compile("(?i)" + searchText)
+	if err != nil {
+		vm.cancelSearch()
+		return
+	}
+
+	vm.searchRegex = regex
+	vm.lastSearchPattern = searchText
+	vm.root.RemovePage("search")
+	vm.searchMode = false
+
+	// Find matches in current log content
+	vm.findSearchMatches()
+	if len(vm.searchMatches) > 0 {
+		vm.currentSearchMatch = 0
+		vm.highlightSearchMatch()
+		vm.updateSearchStatus()
+	} else {
+		vm.searchStatus.SetText(fmt.Sprintf("[red]Pattern not found: %s[-]", searchText))
+	}
+}
+
+func (vm *viewModel) cancelSearch() {
+	vm.root.RemovePage("search")
+	vm.searchMode = false
+	vm.returnToCurrentView()
+}
+
+func (vm *viewModel) clearSearch() {
+	vm.searchRegex = nil
+	vm.searchMatches = []int{}
+	vm.currentSearchMatch = 0
+	vm.lastSearchPattern = ""
+	vm.searchStatus.SetText("")
+}
+
+func (vm *viewModel) updateSearchStatus() {
+	if vm.searchRegex == nil || len(vm.searchMatches) == 0 {
+		vm.searchStatus.SetText("")
+		return
+	}
+
+	matchNum := vm.currentSearchMatch + 1
+	totalMatches := len(vm.searchMatches)
+	vm.searchStatus.SetText(fmt.Sprintf("[dodgerblue]/%s[-] - [yellow]%d/%d[-] - Press [dodgerblue]n[-] for next, [dodgerblue]N[-] for previous",
+		vm.lastSearchPattern, matchNum, totalMatches))
+}
+
+func (vm *viewModel) findSearchMatches() {
+	if vm.searchRegex == nil {
+		return
+	}
+
+	logText := vm.logView.GetText(false)
+	lines := strings.Split(logText, "\n")
+
+	vm.searchMatches = []int{}
+	for i, line := range lines {
+		if vm.searchRegex.MatchString(line) {
+			vm.searchMatches = append(vm.searchMatches, i)
+		}
+	}
+}
+
+func (vm *viewModel) nextSearchMatch() {
+	if len(vm.searchMatches) == 0 {
+		return
+	}
+
+	vm.currentSearchMatch = (vm.currentSearchMatch + 1) % len(vm.searchMatches)
+	vm.highlightSearchMatch()
+	vm.updateSearchStatus()
+}
+
+func (vm *viewModel) previousSearchMatch() {
+	if len(vm.searchMatches) == 0 {
+		return
+	}
+
+	vm.currentSearchMatch = (vm.currentSearchMatch - 1 + len(vm.searchMatches)) % len(vm.searchMatches)
+	vm.highlightSearchMatch()
+	vm.updateSearchStatus()
+}
+
+func (vm *viewModel) highlightSearchMatch() {
+	if len(vm.searchMatches) == 0 || vm.currentSearchMatch >= len(vm.searchMatches) {
+		return
+	}
+
+	targetLine := vm.searchMatches[vm.currentSearchMatch]
+
+	// Get original log content (without highlighting)
+	logText := vm.logView.GetText(false)
+	lines := strings.Split(logText, "\n")
+
+	// Highlight all matches, but emphasize the current one
+	for i, line := range lines {
+		if vm.searchRegex.MatchString(line) {
+			if i == targetLine {
+				// Current match: yellow background with bold text
+				lines[i] = vm.searchRegex.ReplaceAllString(line, "[::b][black:yellow]${0}[-]")
+			} else {
+				// Other matches: just highlight in red
+				lines[i] = vm.searchRegex.ReplaceAllString(line, "[red]${0}[-]")
+			}
+		}
+	}
+
+	// Update the log view with highlighted content
+	vm.logView.SetText(strings.Join(lines, "\n"))
+
+	// Scroll to the matched line
+	vm.logView.ScrollTo(targetLine, 0)
 }
 
 func yesNo(value bool) string {
