@@ -156,7 +156,7 @@ type viewModel struct {
 	// Header components (top 25%)
 	header     *tview.Flex
 	statusView *tview.TextView
-	cmdView    *tview.TextView
+	cmdView    *tview.Table
 	logoView   *tview.TextView
 
 	// Main content pane (bottom 75%)
@@ -178,16 +178,51 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	// Header components (k9s-style)
 	statusView := tview.NewTextView().SetDynamicColors(true).SetWrap(true)
 	statusView.SetTextAlign(tview.AlignLeft)
+	statusView.SetBackgroundColor(tcell.ColorBlack)
 
-	cmdView := tview.NewTextView().SetDynamicColors(true)
-	cmdView.SetTextAlign(tview.AlignCenter)
-	// k9s-style command formatting with dodgerblue keys
-	cmdView.SetText("[::b]Commands:[-] [dodgerblue]q[-]:Queue  [dodgerblue]d[-]:Detail  [dodgerblue]l[-]:Logs  [dodgerblue]Tab[-]:Switch  [dodgerblue]?[-]:Help  [dodgerblue]e[-]:Exit")
+	// k9s-style command menu using table layout for vertical columns
+	cmdView := tview.NewTable()
+	cmdView.SetBackgroundColor(tcell.ColorBlack)
+	cmdView.SetBorders(false)
+
+	// Define commands in k9s-style format
+	commands := []struct{ key, desc string }{
+		{"q", "Queue"},
+		{"d", "Detail"},
+		{"l", "Logs"},
+		{"Tab", "Switch"},
+		{"?", "Help"},
+		{"e", "Exit"},
+	}
+
+	// Create single column layout with vertical alignment
+	// Calculate max key length for proper alignment
+	maxKeyLen := 0
+	for _, cmd := range commands {
+		if len(cmd.key) > maxKeyLen {
+			maxKeyLen = len(cmd.key)
+		}
+	}
+
+	for i, cmd := range commands {
+		// Create properly aligned layout: <key>       description (k9s-style)
+		paddedKey := fmt.Sprintf("<%s>", cmd.key)
+		// Add spacing to align descriptions vertically (max key length + brackets + 5 spaces for k9s-style spacing)
+		padding := strings.Repeat(" ", maxKeyLen+5-len(paddedKey))
+		// k9s-style bold keys with proper coloring
+		text := fmt.Sprintf("[::b][dodgerblue]%s[white]%s%s", paddedKey, padding, cmd.desc)
+		cell := tview.NewTableCell(text)
+		cell.SetBackgroundColor(tcell.ColorBlack)
+		cell.SetSelectable(false)
+		cell.SetAlign(tview.AlignLeft)
+		cmdView.SetCell(i, 0, cell)  // All commands in column 0
+	}
 
 	logoView := tview.NewTextView()
 	logoView.SetTextAlign(tview.AlignRight)
 	logoView.SetDynamicColors(true)
 	logoView.SetRegions(true)
+	logoView.SetBackgroundColor(tcell.ColorBlack)
 	logoView.SetText(createLogo())
 
 	// Main content components (k9s-style)
@@ -195,15 +230,18 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	table.SetBorder(true).SetTitle(" [aqua]Queue[-] ")
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
+	table.SetBackgroundColor(tcell.ColorBlack)
 	// k9s-style border color
 	table.SetBorderColor(tcell.ColorDodgerBlue)
 
 	detail := tview.NewTextView().SetDynamicColors(true).SetWrap(true)
 	detail.SetBorder(true).SetTitle(" [aqua]Details[-] ")
+	detail.SetBackgroundColor(tcell.ColorBlack)
 	detail.SetBorderColor(tcell.ColorDodgerBlue)
 
 	logView := tview.NewTextView().SetDynamicColors(true)
 	logView.SetBorder(true).SetTitle(" [aqua]Daemon Log[-] ")
+	logView.SetBackgroundColor(tcell.ColorBlack)
 	logView.SetBorderColor(tcell.ColorDodgerBlue)
 	logView.ScrollToEnd()
 
@@ -243,6 +281,7 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	})
 
 	vm.root = tview.NewPages()
+	vm.root.SetBackgroundColor(tcell.ColorBlack)
 	vm.root.AddPage("main", vm.buildMainLayout(), true, true)
 
 	app.SetRoot(vm.root, true)
@@ -253,11 +292,13 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 
 func (vm *viewModel) buildMainLayout() tview.Primitive {
 	// Create padding elements for the header (1 character padding on each side)
-	paddingLeft := tview.NewBox().SetBackgroundColor(tcell.ColorDefault)
-	paddingRight := tview.NewBox().SetBackgroundColor(tcell.ColorDefault)
+	paddingLeft := tview.NewBox().SetBackgroundColor(tcell.ColorBlack)
+	paddingRight := tview.NewBox().SetBackgroundColor(tcell.ColorBlack)
 
 	// Create header with k9s-style proportions: padding (1), Status (30%), Commands (40%), Logo (30%), padding (1)
-	vm.header = tview.NewFlex().SetDirection(tview.FlexColumn).
+	vm.header = tview.NewFlex().SetDirection(tview.FlexColumn)
+	vm.header.SetBackgroundColor(tcell.ColorBlack)
+	vm.header.
 		AddItem(paddingLeft, 1, 0, false).     // Left padding of 1 character
 		AddItem(vm.statusView, 0, 30, false).  // Status ~30% width
 		AddItem(vm.cmdView, 0, 40, false).     // Commands ~40% width
@@ -266,12 +307,15 @@ func (vm *viewModel) buildMainLayout() tview.Primitive {
 
 	// Create main content pages for different views
 	vm.mainContent = tview.NewPages()
+	vm.mainContent.SetBackgroundColor(tcell.ColorBlack)
 	vm.mainContent.AddPage("queue", vm.table, true, true)
 	vm.mainContent.AddPage("detail", vm.detail, true, false)
 	vm.mainContent.AddPage("logs", vm.logView, true, false)
 
 	// Main layout: header (25%) + main content (75%) - k9s proportions
-	main := tview.NewFlex().SetDirection(tview.FlexRow).
+	main := tview.NewFlex().SetDirection(tview.FlexRow)
+	main.SetBackgroundColor(tcell.ColorBlack)
+	main.
 		AddItem(vm.header, 0, 1, false).   // Top area ~25%
 		AddItem(vm.mainContent, 0, 3, true) // Main pane ~75%
 
@@ -566,8 +610,36 @@ func (vm *viewModel) toggleLogSource() {
 
 
 func (vm *viewModel) showHelp() {
-	// k9s-style help text with colored keys
-	text := "[dodgerblue]q[-] Queue View  |  [dodgerblue]d[-] Detail View  |  [dodgerblue]l[-] Toggle Log Source  |  [dodgerblue]Tab[-] Switch Views (Queue→Detail→Logs)  |  [dodgerblue]?[-] Help  |  [dodgerblue]e[-] Exit  |  [dodgerblue]Ctrl+C[-] Exit"
+	// k9s-style help text with bracketed keys in column layout
+	helpCommands := []struct{ key, desc string }{
+		{"q", "Queue View"},
+		{"d", "Detail View"},
+		{"l", "Toggle Log Source"},
+		{"Tab", "Switch Views (Queue→Detail→Logs)"},
+		{"?", "Help"},
+		{"e", "Exit"},
+		{"Ctrl+C", "Exit"},
+	}
+
+	// Create formatted help text
+	var helpLines []string
+	maxRows := 4
+	for i, cmd := range helpCommands {
+		row := i % maxRows
+		col := i / maxRows
+
+		text := fmt.Sprintf("[dodgerblue]<%s>[white] %s", cmd.key, cmd.desc)
+		for len(helpLines) <= row {
+			helpLines = append(helpLines, "")
+		}
+		if col > 0 {
+			helpLines[row] += "  |  " + text
+		} else {
+			helpLines[row] = text
+		}
+	}
+
+	text := strings.Join(helpLines, "\n")
 	modal := tview.NewModal().SetText(text).AddButtons([]string{"Close"})
 	// k9s-style modal styling
 	modal.SetBorderColor(tcell.ColorDodgerBlue)
