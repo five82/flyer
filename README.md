@@ -3,10 +3,12 @@
 Flyer is a read-only terminal dashboard for the Spindle disc-ripping daemon. It mirrors k9s-style navigation to surface queue activity, progress, and logs for a single Spindle instance running on your home network. No write actions are exposed—the CLI remains the place for retries, clears, or other mutations.
 
 ## Features
-- Queue overview grouped by pipeline stage with live counts in the status bar.
-- Selectable table of queue items with detail pane showing metadata, file paths, progress, and review flags.
-- Toggling log viewer that tails the main `spindle.log` or the selected item’s background log when available.
-- Lightweight search filter (`/`) and help overlay (`?`) to keep keyboard workflows fast.
+- **Queue view** showing all items grouped by status with live counts in the header.
+- **Detail view** displaying metadata, file paths, progress, error messages, and review flags for the selected item.
+- **Log viewer** supporting both daemon logs and per-item background logs with syntax highlighting.
+- **Log search** with vim-style `/` search, `n`/`N` navigation, and regex support.
+- **Fast navigation** via single-key commands and Tab cycling between Queue → Detail → Daemon Log → Item Log.
+- **Help overlay** (`?`) showing all available keybindings.
 
 ## Requirements
 - Go 1.25 or newer.
@@ -41,16 +43,37 @@ Optional flags:
 - `--poll 3` – change the refresh interval in seconds (defaults to 2 seconds when omitted).
 
 ### Key Bindings
-- `q` / `Ctrl+C` – quit.
-- `Tab` – move focus between queue table and log pane.
-- `l` – toggle between daemon log and selected item log.
-- `/` – filter queue items (matches title, status, fingerprint, or progress text).
-- `?` – help overlay.
+
+**Navigation:**
+- `q` – switch to Queue view
+- `d` – switch to Detail view for the selected item
+- `i` – switch to Item Log view for the selected item
+- `l` – toggle between Daemon Log and Item Log (switches to log view)
+- `Tab` – cycle through views: Queue → Detail → Daemon Log → Item Log
+- `ESC` – return to Queue view
+
+**Search (in Log view):**
+- `/` – start a new search (supports regex)
+- `n` – jump to next search match
+- `N` – jump to previous search match
+
+**General:**
+- `?` – show help overlay with all keybindings
+- `e` / `Ctrl+C` – exit Flyer
 
 ## Development
-- Format with `gofmt`/`goimports`.
-- `go build ./...` to compile.
-- `go test ./...` for the test suite once tests are added.
-- For live reloads, `watchexec -- go run ./cmd/flyer` pairs well with the UI.
+- Format with `gofmt`/`goimports` before committing.
+- `go build ./cmd/flyer` to compile the binary.
+- `go test ./...` to run the test suite.
+- For live reloads during UI development, `watchexec -- go run ./cmd/flyer` works well.
+
+### Project Structure
+- `cmd/flyer/` – main entrypoint
+- `internal/app/` – application orchestration and polling logic
+- `internal/config/` – Spindle config discovery and parsing
+- `internal/spindle/` – HTTP client for Spindle API and type definitions
+- `internal/state/` – thread-safe snapshot store
+- `internal/ui/` – TUI components built on tview/tcell
+- `internal/logtail/` – log reading and syntax highlighting
 
 Scope Reminder: Flyer assumes a single trusted Spindle deployment and skips auth, exports, and queue mutations by design.
