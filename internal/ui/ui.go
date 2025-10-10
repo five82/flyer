@@ -69,7 +69,6 @@ func applyOrangeColor(text string) string {
 	return result.String()
 }
 
-
 type logSource int
 
 const (
@@ -180,42 +179,58 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	statusView.SetTextAlign(tview.AlignLeft)
 	statusView.SetBackgroundColor(tcell.ColorBlack)
 
-	// k9s-style command menu using table layout for vertical columns
+	// Commands section using Table (k9s Menu pattern)
+	// k9s fills table with maxRows=6, flowing into multiple columns
 	cmdView := tview.NewTable()
 	cmdView.SetBackgroundColor(tcell.ColorBlack)
-	cmdView.SetBorders(false)
 
-	// Define commands in k9s-style format
 	commands := []struct{ key, desc string }{
-		{"q", "Queue"},
-		{"d", "Detail"},
-		{"l", "Logs"},
-		{"Tab", "Switch"},
-		{"?", "Help"},
-		{"e", "Exit"},
+		{"<q>", "Queue"},
+		{"<d>", "Detail"},
+		{"<l>", "Logs"},
+		{"<Tab>", "Switch"},
+		{"<?>", "Help"},
+		{"<e>", "Exit"},
 	}
 
-	// Create single column layout with vertical alignment
-	// Calculate max key length for proper alignment
-	maxKeyLen := 0
-	for _, cmd := range commands {
-		if len(cmd.key) > maxKeyLen {
-			maxKeyLen = len(cmd.key)
+	// k9s pattern: fill rows first, then columns (maxRows=6)
+	// Calculate max key width per column for padding (k9s does this!)
+	const maxRows = 6
+	colCount := (len(commands) / maxRows) + 1
+
+	// Find max key length per column
+	maxKeyWidth := make([]int, colCount)
+	for i, cmd := range commands {
+		col := i / maxRows
+		if len(cmd.key) > maxKeyWidth[col] {
+			maxKeyWidth[col] = len(cmd.key)
 		}
 	}
 
 	for i, cmd := range commands {
-		// Create properly aligned layout: <key>       description (k9s-style)
-		paddedKey := fmt.Sprintf("<%s>", cmd.key)
-		// Add spacing to align descriptions vertically (max key length + brackets + 5 spaces for k9s-style spacing)
-		padding := strings.Repeat(" ", maxKeyLen+5-len(paddedKey))
-		// k9s-style bold keys with proper coloring
-		text := fmt.Sprintf("[::b][dodgerblue]%s[white]%s%s", paddedKey, padding, cmd.desc)
-		cell := tview.NewTableCell(text)
+		row := i % maxRows
+		col := i / maxRows
+
+		// k9s format with padding: " <key>  description " (line 132 in menu.go)
+		// Use %-Ns format to left-align and pad keys to same width
+		paddedKey := fmt.Sprintf("%-*s", maxKeyWidth[col], cmd.key)
+		cell := tview.NewTableCell(fmt.Sprintf(" [::b][dodgerblue]%s[white]  %s ", paddedKey, cmd.desc))
 		cell.SetBackgroundColor(tcell.ColorBlack)
-		cell.SetSelectable(false)
-		cell.SetAlign(tview.AlignLeft)
-		cmdView.SetCell(i, 0, cell)  // All commands in column 0
+		cell.SetExpansion(1) // Make cells expand to fill available space
+
+		cmdView.SetCell(row, col, cell)
+	}
+
+	// Fill empty cells so all columns render
+	for row := 0; row < maxRows; row++ {
+		for col := 0; col < colCount; col++ {
+			if cmdView.GetCell(row, col) == nil {
+				empty := tview.NewTableCell("")
+				empty.SetBackgroundColor(tcell.ColorBlack)
+				empty.SetExpansion(1) // Make empty cells expand too
+				cmdView.SetCell(row, col, empty)
+			}
+		}
 	}
 
 	logoView := tview.NewTextView()
@@ -291,19 +306,20 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 }
 
 func (vm *viewModel) buildMainLayout() tview.Primitive {
-	// Create padding elements for the header (1 character padding on each side)
-	paddingLeft := tview.NewBox().SetBackgroundColor(tcell.ColorBlack)
-	paddingRight := tview.NewBox().SetBackgroundColor(tcell.ColorBlack)
+	// k9s header layout: FIXED width left | FLEX middle | FIXED width right
+	// ClusterInfo: 50 chars | Menu: remaining space | Logo: 26 chars
+	const (
+		statusWidth = 40 // Fixed width for status section (k9s uses 50 for cluster info)
+		logoWidth   = 30 // Fixed width for logo section (k9s uses 26)
+	)
 
-	// Create header with k9s-style proportions: padding (1), Status (30%), Commands (40%), Logo (30%), padding (1)
+	// k9s-style header: FIXED | FLEX | FIXED (exact k9s pattern)
 	vm.header = tview.NewFlex().SetDirection(tview.FlexColumn)
 	vm.header.SetBackgroundColor(tcell.ColorBlack)
 	vm.header.
-		AddItem(paddingLeft, 1, 0, false).     // Left padding of 1 character
-		AddItem(vm.statusView, 0, 30, false).  // Status ~30% width
-		AddItem(vm.cmdView, 0, 40, false).     // Commands ~40% width
-		AddItem(vm.logoView, 0, 30, false).    // Logo ~30% width
-		AddItem(paddingRight, 1, 0, false)     // Right padding of 1 character
+		AddItem(vm.statusView, statusWidth, 1, false). // FIXED 40 chars
+		AddItem(vm.cmdView, 0, 1, false).              // FLEX - direct table (k9s does this!)
+		AddItem(vm.logoView, logoWidth, 1, false)      // FIXED 30 chars
 
 	// Create main content pages for different views
 	vm.mainContent = tview.NewPages()
@@ -316,7 +332,7 @@ func (vm *viewModel) buildMainLayout() tview.Primitive {
 	main := tview.NewFlex().SetDirection(tview.FlexRow)
 	main.SetBackgroundColor(tcell.ColorBlack)
 	main.
-		AddItem(vm.header, 0, 1, false).   // Top area ~25%
+		AddItem(vm.header, 0, 1, false).    // Top area ~25%
 		AddItem(vm.mainContent, 0, 3, true) // Main pane ~75%
 
 	return main
@@ -373,13 +389,12 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 	vm.statusView.SetText(statusText)
 }
 
-
 func (vm *viewModel) renderTable() {
 	vm.table.Clear()
 	headers := []string{"ID", "Title", "Status", "Lane", "Progress"}
 	for col, label := range headers {
 		// k9s-style table headers with white background
-		headerCell := tview.NewTableCell("[::b][black:white]"+label+"[-]")
+		headerCell := tview.NewTableCell("[::b][black:white]" + label + "[-]")
 		headerCell.SetSelectable(false)
 		vm.table.SetCell(0, col, headerCell)
 	}
@@ -607,7 +622,6 @@ func (vm *viewModel) toggleLogSource() {
 	// Always show logs view when toggling log source
 	vm.showLogsView()
 }
-
 
 func (vm *viewModel) showHelp() {
 	// k9s-style help text with bracketed keys in column layout
