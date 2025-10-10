@@ -115,6 +115,9 @@ func Run(ctx context.Context, opts Options) error {
 		case tcell.KeyCtrlC:
 			app.Stop()
 			return nil
+		case tcell.KeyESC:
+			model.showQueueView()
+			return nil
 		case tcell.KeyTAB:
 			model.toggleFocus()
 			return nil
@@ -131,6 +134,9 @@ func Run(ctx context.Context, opts Options) error {
 				return nil
 			case 'l':
 				model.toggleLogSource()
+				return nil
+			case 'i':
+				model.showItemLogsView()
 				return nil
 			case '?':
 				model.showHelp()
@@ -188,6 +194,7 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		{"<q>", "Queue"},
 		{"<d>", "Detail"},
 		{"<l>", "Logs"},
+		{"<i>", "Item Logs"},
 		{"<Tab>", "Switch"},
 		{"<?>", "Help"},
 		{"<e>", "Exit"},
@@ -517,6 +524,28 @@ func (vm *viewModel) showLogsView() {
 	vm.app.SetFocus(vm.logView)
 }
 
+func (vm *viewModel) showItemLogsView() {
+	vm.currentView = "logs"
+	vm.mainContent.SwitchToPage("logs")
+	// Force item log mode
+	vm.logMode = logSourceItem
+	vm.logView.SetTitle(" [aqua]Item Log[-] ")
+	vm.lastLogPath = ""
+	vm.refreshLogs(true)
+	vm.app.SetFocus(vm.logView)
+}
+
+func (vm *viewModel) showDaemonLogsView() {
+	vm.currentView = "logs"
+	vm.mainContent.SwitchToPage("logs")
+	// Force daemon log mode
+	vm.logMode = logSourceDaemon
+	vm.logView.SetTitle(" [aqua]Daemon Log[-] ")
+	vm.lastLogPath = ""
+	vm.refreshLogs(true)
+	vm.app.SetFocus(vm.logView)
+}
+
 func (vm *viewModel) updateDetail(row int) {
 	if row <= 0 || row-1 >= len(vm.items) {
 		vm.detail.SetText("[cadetblue]Select an item to view details[-]")
@@ -604,9 +633,13 @@ func (vm *viewModel) toggleFocus() {
 	case "queue":
 		vm.showDetailView()
 	case "detail":
-		vm.showLogsView()
+		vm.showDaemonLogsView()
 	case "logs":
-		vm.showQueueView()
+		if vm.logMode == logSourceDaemon {
+			vm.showItemLogsView()
+		} else {
+			vm.showQueueView()
+		}
 	}
 }
 
@@ -629,7 +662,9 @@ func (vm *viewModel) showHelp() {
 		{"q", "Queue View"},
 		{"d", "Detail View"},
 		{"l", "Toggle Log Source"},
-		{"Tab", "Switch Views (Queue→Detail→Logs)"},
+		{"i", "Item Logs (Highlighted)"},
+		{"Tab", "Cycle Views (Queue→Detail→Daemon→Item)"},
+		{"ESC", "Return to Queue View"},
 		{"?", "Help"},
 		{"e", "Exit"},
 		{"Ctrl+C", "Exit"},
