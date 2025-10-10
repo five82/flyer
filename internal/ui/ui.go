@@ -321,12 +321,15 @@ func (vm *viewModel) buildMainLayout() tview.Primitive {
 	)
 
 	// k9s-style header: FIXED | FLEX | FIXED (exact k9s pattern)
+	// Add single space padding on left and right edges
 	vm.header = tview.NewFlex().SetDirection(tview.FlexColumn)
 	vm.header.SetBackgroundColor(tcell.ColorBlack)
 	vm.header.
+		AddItem(nil, 1, 1, false).                     // Single space padding left
 		AddItem(vm.statusView, statusWidth, 1, false). // FIXED 40 chars
 		AddItem(vm.cmdView, 0, 1, false).              // FLEX - direct table (k9s does this!)
-		AddItem(vm.logoView, logoWidth, 1, false)      // FIXED 30 chars
+		AddItem(vm.logoView, logoWidth, 1, false).     // FIXED 30 chars
+		AddItem(nil, 1, 1, false)                      // Single space padding right
 
 	// Create main content pages for different views
 	vm.mainContent = tview.NewPages()
