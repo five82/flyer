@@ -3,9 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -13,7 +11,6 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/five82/flyer/internal/config"
-	"github.com/five82/flyer/internal/logtail"
 	"github.com/five82/flyer/internal/spindle"
 	"github.com/five82/flyer/internal/state"
 )
@@ -30,45 +27,6 @@ const (
 	maxLogLines       = 400
 	defaultUIInterval = time.Second
 )
-
-// createLogo generates the flyer logo using figlet or fallback
-func createLogo() string {
-	// Try to use figlet for ASCII art
-	cmd := exec.Command("figlet", "-f", "slant", "flyer")
-	output, err := cmd.Output()
-	if err == nil && len(output) > 0 {
-		// Apply orange color to figlet output (k9s-style logo color)
-		return applyOrangeColor(string(output))
-	}
-
-	// Fallback: simple orange FLYER text (k9s-style)
-	return "[orange]FLYER[-]"
-}
-
-// applyOrangeColor applies orange color to text using tview color tags (k9s-style)
-func applyOrangeColor(text string) string {
-	color := "[orange]"
-	var result strings.Builder
-	lines := strings.Split(text, "\n")
-
-	for lineIdx, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-
-		result.WriteString(color) // Start orange color for this line
-		for _, r := range line {
-			result.WriteRune(r)
-		}
-		result.WriteString("[-]") // End orange color for this line
-
-		if lineIdx < len(lines)-1 {
-			result.WriteString("\n")
-		}
-	}
-
-	return result.String()
-}
 
 type logSource int
 
@@ -183,37 +141,40 @@ func Run(ctx context.Context, opts Options) error {
 }
 
 type viewModel struct {
+	// Core application state
 	app     *tview.Application
 	options Options
+	root    *tview.Pages
 
-	// Header components (top 25%)
+	// Header components
 	header     *tview.Flex
 	statusView *tview.TextView
 	cmdView    *tview.Table
 	logoView   *tview.TextView
 
-	// Main content pane (bottom 75%)
+	// Main content views
 	mainContent *tview.Pages
 	table       *tview.Table
 	detail      *tview.TextView
 	logView     *tview.TextView
 
-	// Search components
+	// Search state
 	searchInput        *tview.InputField
 	searchStatus       *tview.TextView
 	searchRegex        *regexp.Regexp
 	searchMatches      []int
 	currentSearchMatch int
 	lastSearchPattern  string
+	searchMode         bool
 
-	root *tview.Pages
-
+	// Data and navigation state
 	items       []spindle.QueueItem
+	currentView string // "queue", "detail", "logs"
+
+	// Log viewing state
 	logMode     logSource
 	lastLogPath string
 	lastLogSet  time.Time
-	currentView string // "queue", "detail", "logs"
-	searchMode  bool   // true when in search input mode
 }
 
 func newViewModel(app *tview.Application, opts Options) *viewModel {
@@ -463,97 +424,6 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 	vm.statusView.SetText(statusText)
 }
 
-func (vm *viewModel) renderTable() {
-	vm.table.Clear()
-	headers := []string{"ID", "Title", "Status", "Lane", "Progress"}
-	for col, label := range headers {
-		// k9s-style table headers with white background
-		headerCell := tview.NewTableCell("[::b][black:white]" + label + "[-]")
-		headerCell.SetSelectable(false)
-		vm.table.SetCell(0, col, headerCell)
-	}
-
-	rows := vm.items
-	sort.SliceStable(rows, func(i, j int) bool {
-		return rows[i].ID > rows[j].ID
-	})
-
-	for row := 0; row < len(rows); row++ {
-		item := rows[row]
-		// k9s-style table data with dodgerblue color
-		vm.table.SetCell(row+1, 0, tview.NewTableCell(fmt.Sprintf("[dodgerblue]%d[-]", item.ID)))
-		vm.table.SetCell(row+1, 1, tview.NewTableCell("[dodgerblue]"+composeTitle(item)+"[-]"))
-		vm.table.SetCell(row+1, 2, tview.NewTableCell("[dodgerblue]"+strings.ToUpper(item.Status)+"[-]"))
-		vm.table.SetCell(row+1, 3, tview.NewTableCell("[dodgerblue]"+determineLane(item.Status)+"[-]"))
-		vm.table.SetCell(row+1, 4, tview.NewTableCell("[dodgerblue]"+formatProgress(item)+"[-]"))
-	}
-
-	// Set k9s-style selection colors
-	vm.table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorAqua).Foreground(tcell.ColorBlack))
-}
-
-func composeTitle(item spindle.QueueItem) string {
-	title := strings.TrimSpace(item.DiscTitle)
-	if title != "" {
-		return title
-	}
-	return fallbackTitle(item.SourcePath)
-}
-
-func fallbackTitle(path string) string {
-	trimmed := strings.TrimSpace(path)
-	if trimmed == "" {
-		return "Unknown"
-	}
-	parts := strings.Split(trimmed, "/")
-	name := parts[len(parts)-1]
-	if name == "" && len(parts) > 1 {
-		return parts[len(parts)-2]
-	}
-	return name
-}
-
-func formatProgress(item spindle.QueueItem) string {
-	stage := strings.TrimSpace(item.Progress.Stage)
-	if stage == "" {
-		stage = titleCase(item.Status)
-	}
-	percent := item.Progress.Percent
-	if percent <= 0 {
-		return stage
-	}
-	return fmt.Sprintf("%s %.0f%%", stage, percent)
-}
-
-func determineLane(status string) string {
-	switch status {
-	case "pending", "identifying", "identified", "ripping":
-		return "foreground"
-	case "ripped", "encoding", "encoded", "organizing", "completed":
-		return "background"
-	case "failed", "review":
-		return "attention"
-	default:
-		return "-"
-	}
-}
-
-func titleCase(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	parts := strings.Split(value, "_")
-	for i, part := range parts {
-		if part == "" {
-			continue
-		}
-		lower := strings.ToLower(part)
-		parts[i] = strings.ToUpper(lower[:1]) + lower[1:]
-	}
-	return strings.Join(parts, " ")
-}
-
 func (vm *viewModel) ensureSelection() {
 	rows := len(vm.items)
 	if rows == 0 {
@@ -568,162 +438,6 @@ func (vm *viewModel) ensureSelection() {
 	if row > rows {
 		vm.table.Select(rows, 0)
 	}
-}
-
-func (vm *viewModel) showDetailView() {
-	vm.currentView = "detail"
-	vm.mainContent.SwitchToPage("detail")
-	vm.clearSearch()
-	row, _ := vm.table.GetSelection()
-	vm.updateDetail(row)
-	vm.app.SetFocus(vm.detail)
-}
-
-func (vm *viewModel) showQueueView() {
-	vm.currentView = "queue"
-	vm.mainContent.SwitchToPage("queue")
-	vm.clearSearch()
-	vm.app.SetFocus(vm.table)
-}
-
-func (vm *viewModel) showLogsView() {
-	vm.currentView = "logs"
-	vm.mainContent.SwitchToPage("logs")
-	vm.refreshLogs(true)
-	vm.app.SetFocus(vm.logView)
-}
-
-func (vm *viewModel) showItemLogsView() {
-	vm.currentView = "logs"
-	vm.mainContent.SwitchToPage("logs")
-	// Force item log mode
-	vm.logMode = logSourceItem
-	vm.logView.SetTitle(" [lightskyblue]Item Log[-] ")
-	vm.lastLogPath = ""
-	vm.refreshLogs(true)
-	vm.app.SetFocus(vm.logView)
-}
-
-func (vm *viewModel) showDaemonLogsView() {
-	vm.currentView = "logs"
-	vm.mainContent.SwitchToPage("logs")
-	// Force daemon log mode
-	vm.logMode = logSourceDaemon
-	vm.logView.SetTitle(" [lightskyblue]Daemon Log[-] ")
-	vm.lastLogPath = ""
-	vm.refreshLogs(true)
-	vm.app.SetFocus(vm.logView)
-}
-
-func (vm *viewModel) updateDetail(row int) {
-	if row <= 0 || row-1 >= len(vm.items) {
-		vm.detail.SetText("[cadetblue]Select an item to view details[-]")
-		return
-	}
-	item := vm.items[row-1]
-	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("[fuchsia]Title:[-] [dodgerblue]%s[-]\n", composeTitle(item)))
-	builder.WriteString(fmt.Sprintf("[fuchsia]Status:[-] [dodgerblue]%s[-]\n", strings.ToUpper(item.Status)))
-	builder.WriteString(fmt.Sprintf("[fuchsia]Lane:[-] [dodgerblue]%s[-]\n", determineLane(item.Status)))
-	if item.Progress.Stage != "" || item.Progress.Message != "" {
-		builder.WriteString(fmt.Sprintf("[fuchsia]Stage:[-] [dodgerblue]%s[-] ([cadetblue]%s[-] [dodgerblue]%.0f%%[-])\n", strings.TrimSpace(item.Progress.Stage), strings.TrimSpace(item.Progress.Message), item.Progress.Percent))
-	}
-	if strings.TrimSpace(item.ErrorMessage) != "" {
-		builder.WriteString(fmt.Sprintf("[orangered]Error:[-] [red]%s[-]\n", item.ErrorMessage))
-	}
-	if item.NeedsReview {
-		builder.WriteString("[darkorange]Needs review[-]\n")
-	}
-	if item.ReviewReason != "" {
-		builder.WriteString(fmt.Sprintf("[darkorange]Reason:[-] [dodgerblue]%s[-]\n", item.ReviewReason))
-	}
-	if item.RippedFile != "" {
-		builder.WriteString(fmt.Sprintf("[fuchsia]Rip:[-] [cadetblue]%s[-]\n", item.RippedFile))
-	}
-	if item.EncodedFile != "" {
-		builder.WriteString(fmt.Sprintf("[fuchsia]Encoded:[-] [cadetblue]%s[-]\n", item.EncodedFile))
-	}
-	if item.FinalFile != "" {
-		builder.WriteString(fmt.Sprintf("[fuchsia]Final:[-] [cadetblue]%s[-]\n", item.FinalFile))
-	}
-	if item.BackgroundLogPath != "" {
-		builder.WriteString(fmt.Sprintf("[fuchsia]Background log:[-] [cadetblue]%s[-]\n", item.BackgroundLogPath))
-	}
-	if ts := item.ParsedCreatedAt(); !ts.IsZero() {
-		builder.WriteString(fmt.Sprintf("[fuchsia]Created:[-] [cadetblue]%s[-]\n", ts.Format(time.RFC3339)))
-	}
-	if ts := item.ParsedUpdatedAt(); !ts.IsZero() {
-		builder.WriteString(fmt.Sprintf("[fuchsia]Updated:[-] [cadetblue]%s[-]\n", ts.Format(time.RFC3339)))
-	}
-	vm.detail.SetText(builder.String())
-}
-
-func (vm *viewModel) refreshLogs(force bool) {
-	path := vm.options.LogPath
-	if vm.logMode == logSourceItem {
-		item := vm.selectedItem()
-		if item == nil || strings.TrimSpace(item.BackgroundLogPath) == "" {
-			vm.logView.SetText("No background log for this item")
-			vm.lastLogPath = ""
-			return
-		}
-		path = item.BackgroundLogPath
-	}
-	if path == "" {
-		vm.logView.SetText("Log path not configured")
-		return
-	}
-	if !force && path == vm.lastLogPath && time.Since(vm.lastLogSet) < 500*time.Millisecond {
-		return
-	}
-	lines, err := logtail.Read(path, maxLogLines)
-	if err != nil {
-		vm.logView.SetText(fmt.Sprintf("Error reading log: %v", err))
-		vm.lastLogPath = path
-		vm.lastLogSet = time.Now()
-		return
-	}
-	colorizedLines := logtail.ColorizeLines(lines)
-	vm.logView.SetText(strings.Join(colorizedLines, "\n"))
-	vm.lastLogPath = path
-	vm.lastLogSet = time.Now()
-}
-
-func (vm *viewModel) selectedItem() *spindle.QueueItem {
-	row, _ := vm.table.GetSelection()
-	if row <= 0 || row-1 >= len(vm.items) {
-		return nil
-	}
-	item := vm.items[row-1]
-	return &item
-}
-
-func (vm *viewModel) toggleFocus() {
-	switch vm.currentView {
-	case "queue":
-		vm.showDetailView()
-	case "detail":
-		vm.showDaemonLogsView()
-	case "logs":
-		if vm.logMode == logSourceDaemon {
-			vm.showItemLogsView()
-		} else {
-			vm.showQueueView()
-		}
-	}
-}
-
-func (vm *viewModel) toggleLogSource() {
-	if vm.logMode == logSourceDaemon {
-		vm.logMode = logSourceItem
-		vm.logView.SetTitle(" [lightskyblue]Item Log[-] ")
-	} else {
-		vm.logMode = logSourceDaemon
-		vm.logView.SetTitle(" [lightskyblue]Daemon Log[-] ")
-	}
-	vm.lastLogPath = ""
-	// Always show logs view when toggling log source
-	vm.showLogsView()
 }
 
 func (vm *viewModel) showHelp() {
@@ -775,17 +489,6 @@ func (vm *viewModel) showHelp() {
 	vm.root.AddPage("modal", center(75, 7, modal), true, true)
 }
 
-func (vm *viewModel) returnToCurrentView() {
-	switch vm.currentView {
-	case "queue":
-		vm.app.SetFocus(vm.table)
-	case "detail":
-		vm.app.SetFocus(vm.detail)
-	case "logs":
-		vm.app.SetFocus(vm.logView)
-	}
-}
-
 func center(width, height int, primitive tview.Primitive) tview.Primitive {
 	return tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(nil, 0, 1, false).
@@ -794,168 +497,4 @@ func center(width, height int, primitive tview.Primitive) tview.Primitive {
 			AddItem(primitive, width, 0, true).
 			AddItem(nil, 0, 1, false), height, 0, true).
 		AddItem(nil, 0, 1, false)
-}
-
-func (vm *viewModel) startSearch() {
-	if vm.currentView != "logs" {
-		return
-	}
-
-	vm.searchMode = true
-	vm.searchInput = tview.NewInputField()
-	vm.searchInput.SetLabel("/")
-	vm.searchInput.SetFieldWidth(40)
-	vm.searchInput.SetBackgroundColor(tcell.ColorBlack)
-	vm.searchInput.SetFieldTextColor(tcell.ColorWhite)
-
-	// Create a simple container for the search input
-	searchContainer := tview.NewFlex().SetDirection(tview.FlexRow)
-	searchContainer.SetBackgroundColor(tcell.ColorBlack)
-	searchContainer.AddItem(nil, 0, 1, false) // Push to bottom
-	searchContainer.AddItem(vm.searchInput, 1, 0, true)
-
-	vm.searchInput.SetDoneFunc(func(key tcell.Key) {
-		switch key {
-		case tcell.KeyEnter:
-			vm.performSearch()
-		case tcell.KeyESC:
-			vm.cancelSearch()
-		}
-	})
-
-	vm.root.AddPage("search", searchContainer, true, true)
-	vm.app.SetFocus(vm.searchInput)
-}
-
-func (vm *viewModel) performSearch() {
-	if vm.searchInput == nil {
-		return
-	}
-	searchText := strings.TrimSpace(vm.searchInput.GetText())
-	if searchText == "" {
-		vm.cancelSearch()
-		return
-	}
-
-	// Compile regex for case-insensitive search
-	regex, err := regexp.Compile("(?i)" + searchText)
-	if err != nil {
-		vm.cancelSearch()
-		return
-	}
-
-	vm.searchRegex = regex
-	vm.lastSearchPattern = searchText
-	vm.root.RemovePage("search")
-	vm.searchMode = false
-
-	// Find matches in current log content
-	vm.findSearchMatches()
-	if len(vm.searchMatches) > 0 {
-		vm.currentSearchMatch = 0
-		vm.highlightSearchMatch()
-		vm.updateSearchStatus()
-	} else {
-		vm.searchStatus.SetText(fmt.Sprintf("[red]Pattern not found: %s[-]", searchText))
-	}
-}
-
-func (vm *viewModel) cancelSearch() {
-	vm.root.RemovePage("search")
-	vm.searchMode = false
-	vm.returnToCurrentView()
-}
-
-func (vm *viewModel) clearSearch() {
-	vm.searchRegex = nil
-	vm.searchMatches = []int{}
-	vm.currentSearchMatch = 0
-	vm.lastSearchPattern = ""
-	vm.searchStatus.SetText("")
-}
-
-func (vm *viewModel) updateSearchStatus() {
-	if vm.searchRegex == nil || len(vm.searchMatches) == 0 {
-		vm.searchStatus.SetText("")
-		return
-	}
-
-	matchNum := vm.currentSearchMatch + 1
-	totalMatches := len(vm.searchMatches)
-	vm.searchStatus.SetText(fmt.Sprintf("[dodgerblue]/%s[-] - [yellow]%d/%d[-] - Press [dodgerblue]n[-] for next, [dodgerblue]N[-] for previous",
-		vm.lastSearchPattern, matchNum, totalMatches))
-}
-
-func (vm *viewModel) findSearchMatches() {
-	if vm.searchRegex == nil {
-		return
-	}
-
-	logText := vm.logView.GetText(false)
-	lines := strings.Split(logText, "\n")
-
-	vm.searchMatches = []int{}
-	for i, line := range lines {
-		if vm.searchRegex.MatchString(line) {
-			vm.searchMatches = append(vm.searchMatches, i)
-		}
-	}
-}
-
-func (vm *viewModel) nextSearchMatch() {
-	if len(vm.searchMatches) == 0 {
-		return
-	}
-
-	vm.currentSearchMatch = (vm.currentSearchMatch + 1) % len(vm.searchMatches)
-	vm.highlightSearchMatch()
-	vm.updateSearchStatus()
-}
-
-func (vm *viewModel) previousSearchMatch() {
-	if len(vm.searchMatches) == 0 {
-		return
-	}
-
-	vm.currentSearchMatch = (vm.currentSearchMatch - 1 + len(vm.searchMatches)) % len(vm.searchMatches)
-	vm.highlightSearchMatch()
-	vm.updateSearchStatus()
-}
-
-func (vm *viewModel) highlightSearchMatch() {
-	if len(vm.searchMatches) == 0 || vm.currentSearchMatch >= len(vm.searchMatches) {
-		return
-	}
-
-	targetLine := vm.searchMatches[vm.currentSearchMatch]
-
-	// Get original log content (without highlighting)
-	logText := vm.logView.GetText(false)
-	lines := strings.Split(logText, "\n")
-
-	// Highlight all matches, but emphasize the current one
-	for i, line := range lines {
-		if vm.searchRegex.MatchString(line) {
-			if i == targetLine {
-				// Current match: yellow background with bold text
-				lines[i] = vm.searchRegex.ReplaceAllString(line, "[::b][black:yellow]${0}[-]")
-			} else {
-				// Other matches: just highlight in red
-				lines[i] = vm.searchRegex.ReplaceAllString(line, "[red]${0}[-]")
-			}
-		}
-	}
-
-	// Update the log view with highlighted content
-	vm.logView.SetText(strings.Join(lines, "\n"))
-
-	// Scroll to the matched line
-	vm.logView.ScrollTo(targetLine, 0)
-}
-
-func yesNo(value bool) string {
-	if value {
-		return "yes"
-	}
-	return "no"
 }
