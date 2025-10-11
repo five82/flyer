@@ -17,10 +17,11 @@ import (
 
 // Options configure the UI runtime.
 type Options struct {
-	Store        *state.Store
-	LogPath      string
-	Config       config.Config
-	RefreshEvery time.Duration
+	Store         *state.Store
+	DaemonLogPath string
+	DraptoLogPath string
+	Config        config.Config
+	RefreshEvery  time.Duration
 }
 
 const (
@@ -32,6 +33,7 @@ type logSource int
 
 const (
 	logSourceDaemon logSource = iota
+	logSourceEncoding
 	logSourceItem
 )
 
@@ -121,8 +123,14 @@ func Run(ctx context.Context, opts Options) error {
 			case 'l':
 				model.toggleLogSource()
 				return nil
+			case 'r':
+				model.showEncodingLogsView()
+				return nil
 			case 'i':
 				model.showItemLogsView()
+				return nil
+			case 'h':
+				model.showHelp()
 				return nil
 			case '?':
 				model.showHelp()
@@ -206,10 +214,11 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	commands := []struct{ key, desc string }{
 		{"<q>", "Queue"},
 		{"<d>", "Detail"},
-		{"<l>", "Logs"},
-		{"<i>", "Item Logs"},
+		{"<l>", "Logs (cycle)"},
+		{"<i>", "Item Log"},
+		{"<r>", "Encoding Log"},
 		{"<Tab>", "Switch"},
-		{"<?>", "Help"},
+		{"<h>", "Help"},
 		{"<e>", "Exit"},
 	}
 
@@ -455,14 +464,15 @@ func (vm *viewModel) showHelp() {
 	helpCommands := []struct{ key, desc string }{
 		{"q", "Queue View"},
 		{"d", "Detail View"},
-		{"l", "Toggle Log Source"},
+		{"l", "Toggle Log Source (Daemon→Encoding→Item)"},
+		{"r", "Encoding Log View"},
+		{"h/?", "Help"},
 		{"i", "Item Logs (Highlighted)"},
 		{"/", "Start New Search"},
 		{"n", "Next Search Match"},
 		{"N", "Previous Search Match"},
-		{"Tab", "Cycle Views (Queue→Detail→Daemon→Item)"},
+		{"Tab", "Cycle Views (Queue→Detail→Daemon→Encoding→Item)"},
 		{"ESC", "Return to Queue View"},
-		{"?", "Help"},
 		{"e", "Exit"},
 		{"Ctrl+C", "Exit"},
 	}

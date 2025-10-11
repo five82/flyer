@@ -5,10 +5,10 @@ Flyer is a read-only terminal dashboard for the Spindle disc-ripping daemon. It 
 ## Features
 - **Queue view** showing all items grouped by status with live counts in the header.
 - **Detail view** displaying metadata, file paths, progress, error messages, and review flags for the selected item.
-- **Log viewer** supporting both daemon logs and per-item background logs with syntax highlighting.
+- **Log viewer** supporting daemon, encoding (Drapto), and per-item background logs with syntax highlighting.
 - **Log search** with vim-style `/` search, `n`/`N` navigation, and regex support.
-- **Fast navigation** via single-key commands and Tab cycling between Queue → Detail → Daemon Log → Item Log.
-- **Help overlay** (`?`) showing all available keybindings.
+- **Fast navigation** via single-key commands and Tab cycling between Queue → Detail → Daemon Log → Encoding Log → Item Log.
+- **Help overlay** (`h`) showing all available keybindings.
 
 ## Requirements
 - Go 1.25 or newer.
@@ -48,8 +48,9 @@ Optional flags:
 - `q` – switch to Queue view
 - `d` – switch to Detail view for the selected item
 - `i` – switch to Item Log view for the selected item
-- `l` – toggle between Daemon Log and Item Log (switches to log view)
-- `Tab` – cycle through views: Queue → Detail → Daemon Log → Item Log
+- `r` – switch to Encoding Log view for the selected item
+- `l` – cycle log sources (Daemon → Encoding → Item) and switch to log view
+- `Tab` – cycle through views: Queue → Detail → Daemon Log → Encoding Log → Item Log
 - `ESC` – return to Queue view
 
 **Search (in Log view):**
@@ -58,7 +59,7 @@ Optional flags:
 - `N` – jump to previous search match
 
 **General:**
-- `?` – show help overlay with all keybindings
+- `h` – show help overlay with all keybindings
 - `e` / `Ctrl+C` – exit Flyer
 
 ## Development

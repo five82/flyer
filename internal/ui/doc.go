@@ -58,10 +58,11 @@
 // # Usage Example
 //
 //	opts := ui.Options{
-//		Store:        stateStore,
-//		LogPath:      "/var/log/spindle/daemon.log",
-//		Config:       cfg,
-//		RefreshEvery: time.Second,
+//		Store:         stateStore,
+//		DaemonLogPath: "/var/log/spindle/daemon.log",
+//		DraptoLogPath: "/var/log/spindle/drapto.log",
+//		Config:        cfg,
+//		RefreshEvery:  time.Second,
 //	}
 //	if err := ui.Run(ctx, opts); err != nil {
 //		log.Fatal(err)
@@ -71,7 +72,8 @@
 //
 //   - q: Queue view
 //   - d: Detail view for selected item
-//   - l: Toggle log source (daemon/item)
+//   - l: Toggle log source (daemon/encoding/item)
+//   - r: Jump to encoding log
 //   - i: Show logs for selected item
 //   - Tab: Cycle through views
 //   - /: Start search (in log view)

@@ -43,10 +43,11 @@ func Run(ctx context.Context, opts Options) error {
 	StartPoller(ctx, store, client, interval)
 
 	uiOpts := ui.Options{
-		Store:        store,
-		LogPath:      cfg.DaemonLogPath(),
-		Config:       cfg,
-		RefreshEvery: interval,
+		Store:         store,
+		DaemonLogPath: cfg.DaemonLogPath(),
+		DraptoLogPath: cfg.DraptoLogPath(),
+		Config:        cfg,
+		RefreshEvery:  interval,
 	}
 
 	return ui.Run(ctx, uiOpts)

@@ -28,6 +28,7 @@ func (vm *viewModel) showQueueView() {
 func (vm *viewModel) showLogsView() {
 	vm.currentView = "logs"
 	vm.mainContent.SwitchToPage("logs")
+	vm.updateLogTitle()
 	vm.refreshLogs(true)
 	vm.app.SetFocus(vm.logView)
 }
@@ -37,7 +38,7 @@ func (vm *viewModel) showItemLogsView() {
 	vm.mainContent.SwitchToPage("logs")
 	// Force item log mode
 	vm.logMode = logSourceItem
-	vm.logView.SetTitle(" [lightskyblue]Item Log[-] ")
+	vm.updateLogTitle()
 	vm.lastLogPath = ""
 	vm.refreshLogs(true)
 	vm.app.SetFocus(vm.logView)
@@ -48,7 +49,18 @@ func (vm *viewModel) showDaemonLogsView() {
 	vm.mainContent.SwitchToPage("logs")
 	// Force daemon log mode
 	vm.logMode = logSourceDaemon
-	vm.logView.SetTitle(" [lightskyblue]Daemon Log[-] ")
+	vm.updateLogTitle()
+	vm.lastLogPath = ""
+	vm.refreshLogs(true)
+	vm.app.SetFocus(vm.logView)
+}
+
+func (vm *viewModel) showEncodingLogsView() {
+	vm.currentView = "logs"
+	vm.mainContent.SwitchToPage("logs")
+	// Force encoding log mode
+	vm.logMode = logSourceEncoding
+	vm.updateLogTitle()
 	vm.lastLogPath = ""
 	vm.refreshLogs(true)
 	vm.app.SetFocus(vm.logView)
@@ -61,22 +73,27 @@ func (vm *viewModel) toggleFocus() {
 	case "detail":
 		vm.showDaemonLogsView()
 	case "logs":
-		if vm.logMode == logSourceDaemon {
+		switch vm.logMode {
+		case logSourceDaemon:
+			vm.showEncodingLogsView()
+		case logSourceEncoding:
 			vm.showItemLogsView()
-		} else {
+		default:
 			vm.showQueueView()
 		}
 	}
 }
 
 func (vm *viewModel) toggleLogSource() {
-	if vm.logMode == logSourceDaemon {
+	switch vm.logMode {
+	case logSourceDaemon:
+		vm.logMode = logSourceEncoding
+	case logSourceEncoding:
 		vm.logMode = logSourceItem
-		vm.logView.SetTitle(" [lightskyblue]Item Log[-] ")
-	} else {
+	default:
 		vm.logMode = logSourceDaemon
-		vm.logView.SetTitle(" [lightskyblue]Daemon Log[-] ")
 	}
+	vm.updateLogTitle()
 	vm.lastLogPath = ""
 	// Always show logs view when toggling log source
 	vm.showLogsView()
@@ -137,8 +154,13 @@ func (vm *viewModel) updateDetail(row int) {
 }
 
 func (vm *viewModel) refreshLogs(force bool) {
-	path := vm.options.LogPath
-	if vm.logMode == logSourceItem {
+	var path string
+	switch vm.logMode {
+	case logSourceDaemon:
+		path = vm.options.DaemonLogPath
+	case logSourceEncoding:
+		path = vm.options.DraptoLogPath
+	case logSourceItem:
 		item := vm.selectedItem()
 		if item == nil || strings.TrimSpace(item.BackgroundLogPath) == "" {
 			vm.logView.SetText("No background log for this item")
@@ -148,7 +170,14 @@ func (vm *viewModel) refreshLogs(force bool) {
 		path = item.BackgroundLogPath
 	}
 	if path == "" {
-		vm.logView.SetText("Log path not configured")
+		switch vm.logMode {
+		case logSourceEncoding:
+			vm.logView.SetText("Encoding log path not configured")
+		case logSourceItem:
+			vm.logView.SetText("No background log for this item")
+		default:
+			vm.logView.SetText("Log path not configured")
+		}
 		return
 	}
 	if !force && path == vm.lastLogPath && time.Since(vm.lastLogSet) < 500*time.Millisecond {
@@ -174,4 +203,15 @@ func (vm *viewModel) selectedItem() *spindle.QueueItem {
 	}
 	item := vm.items[row-1]
 	return &item
+}
+
+func (vm *viewModel) updateLogTitle() {
+	switch vm.logMode {
+	case logSourceItem:
+		vm.logView.SetTitle(" [lightskyblue]Item Log[-] ")
+	case logSourceEncoding:
+		vm.logView.SetTitle(" [lightskyblue]Encoding Log[-] ")
+	default:
+		vm.logView.SetTitle(" [lightskyblue]Daemon Log[-] ")
+	}
 }
