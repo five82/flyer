@@ -11,17 +11,17 @@ func createLogo() string {
 	cmd := exec.Command("figlet", "-f", "slant", "flyer")
 	output, err := cmd.Output()
 	if err == nil && len(output) > 0 {
-		// Apply orange color to figlet output (k9s-style logo color)
-		return applyOrangeColor(string(output))
+		// Apply yellow color to figlet output
+		return applyYellowColor(string(output))
 	}
 
-	// Fallback: simple orange FLYER text (k9s-style)
-	return "[orange]FLYER[-]"
+	// Fallback: simple yellow FLYER text
+	return "[yellow]FLYER[-]"
 }
 
-// applyOrangeColor applies orange color to text using tview color tags (k9s-style)
-func applyOrangeColor(text string) string {
-	color := "[orange]"
+// applyYellowColor applies yellow color to text using tview color tags
+func applyYellowColor(text string) string {
+	color := "[yellow]"
 	var result strings.Builder
 	lines := strings.Split(text, "\n")
 
@@ -30,11 +30,11 @@ func applyOrangeColor(text string) string {
 			continue
 		}
 
-		result.WriteString(color) // Start orange color for this line
+		result.WriteString(color) // Start yellow color for this line
 		for _, r := range line {
 			result.WriteRune(r)
 		}
-		result.WriteString("[-]") // End orange color for this line
+		result.WriteString("[-]") // End yellow color for this line
 
 		if lineIdx < len(lines)-1 {
 			result.WriteString("\n")

@@ -190,12 +190,13 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	tview.Styles.PrimitiveBackgroundColor = tcell.ColorBlack
 	tview.Styles.ContrastBackgroundColor = tcell.ColorBlack
 	tview.Styles.MoreContrastBackgroundColor = tcell.ColorBlack
-	tview.Styles.PrimaryTextColor = tcell.ColorWhite
+	tview.Styles.PrimaryTextColor = tcell.ColorDefault // Allow dynamic colors
 
 	// Header components (k9s-style)
 	statusView := tview.NewTextView().SetDynamicColors(true).SetWrap(true)
 	statusView.SetTextAlign(tview.AlignLeft)
 	statusView.SetBackgroundColor(tcell.ColorBlack)
+	statusView.SetTextColor(tcell.ColorPurple) // Set default to purple
 
 	// Commands section using Table (k9s Menu pattern)
 	// k9s fills table with maxRows=6, flowing into multiple columns
@@ -233,7 +234,7 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		// k9s format with padding: " <key>  description " (line 132 in menu.go)
 		// Use %-Ns format to left-align and pad keys to same width
 		paddedKey := fmt.Sprintf("%-*s", maxKeyWidth[col], cmd.key)
-		cell := tview.NewTableCell(fmt.Sprintf(" [::b][dodgerblue]%s[gray]  %s ", paddedKey, cmd.desc))
+		cell := tview.NewTableCell(fmt.Sprintf(" [::b][dodgerblue]%s[slategray]  %s ", paddedKey, cmd.desc))
 		cell.SetBackgroundColor(tcell.ColorBlack)
 		cell.SetExpansion(1) // Make cells expand to fill available space
 
@@ -395,31 +396,40 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 			if !snapshot.LastUpdated.IsZero() {
 				last = snapshot.LastUpdated.Format("15:04:05")
 			}
-			vm.statusView.SetText(fmt.Sprintf("[orangered]spindle unavailable[-]\nRetrying (last attempt [cadetblue]%s[-])", last))
+			vm.statusView.SetText(fmt.Sprintf("[red::b]spindle unavailable[-]\n[magenta::b]Retrying:[-] [orange]%s[-]", last))
 			return
 		}
-		vm.statusView.SetText("[darkorange]waiting for spindle status…[-]")
+		vm.statusView.SetText("[yellow::b]waiting for spindle status…[-]")
 		return
 	}
 	stats := snapshot.Status.Workflow.QueueStats
-	counts := []string{
-		fmt.Sprintf("[lightskyblue]Pending[-]: [dodgerblue]%d[-]", stats["pending"]),
-		fmt.Sprintf("[greenyellow]Processing[-]: [dodgerblue]%d[-]", stats["identifying"]+stats["ripping"]+stats["encoding"]+stats["organizing"]),
-		fmt.Sprintf("[orangered]Failed[-]: [dodgerblue]%d[-]", stats["failed"]),
-		fmt.Sprintf("[darkorange]Review[-]: [dodgerblue]%d[-]", stats["review"]),
-		fmt.Sprintf("[greenyellow]Completed[-]: [dodgerblue]%d[-]", stats["completed"]),
-	}
+	pending := stats["pending"]
+	processing := stats["identifying"] + stats["ripping"] + stats["encoding"] + stats["organizing"]
+	failed := stats["failed"]
+	review := stats["review"]
+	completed := stats["completed"]
 
-	// k9s-style daemon status with colors
-	daemonStatus := "[red]no[-]"
+	// Simplified daemon status
+	daemonStatus := "[red::b]no[-]"
 	if snapshot.Status.Running {
-		daemonStatus = "[greenyellow]yes[-]"
+		daemonStatus = "[lightgreen::b]yes[-]" // pleasing green
 	}
 
-	statusText := fmt.Sprintf("[fuchsia]Daemon:[-] %s\n[fuchsia]PID:[-] [dodgerblue]%d[-]\n[fuchsia]Updated:[-] [cadetblue]%s[-]\n%s",
-		daemonStatus, snapshot.Status.PID, snapshot.LastUpdated.Format("15:04:05"), strings.Join(counts, "\n"))
+	// Color code values based on conditions
+	failedColor := "[lightgray]"
+	if failed > 0 {
+		failedColor = "[red]"
+	}
+
+	reviewColor := "[lightgray]"
+	if review > 0 {
+		reviewColor = "[yellow]"
+	}
+
+	statusText := fmt.Sprintf("[mediumpurple]Daemon:[-]     %s\n[mediumpurple]PID:[-]        [lightgray]%d[-]\n[mediumpurple]Updated:[-]    [lightgray]%s[-]\n[mediumpurple]Pending:[-]    [lightgray]%d[-]\n[mediumpurple]Processing:[-] [lightgray]%d[-]\n[mediumpurple]Failed:[-]     %s%d[-]\n[mediumpurple]Review:[-]     %s%d[-]\n[mediumpurple]Completed:[-]  [lightgray]%d[-]",
+		daemonStatus, snapshot.Status.PID, snapshot.LastUpdated.Format("15:04:05"), pending, processing, failedColor, failed, reviewColor, review, completed)
 	if snapshot.LastError != nil {
-		statusText += fmt.Sprintf("\n[orangered]Error:[-] [red]%v[-]", snapshot.LastError)
+		statusText += fmt.Sprintf("\n[white::b]Error:[-] [red]%v[-]", snapshot.LastError)
 	}
 	vm.statusView.SetText(statusText)
 }
