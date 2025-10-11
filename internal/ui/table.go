@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -11,33 +12,270 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
+var statusPalette = map[string]string{
+	"pending":     "#7f8c8d",
+	"identifying": "#74b9ff",
+	"identified":  "#74b9ff",
+	"ripping":     "#0abde3",
+	"ripped":      "#38ada9",
+	"encoding":    "#f6c90e",
+	"encoded":     "#2ecc71",
+	"organizing":  "#27ae60",
+	"completed":   "#27ae60",
+	"failed":      "#ff6b6b",
+	"review":      "#f39c12",
+}
+
+var lanePalette = map[string]string{
+	"foreground": "#74b9ff",
+	"background": "#5b7083",
+	"attention":  "#f39c12",
+}
+
+var statusPriority = map[string]int{
+	"failed":      0,
+	"review":      1,
+	"encoding":    2,
+	"ripping":     3,
+	"ripped":      4,
+	"pending":     5,
+	"identifying": 6,
+	"identified":  7,
+	"organizing":  8,
+	"encoded":     9,
+	"completed":   10,
+}
+
 func (vm *viewModel) renderTable() {
 	vm.table.Clear()
-	headers := []string{"ID", "Title", "Status", "Lane", "Progress"}
-	for col, label := range headers {
-		// k9s-style table headers with white background
-		headerCell := tview.NewTableCell("[::b][black:white]" + label + "[-]")
-		headerCell.SetSelectable(false)
-		vm.table.SetCell(0, col, headerCell)
+
+	columns := []struct {
+		label     string
+		align     int
+		expansion int
+	}{
+		{"ID", tview.AlignRight, 1},
+		{"Title", tview.AlignLeft, 4},
+		{"Stage", tview.AlignLeft, 3},
+		{"Progress", tview.AlignLeft, 3},
+		{"Status", tview.AlignLeft, 2},
+		{"Updated", tview.AlignLeft, 2},
+		{"Flags", tview.AlignLeft, 1},
 	}
 
-	rows := vm.items
+	headerBackground := tcell.ColorRoyalBlue
+	for col, column := range columns {
+		header := tview.NewTableCell(fmt.Sprintf("[#f1f5f9::b]%s[-]", column.label)).
+			SetSelectable(false).
+			SetAlign(column.align).
+			SetExpansion(column.expansion).
+			SetBackgroundColor(headerBackground)
+		vm.table.SetCell(0, col, header)
+	}
+
+	rows := append([]spindle.QueueItem(nil), vm.items...)
 	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].NeedsReview != rows[j].NeedsReview {
+			return rows[i].NeedsReview
+		}
+		pi := statusRank(rows[i].Status)
+		pj := statusRank(rows[j].Status)
+		if pi != pj {
+			return pi < pj
+		}
+		ti := mostRecentTimestamp(rows[i])
+		tj := mostRecentTimestamp(rows[j])
+		if ti.IsZero() && !tj.IsZero() {
+			return false
+		}
+		if tj.IsZero() && !ti.IsZero() {
+			return true
+		}
+		if !ti.Equal(tj) {
+			return ti.After(tj)
+		}
 		return rows[i].ID > rows[j].ID
 	})
 
-	for row := 0; row < len(rows); row++ {
-		item := rows[row]
-		// k9s-style table data with dodgerblue color
-		vm.table.SetCell(row+1, 0, tview.NewTableCell(fmt.Sprintf("[dodgerblue]%d[-]", item.ID)))
-		vm.table.SetCell(row+1, 1, tview.NewTableCell("[dodgerblue]"+composeTitle(item)+"[-]"))
-		vm.table.SetCell(row+1, 2, tview.NewTableCell("[dodgerblue]"+strings.ToUpper(item.Status)+"[-]"))
-		vm.table.SetCell(row+1, 3, tview.NewTableCell("[dodgerblue]"+determineLane(item.Status)+"[-]"))
-		vm.table.SetCell(row+1, 4, tview.NewTableCell("[dodgerblue]"+formatProgress(item)+"[-]"))
+	now := time.Now()
+
+	for rowIdx, item := range rows {
+		displayRow := rowIdx + 1
+		vm.table.SetCell(displayRow, 0, makeCell(fmt.Sprintf("[#94a3b8]%d[-]", item.ID), tview.AlignRight, 1))
+		vm.table.SetCell(displayRow, 1, makeCell(formatTitle(item), tview.AlignLeft, 4))
+		vm.table.SetCell(displayRow, 2, makeCell(formatStage(item), tview.AlignLeft, 3))
+		vm.table.SetCell(displayRow, 3, makeCell(formatProgressBar(item), tview.AlignLeft, 3))
+		vm.table.SetCell(displayRow, 4, makeCell(formatStatus(item), tview.AlignLeft, 2))
+		vm.table.SetCell(displayRow, 5, makeCell(formatUpdated(now, item), tview.AlignLeft, 2))
+		vm.table.SetCell(displayRow, 6, makeCell(formatFlags(item), tview.AlignLeft, 1))
 	}
 
-	// Set k9s-style selection colors
-	vm.table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorAqua).Foreground(tcell.ColorBlack))
+	vm.table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorSteelBlue).Foreground(tcell.ColorWhite))
+}
+
+func makeCell(content string, align, expansion int) *tview.TableCell {
+	return tview.NewTableCell(content).
+		SetAlign(align).
+		SetExpansion(expansion).
+		SetBackgroundColor(tcell.ColorBlack)
+}
+
+func formatTitle(item spindle.QueueItem) string {
+	title := composeTitle(item)
+	title = truncate(title, 50)
+	color := "#e2e8f0"
+	if item.NeedsReview {
+		color = "#f39c12"
+	}
+	return fmt.Sprintf("[%s]%s[-]", color, tview.Escape(title))
+}
+
+func formatStage(item spindle.QueueItem) string {
+	stage := strings.TrimSpace(item.Progress.Stage)
+	if stage == "" {
+		stage = item.Status
+	}
+	stage = titleCase(stage)
+	stage = truncate(stage, 22)
+
+	detail := strings.TrimSpace(item.Progress.Message)
+	detailColor := "#9aa5b1"
+
+	if strings.TrimSpace(item.ErrorMessage) != "" {
+		detail = item.ErrorMessage
+		detailColor = "#ff6b6b"
+	} else if item.NeedsReview && strings.TrimSpace(item.ReviewReason) != "" {
+		detail = item.ReviewReason
+		detailColor = "#f39c12"
+	}
+
+	if detail != "" {
+		detail = truncate(detail, 36)
+		return fmt.Sprintf("[%s]%s[-] [#6c757d]·[-] [%s]%s[-]", colorForStatus(item.Status), tview.Escape(stage), detailColor, tview.Escape(detail))
+	}
+
+	return fmt.Sprintf("[%s]%s[-]", colorForStatus(item.Status), tview.Escape(stage))
+}
+
+func formatProgressBar(item spindle.QueueItem) string {
+	percent := item.Progress.Percent
+	if percent < 0 {
+		percent = 0
+	}
+	if percent > 100 {
+		percent = 100
+	}
+	const barWidth = 14
+	filled := int(percent/100*barWidth + 0.5)
+	if filled < 0 {
+		filled = 0
+	}
+	if filled > barWidth {
+		filled = barWidth
+	}
+	bar := "[" + strings.Repeat("=", filled) + strings.Repeat(".", barWidth-filled) + "]"
+	return fmt.Sprintf("[%s]%s[-] %3.0f%%", colorForStatus(item.Status), bar, percent)
+}
+
+func formatStatus(item spindle.QueueItem) string {
+	status := titleCase(item.Status)
+	if status == "" {
+		status = "Unknown"
+	}
+
+	lane := strings.TrimSpace(item.ProcessingLane)
+	if lane == "" {
+		lane = determineLane(item.Status)
+	}
+	laneLower := strings.ToLower(strings.TrimSpace(lane))
+	if laneLower != "" {
+		laneLabel := titleCase(laneLower)
+		return fmt.Sprintf("[%s]%s[-] [#6c757d]·[-] [%s]%s[-]", colorForStatus(item.Status), tview.Escape(status), colorForLane(laneLower), tview.Escape(laneLabel))
+	}
+
+	return fmt.Sprintf("[%s]%s[-]", colorForStatus(item.Status), tview.Escape(status))
+}
+
+func formatUpdated(now time.Time, item spindle.QueueItem) string {
+	ts := mostRecentTimestamp(item)
+	if ts.IsZero() {
+		return "[#94a3b8]-[-]"
+	}
+	diff := now.Sub(ts)
+	if diff < 0 {
+		diff = 0
+	}
+	switch {
+	case diff < time.Minute:
+		return "[#94a3b8]just now[-]"
+	case diff < time.Hour:
+		return fmt.Sprintf("[#94a3b8]%dm ago[-]", int(diff.Minutes()))
+	case diff < 24*time.Hour:
+		return fmt.Sprintf("[#94a3b8]%dh ago[-]", int(diff.Hours()))
+	case diff < 7*24*time.Hour:
+		return fmt.Sprintf("[#94a3b8]%dd ago[-]", int(diff.Hours()/24))
+	case diff < 30*24*time.Hour:
+		weeks := int(diff.Hours() / (24 * 7))
+		if weeks < 1 {
+			weeks = 1
+		}
+		return fmt.Sprintf("[#94a3b8]%dw ago[-]", weeks)
+	default:
+		return fmt.Sprintf("[#94a3b8]%s[-]", ts.Format("Jan 02"))
+	}
+}
+
+func formatFlags(item spindle.QueueItem) string {
+	var flags []string
+	if item.NeedsReview {
+		flags = append(flags, "[#f39c12]REVIEW[-]")
+	}
+	if strings.TrimSpace(item.ErrorMessage) != "" {
+		flags = append(flags, "[#ff6b6b]ERROR[-]")
+	}
+	if strings.TrimSpace(item.BackgroundLogPath) != "" {
+		flags = append(flags, "[#74b9ff]LOG[-]")
+	}
+	return strings.Join(flags, " ")
+}
+
+func colorForStatus(status string) string {
+	if color, ok := statusPalette[strings.ToLower(strings.TrimSpace(status))]; ok {
+		return color
+	}
+	return "#cbd5f5"
+}
+
+func colorForLane(lane string) string {
+	if color, ok := lanePalette[strings.ToLower(strings.TrimSpace(lane))]; ok {
+		return color
+	}
+	return "#94a3b8"
+}
+
+func statusRank(status string) int {
+	if rank, ok := statusPriority[strings.ToLower(strings.TrimSpace(status))]; ok {
+		return rank
+	}
+	return 999
+}
+
+func mostRecentTimestamp(item spindle.QueueItem) time.Time {
+	updated := item.ParsedUpdatedAt()
+	created := item.ParsedCreatedAt()
+	if updated.IsZero() && created.IsZero() {
+		return time.Time{}
+	}
+	if updated.IsZero() {
+		return created
+	}
+	if created.IsZero() {
+		return updated
+	}
+	if updated.After(created) {
+		return updated
+	}
+	return created
 }
 
 func composeTitle(item spindle.QueueItem) string {
@@ -61,20 +299,8 @@ func fallbackTitle(path string) string {
 	return name
 }
 
-func formatProgress(item spindle.QueueItem) string {
-	stage := strings.TrimSpace(item.Progress.Stage)
-	if stage == "" {
-		stage = titleCase(item.Status)
-	}
-	percent := item.Progress.Percent
-	if percent <= 0 {
-		return stage
-	}
-	return fmt.Sprintf("%s %.0f%%", stage, percent)
-}
-
 func determineLane(status string) string {
-	switch status {
+	switch strings.ToLower(strings.TrimSpace(status)) {
 	case "pending", "identifying", "identified", "ripping":
 		return "foreground"
 	case "ripped", "encoding", "encoded", "organizing", "completed":
@@ -82,7 +308,7 @@ func determineLane(status string) string {
 	case "failed", "review":
 		return "attention"
 	default:
-		return "-"
+		return ""
 	}
 }
 
@@ -100,4 +326,19 @@ func titleCase(value string) string {
 		parts[i] = strings.ToUpper(lower[:1]) + lower[1:]
 	}
 	return strings.Join(parts, " ")
+}
+
+func truncate(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if limit <= 0 {
+		return value
+	}
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	if limit <= 3 {
+		return string(runes[:limit])
+	}
+	return string(runes[:limit-3]) + "..."
 }
