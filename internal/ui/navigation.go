@@ -144,6 +144,31 @@ func (vm *viewModel) updateDetail(row int) {
 	if item.BackgroundLogPath != "" {
 		builder.WriteString(fmt.Sprintf("[fuchsia]Background log:[-] [cadetblue]%s[-]\n", item.BackgroundLogPath))
 	}
+	if summary, err := item.ParseRipSpec(); err == nil {
+		if summary.ContentKey != "" {
+			builder.WriteString(fmt.Sprintf("[fuchsia]Content Key:[-] [cadetblue]%s[-]\n", summary.ContentKey))
+		}
+		if len(summary.Titles) > 0 {
+			builder.WriteString("[fuchsia]Titles:[-]\n")
+			for _, title := range summary.Titles {
+				name := strings.TrimSpace(title.Name)
+				if name == "" {
+					name = fmt.Sprintf("Title %d", title.ID)
+				}
+				fingerprint := strings.TrimSpace(title.ContentFingerprint)
+				if len(fingerprint) > 16 {
+					fingerprint = fingerprint[:16]
+				}
+				minutes := title.Duration / 60
+				seconds := title.Duration % 60
+				builder.WriteString(fmt.Sprintf("  [cadetblue]- %s[-] [dodgerblue]%02d:%02d[-]", name, minutes, seconds))
+				if fingerprint != "" {
+					builder.WriteString(fmt.Sprintf(" [lightskyblue]%s[-]", fingerprint))
+				}
+				builder.WriteString("\n")
+			}
+		}
+	}
 	if ts := item.ParsedCreatedAt(); !ts.IsZero() {
 		builder.WriteString(fmt.Sprintf("[fuchsia]Created:[-] [cadetblue]%s[-]\n", ts.Format(time.RFC3339)))
 	}

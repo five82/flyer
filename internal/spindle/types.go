@@ -1,6 +1,9 @@
 package spindle
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 const spindleTimestampLayout = "2006-01-02 15:04:05"
 
@@ -47,22 +50,24 @@ type QueueListResponse struct {
 
 // QueueItem describes a queue entry in transport-friendly form.
 type QueueItem struct {
-	ID                int64         `json:"id"`
-	DiscTitle         string        `json:"discTitle"`
-	SourcePath        string        `json:"sourcePath"`
-	Status            string        `json:"status"`
-	ProcessingLane    string        `json:"processingLane"`
-	Progress          QueueProgress `json:"progress"`
-	ErrorMessage      string        `json:"errorMessage"`
-	CreatedAt         string        `json:"createdAt"`
-	UpdatedAt         string        `json:"updatedAt"`
-	DiscFingerprint   string        `json:"discFingerprint"`
-	RippedFile        string        `json:"rippedFile"`
-	EncodedFile       string        `json:"encodedFile"`
-	FinalFile         string        `json:"finalFile"`
-	BackgroundLogPath string        `json:"backgroundLogPath"`
-	NeedsReview       bool          `json:"needsReview"`
-	ReviewReason      string        `json:"reviewReason"`
+	ID                int64           `json:"id"`
+	DiscTitle         string          `json:"discTitle"`
+	SourcePath        string          `json:"sourcePath"`
+	Status            string          `json:"status"`
+	ProcessingLane    string          `json:"processingLane"`
+	Progress          QueueProgress   `json:"progress"`
+	ErrorMessage      string          `json:"errorMessage"`
+	CreatedAt         string          `json:"createdAt"`
+	UpdatedAt         string          `json:"updatedAt"`
+	DiscFingerprint   string          `json:"discFingerprint"`
+	RippedFile        string          `json:"rippedFile"`
+	EncodedFile       string          `json:"encodedFile"`
+	FinalFile         string          `json:"finalFile"`
+	BackgroundLogPath string          `json:"backgroundLogPath"`
+	NeedsReview       bool            `json:"needsReview"`
+	ReviewReason      string          `json:"reviewReason"`
+	Metadata          json.RawMessage `json:"metadata"`
+	RipSpec           json.RawMessage `json:"ripSpec"`
 }
 
 // QueueProgress tracks stage progress for an item.
@@ -70,6 +75,33 @@ type QueueProgress struct {
 	Stage   string  `json:"stage"`
 	Percent float64 `json:"percent"`
 	Message string  `json:"message"`
+}
+
+// RipSpecSummary describes the subset of rip spec details Flyer cares about.
+type RipSpecSummary struct {
+	ContentKey string             `json:"content_key"`
+	Metadata   map[string]any     `json:"metadata"`
+	Titles     []RipSpecTitleInfo `json:"titles"`
+}
+
+// RipSpecTitleInfo captures per-title fingerprint information.
+type RipSpecTitleInfo struct {
+	ID                 int    `json:"id"`
+	Name               string `json:"name"`
+	Duration           int    `json:"duration"`
+	ContentFingerprint string `json:"content_fingerprint"`
+}
+
+// ParseRipSpec decodes the rip specification payload if present.
+func (q QueueItem) ParseRipSpec() (RipSpecSummary, error) {
+	if len(q.RipSpec) == 0 {
+		return RipSpecSummary{}, nil
+	}
+	var summary RipSpecSummary
+	if err := json.Unmarshal(q.RipSpec, &summary); err != nil {
+		return RipSpecSummary{}, err
+	}
+	return summary, nil
 }
 
 // ParsedCreatedAt returns the parsed CreatedAt timestamp.
