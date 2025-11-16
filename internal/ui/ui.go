@@ -526,6 +526,24 @@ func ternary(cond bool, a, b string) string {
 	return b
 }
 
+func truncateMiddle(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if limit <= 0 || value == "" {
+		return value
+	}
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	if limit <= 3 {
+		return string(runes[:limit])
+	}
+	keep := limit - 1 // room for ellipsis rune
+	prefix := keep / 2
+	suffix := keep - prefix
+	return string(runes[:prefix]) + "…/" + string(runes[len(runes)-suffix:])
+}
+
 func (vm *viewModel) setCommandBar(view string) {
 	vm.cmdView.Clear()
 

@@ -5,9 +5,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rivo/tview"
+
 	"github.com/five82/flyer/internal/logtail"
 	"github.com/five82/flyer/internal/spindle"
 )
+
+const detailLabelWidth = 9
 
 func (vm *viewModel) showDetailView() {
 	vm.currentView = "detail"
@@ -135,66 +139,92 @@ func (vm *viewModel) updateDetail(row int) {
 		return
 	}
 	item := vm.displayItems[row-1]
-	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("[fuchsia]Title:[-] [dodgerblue]%s[-]\n", composeTitle(item)))
-	builder.WriteString(fmt.Sprintf("[fuchsia]Status:[-] [dodgerblue]%s[-]\n", strings.ToUpper(item.Status)))
-	builder.WriteString(fmt.Sprintf("[fuchsia]Lane:[-] [dodgerblue]%s[-]\n", determineLane(item.Status)))
-	if item.Progress.Stage != "" || item.Progress.Message != "" {
-		builder.WriteString(fmt.Sprintf("[fuchsia]Stage:[-] [dodgerblue]%s[-] ([cadetblue]%s[-] [dodgerblue]%.0f%%[-])\n", strings.TrimSpace(item.Progress.Stage), strings.TrimSpace(item.Progress.Message), item.Progress.Percent))
+	var b strings.Builder
+
+	writeRow := func(label, value string) {
+		if strings.TrimSpace(value) == "" {
+			return
+		}
+		fmt.Fprintf(&b, "[slategray]%s[-] %s\n", padLabel(label), value)
 	}
+
+	title := composeTitle(item)
+	writeRow("Title", fmt.Sprintf("[white]%s[-]", tview.Escape(title)))
+
+	statusColor := colorForStatus(item.Status)
+	lane := determineLane(item.Status)
+	writeRow("Status", fmt.Sprintf("[%s]%s[-]   [slategray]Lane[-] [%s]%s[-]", statusColor, strings.ToUpper(item.Status), colorForLane(lane), strings.ToUpper(lane)))
+
+	stage := strings.TrimSpace(item.Progress.Stage)
+	if stage == "" {
+		stage = titleCase(item.Status)
+	}
+	stageMsg := strings.TrimSpace(item.Progress.Message)
+	progress := formatProgressBar(item)
+	progressLine := progress
+	if stageMsg != "" {
+		progressLine = fmt.Sprintf("%s  [#6c757d]%s[-]", progress, tview.Escape(truncate(stageMsg, 40)))
+	}
+	writeRow("Progress", progressLine)
+
 	if strings.TrimSpace(item.ErrorMessage) != "" {
-		builder.WriteString(fmt.Sprintf("[orangered]Error:[-] [red]%s[-]\n", item.ErrorMessage))
+		writeRow("Error", fmt.Sprintf("[red]%s[-]", tview.Escape(item.ErrorMessage)))
 	}
 	if item.NeedsReview {
-		builder.WriteString("[darkorange]Needs review[-]\n")
+		reason := strings.TrimSpace(item.ReviewReason)
+		if reason == "" {
+			reason = "Needs operator review"
+		}
+		writeRow("Review", fmt.Sprintf("[darkorange]%s[-]", tview.Escape(reason)))
 	}
-	if item.ReviewReason != "" {
-		builder.WriteString(fmt.Sprintf("[darkorange]Reason:[-] [dodgerblue]%s[-]\n", item.ReviewReason))
+
+	// Outputs
+	writeRow("Rip", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(truncateMiddle(item.RippedFile, 48))))
+	writeRow("Encoded", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(truncateMiddle(item.EncodedFile, 48))))
+	writeRow("Final", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(truncateMiddle(item.FinalFile, 48))))
+	writeRow("Bg Log", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(truncateMiddle(item.BackgroundLogPath, 48))))
+
+	// Mini timeline
+	created := item.ParsedCreatedAt()
+	updated := item.ParsedUpdatedAt()
+	if !created.IsZero() || !updated.IsZero() {
+		b.WriteString("\n[slategray]Timeline[-]\n")
+		if !created.IsZero() {
+			fmt.Fprintf(&b, "  [slategray]Created[-] [cadetblue]%s[-] [#6c757d](%s ago)[-]\n", created.Format(time.RFC3339), humanizeDuration(time.Since(created)))
+		}
+		if !updated.IsZero() {
+			fmt.Fprintf(&b, "  [slategray]Updated[-] [cadetblue]%s[-] [#6c757d](%s ago)[-]\n", updated.Format(time.RFC3339), humanizeDuration(time.Since(updated)))
+		}
 	}
-	if item.RippedFile != "" {
-		builder.WriteString(fmt.Sprintf("[fuchsia]Rip:[-] [cadetblue]%s[-]\n", item.RippedFile))
-	}
-	if item.EncodedFile != "" {
-		builder.WriteString(fmt.Sprintf("[fuchsia]Encoded:[-] [cadetblue]%s[-]\n", item.EncodedFile))
-	}
-	if item.FinalFile != "" {
-		builder.WriteString(fmt.Sprintf("[fuchsia]Final:[-] [cadetblue]%s[-]\n", item.FinalFile))
-	}
-	if item.BackgroundLogPath != "" {
-		builder.WriteString(fmt.Sprintf("[fuchsia]Background log:[-] [cadetblue]%s[-]\n", item.BackgroundLogPath))
-	}
+
+	// Rip spec summary
 	if summary, err := item.ParseRipSpec(); err == nil {
+		if summary.ContentKey != "" || len(summary.Titles) > 0 {
+			b.WriteString("\n[slategray]Rip Spec[-]\n")
+		}
 		if summary.ContentKey != "" {
-			builder.WriteString(fmt.Sprintf("[fuchsia]Content Key:[-] [cadetblue]%s[-]\n", summary.ContentKey))
+			fmt.Fprintf(&b, "  [slategray]Key[-]   [cadetblue]%s[-]\n", summary.ContentKey)
 		}
-		if len(summary.Titles) > 0 {
-			builder.WriteString("[fuchsia]Titles:[-]\n")
-			for _, title := range summary.Titles {
-				name := strings.TrimSpace(title.Name)
-				if name == "" {
-					name = fmt.Sprintf("Title %d", title.ID)
-				}
-				fingerprint := strings.TrimSpace(title.ContentFingerprint)
-				if len(fingerprint) > 16 {
-					fingerprint = fingerprint[:16]
-				}
-				minutes := title.Duration / 60
-				seconds := title.Duration % 60
-				builder.WriteString(fmt.Sprintf("  [cadetblue]- %s[-] [dodgerblue]%02d:%02d[-]", name, minutes, seconds))
-				if fingerprint != "" {
-					builder.WriteString(fmt.Sprintf(" [lightskyblue]%s[-]", fingerprint))
-				}
-				builder.WriteString("\n")
+		for _, title := range summary.Titles {
+			name := strings.TrimSpace(title.Name)
+			if name == "" {
+				name = fmt.Sprintf("Title %d", title.ID)
 			}
+			fingerprint := strings.TrimSpace(title.ContentFingerprint)
+			if len(fingerprint) > 16 {
+				fingerprint = fingerprint[:16]
+			}
+			minutes := title.Duration / 60
+			seconds := title.Duration % 60
+			fmt.Fprintf(&b, "  [cadetblue]- %s[-] [dodgerblue]%02d:%02d[-]", tview.Escape(name), minutes, seconds)
+			if fingerprint != "" {
+				fmt.Fprintf(&b, " [lightskyblue]%s[-]", fingerprint)
+			}
+			b.WriteString("\n")
 		}
 	}
-	if ts := item.ParsedCreatedAt(); !ts.IsZero() {
-		builder.WriteString(fmt.Sprintf("[fuchsia]Created:[-] [cadetblue]%s[-]\n", ts.Format(time.RFC3339)))
-	}
-	if ts := item.ParsedUpdatedAt(); !ts.IsZero() {
-		builder.WriteString(fmt.Sprintf("[fuchsia]Updated:[-] [cadetblue]%s[-]\n", ts.Format(time.RFC3339)))
-	}
-	vm.detail.SetText(builder.String())
+
+	vm.detail.SetText(b.String())
 }
 
 func (vm *viewModel) refreshLogs(force bool) {
@@ -270,6 +300,10 @@ func (vm *viewModel) updateLogTitle() {
 	default:
 		vm.logView.SetTitle(" [lightskyblue]Daemon Log[-] ")
 	}
+}
+
+func padLabel(label string) string {
+	return fmt.Sprintf("%-*s", detailLabelWidth, label+":")
 }
 
 // updateLogStatus refreshes the footer line without clobbering active search info.
