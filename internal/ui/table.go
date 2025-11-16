@@ -54,6 +54,7 @@ func (vm *viewModel) renderTable() {
 		align     int
 		expansion int
 	}{
+		{"!", tview.AlignCenter, 1}, // gutter marker
 		{"ID", tview.AlignRight, 1},
 		{"Title", tview.AlignLeft, 4},
 		{"Stage", tview.AlignLeft, 3},
@@ -112,13 +113,14 @@ func (vm *viewModel) renderTable() {
 
 	for rowIdx, item := range rows {
 		displayRow := rowIdx + 1
-		vm.table.SetCell(displayRow, 0, makeCell(fmt.Sprintf("[#94a3b8]%d[-]", item.ID), tview.AlignRight, 1))
-		vm.table.SetCell(displayRow, 1, makeCell(formatTitle(item), tview.AlignLeft, 4))
-		vm.table.SetCell(displayRow, 2, makeCell(formatStage(item), tview.AlignLeft, 3))
-		vm.table.SetCell(displayRow, 3, makeCell(formatProgressBar(item), tview.AlignLeft, 3))
-		vm.table.SetCell(displayRow, 4, makeCell(formatStatus(item), tview.AlignLeft, 2))
-		vm.table.SetCell(displayRow, 5, makeCell(formatUpdated(now, item), tview.AlignLeft, 2))
-		vm.table.SetCell(displayRow, 6, makeCell(formatFlags(item), tview.AlignLeft, 1))
+		vm.table.SetCell(displayRow, 0, makeCell(gutterMarker(item), tview.AlignCenter, 1))
+		vm.table.SetCell(displayRow, 1, makeCell(fmt.Sprintf("[#94a3b8]%d[-]", item.ID), tview.AlignRight, 1))
+		vm.table.SetCell(displayRow, 2, makeCell(formatTitle(item), tview.AlignLeft, 4))
+		vm.table.SetCell(displayRow, 3, makeCell(formatStage(item), tview.AlignLeft, 3))
+		vm.table.SetCell(displayRow, 4, makeCell(formatProgressBar(item), tview.AlignLeft, 3))
+		vm.table.SetCell(displayRow, 5, makeCell(formatStatus(item), tview.AlignLeft, 2))
+		vm.table.SetCell(displayRow, 6, makeCell(formatUpdated(now, item), tview.AlignLeft, 2))
+		vm.table.SetCell(displayRow, 7, makeCell(formatFlags(item), tview.AlignLeft, 1))
 	}
 
 	vm.displayItems = rows
@@ -150,6 +152,16 @@ func formatTitle(item spindle.QueueItem) string {
 		color = "#f39c12"
 	}
 	return fmt.Sprintf("[%s]%s[-]", color, tview.Escape(title))
+}
+
+func gutterMarker(item spindle.QueueItem) string {
+	if strings.TrimSpace(item.ErrorMessage) != "" {
+		return badge("!", "#ff6b6b")
+	}
+	if item.NeedsReview {
+		return badge("R", "#f39c12")
+	}
+	return ""
 }
 
 func formatStage(item spindle.QueueItem) string {
@@ -210,12 +222,12 @@ func formatStatus(item spindle.QueueItem) string {
 		lane = determineLane(item.Status)
 	}
 	laneLower := strings.ToLower(strings.TrimSpace(lane))
+	chip := statusChip(item.Status)
 	if laneLower != "" {
 		laneLabel := titleCase(laneLower)
-		return fmt.Sprintf("[%s]%s[-] [#6c757d]·[-] [%s]%s[-]", colorForStatus(item.Status), tview.Escape(status), colorForLane(laneLower), tview.Escape(laneLabel))
+		return fmt.Sprintf("%s [#6c757d]·[-] [%s]%s[-]", chip, colorForLane(laneLower), tview.Escape(laneLabel))
 	}
-
-	return fmt.Sprintf("[%s]%s[-]", colorForStatus(item.Status), tview.Escape(status))
+	return chip
 }
 
 func formatUpdated(now time.Time, item spindle.QueueItem) string {
@@ -250,13 +262,13 @@ func formatUpdated(now time.Time, item spindle.QueueItem) string {
 func formatFlags(item spindle.QueueItem) string {
 	var flags []string
 	if item.NeedsReview {
-		flags = append(flags, "[#f39c12]REVIEW[-]")
+		flags = append(flags, badge("REV", "#f39c12"))
 	}
 	if strings.TrimSpace(item.ErrorMessage) != "" {
-		flags = append(flags, "[#ff6b6b]ERROR[-]")
+		flags = append(flags, badge("ERR", "#ff6b6b"))
 	}
 	if strings.TrimSpace(item.BackgroundLogPath) != "" {
-		flags = append(flags, "[#74b9ff]LOG[-]")
+		flags = append(flags, badge("LOG", "#74b9ff"))
 	}
 	return strings.Join(flags, " ")
 }
@@ -266,6 +278,19 @@ func colorForStatus(status string) string {
 		return color
 	}
 	return "#cbd5f5"
+}
+
+func statusChip(status string) string {
+	color := colorForStatus(status)
+	text := strings.ToUpper(titleCase(status))
+	if text == "" {
+		text = "UNKNOWN"
+	}
+	return fmt.Sprintf("[black:%s] %s [-:-]", color, tview.Escape(text))
+}
+
+func badge(text, color string) string {
+	return fmt.Sprintf("[black:%s] %s [-:-]", color, text)
 }
 
 func colorForLane(lane string) string {
