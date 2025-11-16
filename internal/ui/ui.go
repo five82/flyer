@@ -131,6 +131,9 @@ func Run(ctx context.Context, opts Options) error {
 			case 'l':
 				model.toggleLogSource()
 				return nil
+			case 'p':
+				model.toggleProblemsDrawer()
+				return nil
 			case 'r':
 				model.showEncodingLogsView()
 				return nil
@@ -146,6 +149,10 @@ func Run(ctx context.Context, opts Options) error {
 			case 'f':
 				model.cycleFilter()
 				return nil
+			case '1', '2', '3', '4', '5', '6', '7', '8', '9':
+				if model.jumpToProblem(event.Rune()) {
+					return nil
+				}
 			}
 		}
 		return event
@@ -173,10 +180,14 @@ type viewModel struct {
 	lastRefresh time.Time
 
 	// Main content views
-	mainContent *tview.Pages
-	table       *tview.Table
-	detail      *tview.TextView
-	logView     *tview.TextView
+	mainContent    *tview.Pages
+	table          *tview.Table
+	detail         *tview.TextView
+	logView        *tview.TextView
+	problemTable   *tview.Table
+	problemSummary *tview.TextView
+	problemDrawer  *tview.Flex
+	mainLayout     *tview.Flex
 
 	// Search state
 	searchInput        *tview.InputField
@@ -198,6 +209,11 @@ type viewModel struct {
 	lastLogPath string
 	lastLogSet  time.Time
 	rawLogLines []string
+
+	// Problems drawer state
+	problemEntries   []problemEntry
+	problemShortcuts map[rune]int64
+	problemsOpen     bool
 }
 
 func newViewModel(app *tview.Application, opts Options) *viewModel {
@@ -258,17 +274,41 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	searchStatus.SetBackgroundColor(tcell.ColorBlack)
 	searchStatus.SetTextColor(tcell.ColorWhite)
 
+	// Problems drawer components
+	problemsTable := tview.NewTable()
+	problemsTable.SetBorder(true)
+	problemsTable.SetTitle(" [lightskyblue]Problems[-] ")
+	problemsTable.SetBorderColor(tcell.ColorIndianRed)
+	problemsTable.SetBackgroundColor(tcell.ColorBlack)
+	problemsTable.SetSelectable(false, false)
+	problemsTable.SetFixed(1, 0)
+
+	problemSummary := tview.NewTextView().SetDynamicColors(true)
+	problemSummary.SetBackgroundColor(tcell.ColorBlack)
+	problemSummary.SetTextColor(tcell.ColorWhite)
+	problemSummary.SetWrap(false)
+
+	problemDrawer := tview.NewFlex().SetDirection(tview.FlexRow)
+	problemDrawer.SetBackgroundColor(tcell.ColorBlack)
+	problemDrawer.
+		AddItem(problemsTable, 0, 1, false).
+		AddItem(problemSummary, 1, 0, false)
+
 	vm := &viewModel{
-		app:          app,
-		options:      opts,
-		statusView:   statusView,
-		cmdView:      cmdView,
-		logoView:     logoView,
-		table:        table,
-		detail:       detail,
-		logView:      logView,
-		searchStatus: searchStatus,
-		currentView:  "queue",
+		app:              app,
+		options:          opts,
+		statusView:       statusView,
+		cmdView:          cmdView,
+		logoView:         logoView,
+		table:            table,
+		detail:           detail,
+		logView:          logView,
+		searchStatus:     searchStatus,
+		problemTable:     problemsTable,
+		problemSummary:   problemSummary,
+		problemDrawer:    problemDrawer,
+		currentView:      "queue",
+		problemShortcuts: map[rune]int64{},
 	}
 
 	vm.table.SetSelectedFunc(func(row, column int) {
@@ -330,19 +370,24 @@ func (vm *viewModel) buildMainLayout() tview.Primitive {
 	vm.mainContent.AddPage("detail", vm.detail, true, false)
 	vm.mainContent.AddPage("logs", logContainer, true, false)
 
-	// Main layout: header (25%) + main content (75%) - k9s proportions
-	main := tview.NewFlex().SetDirection(tview.FlexRow)
-	main.SetBackgroundColor(tcell.ColorBlack)
-	main.
-		AddItem(vm.header, 0, 1, false).    // Top area ~25%
-		AddItem(vm.mainContent, 0, 3, true) // Main pane ~75%
+	// Main layout: header + content + optional problems drawer
+	vm.mainLayout = tview.NewFlex().SetDirection(tview.FlexRow)
+	vm.mainLayout.SetBackgroundColor(tcell.ColorBlack)
+	vm.mainLayout.
+		AddItem(vm.header, 0, 1, false).
+		AddItem(vm.mainContent, 0, 3, true).
+		AddItem(vm.problemDrawer, 0, 0, false) // height managed dynamically
 
-	return main
+	// Start with the drawer hidden.
+	vm.mainLayout.ResizeItem(vm.problemDrawer, 0, 0)
+
+	return vm.mainLayout
 }
 
 func (vm *viewModel) update(snapshot state.Snapshot) {
 	vm.renderStatus(snapshot)
 	vm.items = snapshot.Queue
+	vm.updateProblems(snapshot.Queue)
 	vm.renderTable()
 	vm.ensureSelection()
 	vm.lastRefresh = snapshot.LastUpdated
@@ -453,6 +498,7 @@ func (vm *viewModel) showHelp() {
 		{"d", "Detail View"},
 		{"l", "Toggle Log Source (Daemon→Encoding→Item)"},
 		{"r", "Encoding Log View"},
+		{"p", "Problems Drawer"},
 		{"h/?", "Help"},
 		{"i", "Item Logs (Highlighted)"},
 		{"/", "Start New Search"},
@@ -556,6 +602,7 @@ func (vm *viewModel) setCommandBar(view string) {
 			{"<Tab>", "Switch"},
 			{"</>", "Search"},
 			{"<n>/<N>", "Next/Prev"},
+			{"<p>", "Problems"},
 			{"<q>", "Queue"},
 			{"<h>", "Help"},
 			{"<e>", "Exit"},
@@ -567,6 +614,7 @@ func (vm *viewModel) setCommandBar(view string) {
 			{"<i>", "Item Log"},
 			{"<Tab>", "Switch"},
 			{"<f>", "Filter"},
+			{"<p>", "Problems"},
 			{"<h>", "Help"},
 			{"<e>", "Exit"},
 		}
@@ -586,6 +634,7 @@ func (vm *viewModel) setCommandBar(view string) {
 			{"<r>", "Encoding"},
 			{"<i>", "Item Log"},
 			{"<f>", "Filter: " + filterLabel},
+			{"<p>", "Problems"},
 			{"<Tab>", "Switch"},
 			{"<h>", "Help"},
 			{"<e>", "Exit"},
