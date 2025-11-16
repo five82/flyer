@@ -30,11 +30,19 @@ const (
 )
 
 type logSource int
+type queueFilter int
 
 const (
 	logSourceDaemon logSource = iota
 	logSourceEncoding
 	logSourceItem
+)
+
+const (
+	filterAll queueFilter = iota
+	filterFailed
+	filterReview
+	filterProcessing
 )
 
 // Run wires up tview components and blocks until ctx is cancelled or the user quits.
@@ -135,6 +143,9 @@ func Run(ctx context.Context, opts Options) error {
 			case '?':
 				model.showHelp()
 				return nil
+			case 'f':
+				model.cycleFilter()
+				return nil
 			}
 		}
 		return event
@@ -155,10 +166,11 @@ type viewModel struct {
 	root    *tview.Pages
 
 	// Header components
-	header     *tview.Flex
-	statusView *tview.TextView
-	cmdView    *tview.Table
-	logoView   *tview.TextView
+	header      *tview.Flex
+	statusView  *tview.TextView
+	cmdView     *tview.Table
+	logoView    *tview.TextView
+	lastRefresh time.Time
 
 	// Main content views
 	mainContent *tview.Pages
@@ -176,13 +188,16 @@ type viewModel struct {
 	searchMode         bool
 
 	// Data and navigation state
-	items       []spindle.QueueItem
-	currentView string // "queue", "detail", "logs"
+	items        []spindle.QueueItem
+	displayItems []spindle.QueueItem
+	currentView  string // "queue", "detail", "logs"
+	filterMode   queueFilter
 
 	// Log viewing state
 	logMode     logSource
 	lastLogPath string
 	lastLogSet  time.Time
+	rawLogLines []string
 }
 
 func newViewModel(app *tview.Application, opts Options) *viewModel {
@@ -207,60 +222,9 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	statusView.SetTextColor(tcell.ColorPurple) // Set default to purple
 
 	// Commands section using Table (k9s Menu pattern)
-	// k9s fills table with maxRows=6, flowing into multiple columns
 	cmdView := tview.NewTable()
 	cmdView.SetBackgroundColor(tcell.ColorBlack)
-
-	commands := []struct{ key, desc string }{
-		{"<q>", "Queue"},
-		{"<d>", "Detail"},
-		{"<l>", "Logs (cycle)"},
-		{"<i>", "Item Log"},
-		{"<r>", "Encoding Log"},
-		{"<Tab>", "Switch"},
-		{"<h>", "Help"},
-		{"<e>", "Exit"},
-	}
-
-	// k9s pattern: fill rows first, then columns (maxRows=6)
-	// Calculate max key width per column for padding (k9s does this!)
-	const maxRows = 6
-	colCount := (len(commands) / maxRows) + 1
-
-	// Find max key length per column
-	maxKeyWidth := make([]int, colCount)
-	for i, cmd := range commands {
-		col := i / maxRows
-		if len(cmd.key) > maxKeyWidth[col] {
-			maxKeyWidth[col] = len(cmd.key)
-		}
-	}
-
-	for i, cmd := range commands {
-		row := i % maxRows
-		col := i / maxRows
-
-		// k9s format with padding: " <key>  description " (line 132 in menu.go)
-		// Use %-Ns format to left-align and pad keys to same width
-		paddedKey := fmt.Sprintf("%-*s", maxKeyWidth[col], cmd.key)
-		cell := tview.NewTableCell(fmt.Sprintf(" [::b][dodgerblue]%s[slategray]  %s ", paddedKey, cmd.desc))
-		cell.SetBackgroundColor(tcell.ColorBlack)
-		cell.SetExpansion(1) // Make cells expand to fill available space
-
-		cmdView.SetCell(row, col, cell)
-	}
-
-	// Fill empty cells so all columns render
-	for row := 0; row < maxRows; row++ {
-		for col := 0; col < colCount; col++ {
-			if cmdView.GetCell(row, col) == nil {
-				empty := tview.NewTableCell("")
-				empty.SetBackgroundColor(tcell.ColorBlack)
-				empty.SetExpansion(1) // Make empty cells expand too
-				cmdView.SetCell(row, col, empty)
-			}
-		}
-	}
+	// Content filled later based on current view
 
 	logoView := tview.NewTextView()
 	logoView.SetTextAlign(tview.AlignRight)
@@ -336,28 +300,21 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 
 	app.SetRoot(vm.root, true)
 	app.SetFocus(vm.table)
+	vm.setCommandBar("queue")
 
 	return vm
 }
 
 func (vm *viewModel) buildMainLayout() tview.Primitive {
-	// k9s header layout: FIXED width left | FLEX middle | FIXED width right
-	// ClusterInfo: 50 chars | Menu: remaining space | Logo: 26 chars
-	const (
-		statusWidth = 40 // Fixed width for status section (k9s uses 50 for cluster info)
-		logoWidth   = 30 // Fixed width for logo section (k9s uses 26)
-	)
-
-	// k9s-style header: FIXED | FLEX | FIXED (exact k9s pattern)
-	// Add single space padding on left and right edges
+	// Header: give status and commands room; keep logo flexible to avoid wrapping figlet output
 	vm.header = tview.NewFlex().SetDirection(tview.FlexColumn)
 	vm.header.SetBackgroundColor(tcell.ColorBlack)
 	vm.header.
-		AddItem(nil, 1, 1, false).                     // Single space padding left
-		AddItem(vm.statusView, statusWidth, 1, false). // FIXED 40 chars
-		AddItem(vm.cmdView, 0, 1, false).              // FLEX - direct table (k9s does this!)
-		AddItem(vm.logoView, logoWidth, 1, false).     // FIXED 30 chars
-		AddItem(nil, 1, 1, false)                      // Single space padding right
+		AddItem(nil, 1, 0, false).           // padding
+		AddItem(vm.statusView, 0, 4, false). // flex status
+		AddItem(vm.cmdView, 0, 6, false).    // flex commands
+		AddItem(vm.logoView, 0, 2, false).   // flex logo so figlet fits
+		AddItem(nil, 1, 0, false)            // padding
 
 	// Create log view container with search status
 	logContainer := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -388,6 +345,7 @@ func (vm *viewModel) update(snapshot state.Snapshot) {
 	vm.items = snapshot.Queue
 	vm.renderTable()
 	vm.ensureSelection()
+	vm.lastRefresh = snapshot.LastUpdated
 
 	if vm.currentView == "detail" {
 		row, _ := vm.table.GetSelection()
@@ -405,7 +363,7 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 			if !snapshot.LastUpdated.IsZero() {
 				last = snapshot.LastUpdated.Format("15:04:05")
 			}
-			vm.statusView.SetText(fmt.Sprintf("[red::b]spindle unavailable[-]\n[magenta::b]Retrying:[-] [orange]%s[-]", last))
+			vm.statusView.SetText(fmt.Sprintf("[red::b]spindle unavailable[-]\n[magenta::b]Retrying:[-] [orange]%s[-]\n[gray]Check %s or daemon logs", last, tview.Escape(vm.options.Config.DaemonLogPath())))
 			return
 		}
 		vm.statusView.SetText("[yellow::b]waiting for spindle status…[-]")
@@ -437,6 +395,35 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 
 	statusText := fmt.Sprintf("[mediumpurple]Daemon:[-]     %s\n[mediumpurple]PID:[-]        [lightgray]%d[-]\n[mediumpurple]Updated:[-]    [lightgray]%s[-]\n[mediumpurple]Pending:[-]    [lightgray]%d[-]\n[mediumpurple]Processing:[-] [lightgray]%d[-]\n[mediumpurple]Failed:[-]     %s%d[-]\n[mediumpurple]Review:[-]     %s%d[-]\n[mediumpurple]Completed:[-]  [lightgray]%d[-]",
 		daemonStatus, snapshot.Status.PID, snapshot.LastUpdated.Format("15:04:05"), pending, processing, failedColor, failed, reviewColor, review, completed)
+	// Stage / dependency health summary
+	var unhealthy []string
+	for _, sh := range snapshot.Status.Workflow.StageHealth {
+		if !sh.Ready {
+			unhealthy = append(unhealthy, fmt.Sprintf("%s: %s", sh.Name, sh.Detail))
+		}
+	}
+	for _, dep := range snapshot.Status.Dependencies {
+		if !dep.Available {
+			label := dep.Name
+			if dep.Detail != "" {
+				label += " – " + dep.Detail
+			}
+			unhealthy = append(unhealthy, label)
+		}
+	}
+	if len(unhealthy) > 0 {
+		statusText += "\n[orangered::b]Health:[-] [red]" + truncate(strings.Join(unhealthy, " | "), 80) + "[-]"
+	}
+	if vm.options.RefreshEvery > 0 {
+		statusText += fmt.Sprintf("\n[mediumpurple]Poll:[-] [lightgray]%s[-]", vm.options.RefreshEvery)
+	}
+	if !vm.lastRefresh.IsZero() {
+		ago := time.Since(vm.lastRefresh)
+		if ago < 0 {
+			ago = 0
+		}
+		statusText += fmt.Sprintf("  [mediumpurple]Last:[-] [lightgray]%s ago[-]", humanizeDuration(ago))
+	}
 	if snapshot.LastError != nil {
 		statusText += fmt.Sprintf("\n[white::b]Error:[-] [red]%v[-]", snapshot.LastError)
 	}
@@ -444,10 +431,10 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 }
 
 func (vm *viewModel) ensureSelection() {
-	rows := len(vm.items)
+	rows := vm.table.GetRowCount() - 1 // excludes header
 	if rows == 0 {
 		vm.table.Select(0, 0)
-		vm.detail.SetText("Queue is empty")
+		vm.detail.SetText("[cadetblue]Queue is empty.[-]\nAdd discs to Spindle or check logs at:\n[dodgerblue]" + tview.Escape(vm.options.Config.DaemonLogPath()) + "[-]")
 		return
 	}
 	row, _ := vm.table.GetSelection()
@@ -517,4 +504,103 @@ func center(width, height int, primitive tview.Primitive) tview.Primitive {
 			AddItem(primitive, width, 0, true).
 			AddItem(nil, 0, 1, false), height, 0, true).
 		AddItem(nil, 0, 1, false)
+}
+
+func humanizeDuration(d time.Duration) string {
+	switch {
+	case d < time.Second:
+		return "now"
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	default:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+}
+
+func ternary(cond bool, a, b string) string {
+	if cond {
+		return a
+	}
+	return b
+}
+
+func (vm *viewModel) setCommandBar(view string) {
+	vm.cmdView.Clear()
+
+	type cmd struct{ key, desc string }
+	commands := []cmd{}
+	switch view {
+	case "logs":
+		commands = []cmd{
+			{"<l>", "Cycle Logs"},
+			{"<Tab>", "Switch"},
+			{"</>", "Search"},
+			{"<n>/<N>", "Next/Prev"},
+			{"<q>", "Queue"},
+			{"<h>", "Help"},
+			{"<e>", "Exit"},
+		}
+	case "detail":
+		commands = []cmd{
+			{"<q>", "Queue"},
+			{"<l>", "Logs"},
+			{"<i>", "Item Log"},
+			{"<Tab>", "Switch"},
+			{"<f>", "Filter"},
+			{"<h>", "Help"},
+			{"<e>", "Exit"},
+		}
+	default:
+		filterLabel := "All"
+		switch vm.filterMode {
+		case filterFailed:
+			filterLabel = "Failed"
+		case filterReview:
+			filterLabel = "Review"
+		case filterProcessing:
+			filterLabel = "Processing"
+		}
+		commands = []cmd{
+			{"<d>", "Detail"},
+			{"<l>", "Logs"},
+			{"<r>", "Encoding"},
+			{"<i>", "Item Log"},
+			{"<f>", "Filter: " + filterLabel},
+			{"<Tab>", "Switch"},
+			{"<h>", "Help"},
+			{"<e>", "Exit"},
+		}
+	}
+
+	const maxRows = 5
+	colCount := (len(commands) / maxRows) + 1
+	maxKeyWidth := make([]int, colCount)
+	for i, cmd := range commands {
+		col := i / maxRows
+		if len(cmd.key) > maxKeyWidth[col] {
+			maxKeyWidth[col] = len(cmd.key)
+		}
+	}
+	for i, cmd := range commands {
+		row := i % maxRows
+		col := i / maxRows
+		paddedKey := fmt.Sprintf("%-*s", maxKeyWidth[col], cmd.key)
+		cell := tview.NewTableCell(fmt.Sprintf(" [::b][dodgerblue]%s[slategray]  %s ", paddedKey, cmd.desc))
+		cell.SetBackgroundColor(tcell.ColorBlack)
+		cell.SetExpansion(1)
+		vm.cmdView.SetCell(row, col, cell)
+	}
+	// fill empties
+	for row := 0; row < maxRows; row++ {
+		for col := 0; col < colCount; col++ {
+			if vm.cmdView.GetCell(row, col) == nil {
+				empty := tview.NewTableCell("")
+				empty.SetBackgroundColor(tcell.ColorBlack)
+				empty.SetExpansion(1)
+				vm.cmdView.SetCell(row, col, empty)
+			}
+		}
+	}
 }

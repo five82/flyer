@@ -7,6 +7,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"github.com/five82/flyer/internal/logtail"
 )
 
 func (vm *viewModel) startSearch() {
@@ -76,7 +78,9 @@ func (vm *viewModel) performSearch() {
 func (vm *viewModel) cancelSearch() {
 	vm.root.RemovePage("search")
 	vm.searchMode = false
+	vm.clearSearch()
 	vm.returnToCurrentView()
+	vm.updateLogStatus(true, vm.lastLogPath)
 }
 
 func (vm *viewModel) clearSearch() {
@@ -85,6 +89,7 @@ func (vm *viewModel) clearSearch() {
 	vm.currentSearchMatch = 0
 	vm.lastSearchPattern = ""
 	vm.searchStatus.SetText("")
+	vm.updateLogStatus(true, vm.lastLogPath)
 }
 
 func (vm *viewModel) updateSearchStatus() {
@@ -104,9 +109,7 @@ func (vm *viewModel) findSearchMatches() {
 		return
 	}
 
-	logText := vm.logView.GetText(false)
-	lines := strings.Split(logText, "\n")
-
+	lines := vm.rawLogLines
 	vm.searchMatches = []int{}
 	for i, line := range lines {
 		if vm.searchRegex.MatchString(line) {
@@ -142,26 +145,18 @@ func (vm *viewModel) highlightSearchMatch() {
 
 	targetLine := vm.searchMatches[vm.currentSearchMatch]
 
-	// Get original log content (without highlighting)
-	logText := vm.logView.GetText(false)
-	lines := strings.Split(logText, "\n")
-
-	// Highlight all matches, but emphasize the current one
-	for i, line := range lines {
+	highlighted := make([]string, len(vm.rawLogLines))
+	for i, line := range vm.rawLogLines {
+		colored := logtail.ColorizeLine(line)
 		if vm.searchRegex.MatchString(line) {
 			if i == targetLine {
-				// Current match: yellow background with bold text
-				lines[i] = vm.searchRegex.ReplaceAllString(line, "[::b][black:yellow]${0}[-]")
+				colored = "[black:yellow]" + colored + "[-:-]"
 			} else {
-				// Other matches: just highlight in red
-				lines[i] = vm.searchRegex.ReplaceAllString(line, "[red]${0}[-]")
+				colored = "[red]" + colored + "[-]"
 			}
 		}
+		highlighted[i] = colored
 	}
-
-	// Update the log view with highlighted content
-	vm.logView.SetText(strings.Join(lines, "\n"))
-
-	// Scroll to the matched line
+	vm.logView.SetText(strings.Join(highlighted, "\n"))
 	vm.logView.ScrollTo(targetLine, 0)
 }

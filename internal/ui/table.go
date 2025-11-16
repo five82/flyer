@@ -74,6 +74,17 @@ func (vm *viewModel) renderTable() {
 	}
 
 	rows := append([]spindle.QueueItem(nil), vm.items...)
+	switch vm.filterMode {
+	case filterFailed:
+		rows = filterItems(rows, func(it spindle.QueueItem) bool { return strings.EqualFold(it.Status, "failed") })
+	case filterReview:
+		rows = filterItems(rows, func(it spindle.QueueItem) bool { return it.NeedsReview })
+	case filterProcessing:
+		rows = filterItems(rows, func(it spindle.QueueItem) bool {
+			status := strings.ToLower(strings.TrimSpace(it.Status))
+			return status == "identifying" || status == "ripping" || status == "encoding" || status == "organizing"
+		})
+	}
 	sort.SliceStable(rows, func(i, j int) bool {
 		if rows[i].NeedsReview != rows[j].NeedsReview {
 			return rows[i].NeedsReview
@@ -110,6 +121,7 @@ func (vm *viewModel) renderTable() {
 		vm.table.SetCell(displayRow, 6, makeCell(formatFlags(item), tview.AlignLeft, 1))
 	}
 
+	vm.displayItems = rows
 	vm.table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorSteelBlue).Foreground(tcell.ColorWhite))
 }
 
@@ -118,6 +130,16 @@ func makeCell(content string, align, expansion int) *tview.TableCell {
 		SetAlign(align).
 		SetExpansion(expansion).
 		SetBackgroundColor(tcell.ColorBlack)
+}
+
+func filterItems(items []spindle.QueueItem, keep func(spindle.QueueItem) bool) []spindle.QueueItem {
+	out := items[:0]
+	for _, it := range items {
+		if keep(it) {
+			out = append(out, it)
+		}
+	}
+	return out
 }
 
 func formatTitle(item spindle.QueueItem) string {

@@ -16,6 +16,7 @@ func (vm *viewModel) showDetailView() {
 	row, _ := vm.table.GetSelection()
 	vm.updateDetail(row)
 	vm.app.SetFocus(vm.detail)
+	vm.setCommandBar("detail")
 }
 
 func (vm *viewModel) showQueueView() {
@@ -23,6 +24,7 @@ func (vm *viewModel) showQueueView() {
 	vm.mainContent.SwitchToPage("queue")
 	vm.clearSearch()
 	vm.app.SetFocus(vm.table)
+	vm.setCommandBar("queue")
 }
 
 func (vm *viewModel) showLogsView() {
@@ -31,6 +33,7 @@ func (vm *viewModel) showLogsView() {
 	vm.updateLogTitle()
 	vm.refreshLogs(true)
 	vm.app.SetFocus(vm.logView)
+	vm.setCommandBar("logs")
 }
 
 func (vm *viewModel) showItemLogsView() {
@@ -99,6 +102,22 @@ func (vm *viewModel) toggleLogSource() {
 	vm.showLogsView()
 }
 
+func (vm *viewModel) cycleFilter() {
+	switch vm.filterMode {
+	case filterAll:
+		vm.filterMode = filterFailed
+	case filterFailed:
+		vm.filterMode = filterReview
+	case filterReview:
+		vm.filterMode = filterProcessing
+	default:
+		vm.filterMode = filterAll
+	}
+	vm.renderTable()
+	vm.ensureSelection()
+	vm.setCommandBar(vm.currentView)
+}
+
 func (vm *viewModel) returnToCurrentView() {
 	switch vm.currentView {
 	case "queue":
@@ -111,11 +130,11 @@ func (vm *viewModel) returnToCurrentView() {
 }
 
 func (vm *viewModel) updateDetail(row int) {
-	if row <= 0 || row-1 >= len(vm.items) {
+	if row <= 0 || row-1 >= len(vm.displayItems) {
 		vm.detail.SetText("[cadetblue]Select an item to view details[-]")
 		return
 	}
-	item := vm.items[row-1]
+	item := vm.displayItems[row-1]
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("[fuchsia]Title:[-] [dodgerblue]%s[-]\n", composeTitle(item)))
 	builder.WriteString(fmt.Sprintf("[fuchsia]Status:[-] [dodgerblue]%s[-]\n", strings.ToUpper(item.Status)))
@@ -203,6 +222,11 @@ func (vm *viewModel) refreshLogs(force bool) {
 		default:
 			vm.logView.SetText("Log path not configured")
 		}
+		vm.updateLogStatus(false, path)
+		return
+	}
+	if !force && (vm.searchMode || vm.searchRegex != nil) {
+		vm.updateLogStatus(false, path)
 		return
 	}
 	if !force && path == vm.lastLogPath && time.Since(vm.lastLogSet) < 500*time.Millisecond {
@@ -213,20 +237,27 @@ func (vm *viewModel) refreshLogs(force bool) {
 		vm.logView.SetText(fmt.Sprintf("Error reading log: %v", err))
 		vm.lastLogPath = path
 		vm.lastLogSet = time.Now()
+		vm.updateLogStatus(false, path)
 		return
 	}
+	vm.rawLogLines = lines
 	colorizedLines := logtail.ColorizeLines(lines)
-	vm.logView.SetText(strings.Join(colorizedLines, "\n"))
+	vm.displayLog(colorizedLines, path)
 	vm.lastLogPath = path
 	vm.lastLogSet = time.Now()
 }
 
+func (vm *viewModel) displayLog(colorizedLines []string, path string) {
+	vm.logView.SetText(strings.Join(colorizedLines, "\n"))
+	vm.updateLogStatus(true, path)
+}
+
 func (vm *viewModel) selectedItem() *spindle.QueueItem {
 	row, _ := vm.table.GetSelection()
-	if row <= 0 || row-1 >= len(vm.items) {
+	if row <= 0 || row-1 >= len(vm.displayItems) {
 		return nil
 	}
-	item := vm.items[row-1]
+	item := vm.displayItems[row-1]
 	return &item
 }
 
@@ -239,4 +270,27 @@ func (vm *viewModel) updateLogTitle() {
 	default:
 		vm.logView.SetTitle(" [lightskyblue]Daemon Log[-] ")
 	}
+}
+
+// updateLogStatus refreshes the footer line without clobbering active search info.
+func (vm *viewModel) updateLogStatus(active bool, path string) {
+	if vm.searchMode || vm.searchRegex != nil {
+		// search status owns the bar
+		return
+	}
+	var src string
+	switch vm.logMode {
+	case logSourceItem:
+		src = "Item"
+	case logSourceEncoding:
+		src = "Encoding"
+	default:
+		src = "Daemon"
+	}
+	lineCount := len(vm.rawLogLines)
+	status := fmt.Sprintf("[gray]%s log • %d lines • auto-tail %s[-]", src, lineCount, ternary(active, "on", "off"))
+	if path != "" {
+		status += fmt.Sprintf(" • %s", truncate(path, 40))
+	}
+	vm.searchStatus.SetText(status)
 }
