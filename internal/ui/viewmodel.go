@@ -32,6 +32,7 @@ type viewModel struct {
 	logView        *tview.TextView
 	problemTable   *tview.Table
 	problemSummary *tview.TextView
+	problemBar     *tview.TextView
 	problemDrawer  *tview.Flex
 	mainLayout     *tview.Flex
 
@@ -134,6 +135,10 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	problemSummary.SetTextColor(tcell.ColorWhite)
 	problemSummary.SetWrap(false)
 
+	problemBar := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	problemBar.SetBackgroundColor(tcell.ColorBlack)
+	problemBar.SetTextColor(tcell.ColorWhite)
+
 	problemDrawer := tview.NewFlex().SetDirection(tview.FlexRow)
 	problemDrawer.SetBackgroundColor(tcell.ColorBlack)
 	problemDrawer.
@@ -152,6 +157,7 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		searchStatus:     searchStatus,
 		problemTable:     problemsTable,
 		problemSummary:   problemSummary,
+		problemBar:       problemBar,
 		problemDrawer:    problemDrawer,
 		currentView:      "queue",
 		problemShortcuts: map[rune]int64{},
@@ -234,10 +240,12 @@ func (vm *viewModel) buildMainLayout() tview.Primitive {
 	vm.mainLayout.SetBackgroundColor(tcell.ColorBlack)
 	vm.mainLayout.
 		AddItem(vm.header, 3, 0, false). // keep header to ~2-3 rows max
+		AddItem(vm.problemBar, 1, 0, false).
 		AddItem(vm.mainContent, 0, 1, true).
 		AddItem(vm.problemDrawer, 0, 0, false) // height managed dynamically
 
-	// Start with the drawer hidden.
+	// Start with the problem surfaces hidden.
+	vm.mainLayout.ResizeItem(vm.problemBar, 0, 0)
 	vm.mainLayout.ResizeItem(vm.problemDrawer, 0, 0)
 
 	return vm.mainLayout

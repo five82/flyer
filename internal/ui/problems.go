@@ -86,6 +86,7 @@ func (vm *viewModel) updateProblems(queue []spindle.QueueItem) {
 
 	vm.renderProblemTable(entries)
 	vm.renderProblemSummary(entries)
+	vm.renderProblemBar(entries)
 	vm.updateProblemDrawerHeight()
 }
 
@@ -178,6 +179,46 @@ func (vm *viewModel) renderProblemSummary(entries []problemEntry) {
 	}
 
 	vm.problemSummary.SetText(fmt.Sprintf("%s[gray]Reasons:[-] %s    [slategray](press [dodgerblue]p[-] to toggle, [dodgerblue]1-9[-] to jump)", statusLine, reasons))
+}
+
+// renderProblemBar surfaces a one-line ribbon when problems exist so it isn't hidden.
+func (vm *viewModel) renderProblemBar(entries []problemEntry) {
+	if vm.mainLayout == nil {
+		return
+	}
+	if len(entries) == 0 {
+		vm.problemBar.SetText("")
+		vm.mainLayout.ResizeItem(vm.problemBar, 0, 0)
+		return
+	}
+
+	reasons := aggregateProblemReasons(entries)
+	countFailed := 0
+	countReview := 0
+	for _, e := range entries {
+		if e.Kind == problemFailed {
+			countFailed++
+		} else {
+			countReview++
+		}
+	}
+
+	parts := []string{}
+	if countFailed > 0 {
+		parts = append(parts, fmt.Sprintf("[red::b]%d failed[-]", countFailed))
+	}
+	if countReview > 0 {
+		parts = append(parts, fmt.Sprintf("[darkorange::b]%d review[-]", countReview))
+	}
+
+	statusLine := strings.Join(parts, "  |  ")
+	if statusLine != "" {
+		statusLine += "  •  "
+	}
+
+	hint := "[slategray](p to expand, 1-9 to jump)[-]"
+	vm.problemBar.SetText(fmt.Sprintf("%s[gray]Reasons:[-] %s    %s", statusLine, reasons, hint))
+	vm.mainLayout.ResizeItem(vm.problemBar, 1, 0)
 }
 
 func (vm *viewModel) updateProblemDrawerHeight() {
@@ -315,7 +356,9 @@ func prettifyReason(reason string) string {
 // showNoProblemsNotice surfaces feedback when the drawer is empty.
 func (vm *viewModel) showNoProblemsNotice() {
 	vm.problemSummary.SetText("[gray]No failed or review items.")
+	vm.problemBar.SetText("")
 	vm.mainLayout.ResizeItem(vm.problemDrawer, 0, 0)
+	vm.mainLayout.ResizeItem(vm.problemBar, 0, 0)
 	vm.problemsOpen = false
 
 	modal := tview.NewModal().
