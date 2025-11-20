@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -152,6 +155,13 @@ func (vm *viewModel) updateDetail(row int) {
 	item := vm.displayItems[row-1]
 	var b strings.Builder
 
+	writeSection := func(title string) {
+		if b.Len() > 0 {
+			b.WriteString("\n")
+		}
+		fmt.Fprintf(&b, "[slategray::b]%s[-:-:-]\n", title)
+	}
+
 	writeRow := func(label, value string) {
 		if strings.TrimSpace(value) == "" {
 			return
@@ -159,29 +169,68 @@ func (vm *viewModel) updateDetail(row int) {
 		fmt.Fprintf(&b, "[slategray]%s[-] %s\n", padLabel(label), value)
 	}
 
+	formatPath := func(path string) string {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return ""
+		}
+		base := filepath.Base(path)
+		if base == "." || base == "/" || base == "" {
+			base = path
+		}
+		return fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(base))
+	}
+
+	formatLogPath := func(path, missing string) string {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return fmt.Sprintf("[gray]%s[-]", missing)
+		}
+		return fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(truncateMiddle(path, 72)))
+	}
+
 	// Title and chips
+	writeSection("Summary")
 	title := composeTitle(item)
-	writeRow("Title", fmt.Sprintf("[white]%s[-]", tview.Escape(title)))
+	titleValue := fmt.Sprintf("[white]%s[-]", tview.Escape(title))
+	if item.NeedsReview {
+		titleValue += " " + badge("REVIEW", "#f39c12")
+	}
+	if strings.TrimSpace(item.ErrorMessage) != "" {
+		titleValue += " " + badge("ERROR", "#ff6b6b")
+	}
+	writeRow("Title", titleValue)
+
 	status := statusChip(item.Status)
 	lane := laneChip(determineLane(item.Status))
-	b.WriteString(fmt.Sprintf("[slategray]%s[-] %s  %s  [gray]ID %d[-]\n", padLabel("Status"), status, lane, item.ID))
+	percent := clampPercent(item.Progress.Percent)
+	statusLine := fmt.Sprintf("%s  %s  [gray]ID %d[-]  [#6c757d]%3.0f%%[-]", status, lane, item.ID, percent)
+	writeRow("Status", statusLine)
 
-	// Progress line with roomy bar and full stage message
+	// Progress block
+	writeSection("Progress")
 	stage := strings.TrimSpace(item.Progress.Stage)
 	if stage == "" {
 		stage = titleCase(item.Status)
 	}
-	stageMsg := strings.TrimSpace(item.Progress.Message)
-	progress := detailProgressBar(item)
-	if stageMsg != "" {
-		progress = fmt.Sprintf("%s  [#6c757d]%s[-]", progress, tview.Escape(truncate(stageMsg, 140)))
-	}
-	writeRow("Progress", progress)
+	writeRow("Stage", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(stage)))
 
+	progress := detailProgressBar(item)
+	stageMsg := strings.TrimSpace(item.Progress.Message)
+	writeRow("Progress", progress)
+	if stageMsg != "" {
+		writeRow("Note", fmt.Sprintf("[#6c757d]%s[-]", tview.Escape(stageMsg)))
+	}
+
+	// Issues block
 	if strings.TrimSpace(item.ErrorMessage) != "" {
+		writeSection("Issues")
 		writeRow("Error", fmt.Sprintf("[red]%s[-]", tview.Escape(item.ErrorMessage)))
 	}
 	if item.NeedsReview {
+		if strings.TrimSpace(item.ErrorMessage) == "" {
+			writeSection("Issues")
+		}
 		reason := strings.TrimSpace(item.ReviewReason)
 		if reason == "" {
 			reason = "Needs operator review"
@@ -189,40 +238,47 @@ func (vm *viewModel) updateDetail(row int) {
 		writeRow("Review", fmt.Sprintf("[darkorange]%s[-]", tview.Escape(reason)))
 	}
 
-	// Paths & artifacts (favor concise/meaningful pieces)
-	ripName := strings.TrimSpace(item.RippedFile)
-	if ripName != "" {
-		ripName = filepath.Base(ripName)
-		writeRow("Rip", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(ripName)))
+	// Artifacts
+	writeSection("Artifacts")
+	writeRow("Source", formatPath(item.SourcePath))
+	writeRow("Rip", formatPath(item.RippedFile))
+	writeRow("Encoded", formatPath(item.EncodedFile))
+	writeRow("Final", formatPath(item.FinalFile))
+
+	// Logs
+	writeSection("Logs")
+	writeRow("Daemon", formatLogPath(vm.options.DaemonLogPath, "not configured"))
+	writeRow("Encoding", formatLogPath(vm.options.DraptoLogPath, "not configured"))
+	writeRow("Item", formatLogPath(item.BackgroundLogPath, "not available for this item"))
+
+	// Metadata
+	if metaRows := summarizeMetadata(item.Metadata); len(metaRows) > 0 {
+		writeSection("Metadata")
+		b.WriteString(formatMetadata(metaRows))
 	}
-	if strings.TrimSpace(item.FinalFile) != "" {
-		writeRow("Final", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(item.FinalFile)))
-	}
-	writeRow("Source", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(truncateMiddle(item.SourcePath, 64))))
-	writeRow("Fingerprint", fmt.Sprintf("[lightskyblue]%s[-]", tview.Escape(truncate(item.DiscFingerprint, 48))))
 
 	// Mini timeline
 	created := item.ParsedCreatedAt()
-	updated := item.ParsedUpdatedAt()
-	if !created.IsZero() || !updated.IsZero() {
-		b.WriteString("\n[slategray]Timeline[-]\n")
-		if !created.IsZero() {
-			fmt.Fprintf(&b, "  [slategray]Created[-] [cadetblue]%s[-] [#6c757d](%s ago)[-]\n", created.Format(time.RFC3339), humanizeDuration(time.Since(created)))
-		}
-		if !updated.IsZero() {
-			fmt.Fprintf(&b, "  [slategray]Updated[-] [cadetblue]%s[-] [#6c757d](%s ago)[-]\n", updated.Format(time.RFC3339), humanizeDuration(time.Since(updated)))
-		}
+	if !created.IsZero() {
+		writeSection("Timeline")
+		fmt.Fprintf(&b, "  [slategray]Created[-] [cadetblue]%s[-] [#6c757d](%s ago)[-]\n", formatLocalTimestamp(created), humanizeDuration(time.Since(created)))
 	}
 
 	// Rip spec summary
 	if summary, err := item.ParseRipSpec(); err == nil {
+		const maxTitles = 6
 		if summary.ContentKey != "" || len(summary.Titles) > 0 {
-			b.WriteString("\n[slategray]Rip Spec[-]\n")
+			writeSection("Rip Spec")
 		}
 		if summary.ContentKey != "" {
 			fmt.Fprintf(&b, "  [slategray]Key[-]   [cadetblue]%s[-]\n", summary.ContentKey)
 		}
-		for _, title := range summary.Titles {
+		count := len(summary.Titles)
+		for i, title := range summary.Titles {
+			if i >= maxTitles {
+				fmt.Fprintf(&b, "  [slategray]…[-] [#6c757d]+%d more titles[-]\n", count-maxTitles)
+				break
+			}
 			name := strings.TrimSpace(title.Name)
 			if name == "" {
 				name = fmt.Sprintf("Title %d", title.ID)
@@ -244,14 +300,163 @@ func (vm *viewModel) updateDetail(row int) {
 	vm.detail.SetText(b.String())
 }
 
+func clampPercent(p float64) float64 {
+	if p < 0 {
+		return 0
+	}
+	if p > 100 {
+		return 100
+	}
+	return p
+}
+
+type metadataRow struct {
+	key   string
+	value string
+}
+
+func summarizeMetadata(raw json.RawMessage) []metadataRow {
+	if len(raw) == 0 {
+		return nil
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil || len(obj) == 0 {
+		return nil
+	}
+	mediaType := ""
+	if mt, ok := obj["media_type"]; ok {
+		if s, ok := mt.(string); ok {
+			mediaType = strings.ToLower(strings.TrimSpace(s))
+		}
+	}
+	skip := map[string]struct{}{
+		"vote_average": {},
+		"vote_count":   {},
+	}
+	keys := make([]string, 0, len(obj))
+	for k := range obj {
+		lk := strings.ToLower(strings.TrimSpace(k))
+		if _, ignore := skip[lk]; ignore {
+			continue
+		}
+		if mediaType == "movie" && lk == "movie" {
+			continue
+		}
+		if mediaType == "tv" && lk == "tv" {
+			continue
+		}
+		if mediaType == "movie" && strings.EqualFold(k, "season_number") {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	rows := make([]metadataRow, 0, len(keys))
+	for _, k := range keys {
+		val := obj[k]
+		switch v := val.(type) {
+		case string:
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			rows = append(rows, metadataRow{key: k, value: v})
+		case float64:
+			rows = append(rows, metadataRow{key: k, value: strconv.FormatFloat(v, 'f', -1, 64)})
+		case bool:
+			rows = append(rows, metadataRow{key: k, value: strconv.FormatBool(v)})
+		default:
+			// skip nested/complex values to keep the view compact
+		}
+	}
+	return rows
+}
+
+func formatLocalTimestamp(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Local().Format("Mon Jan 2 2006 15:04")
+}
+
+func formatMetadata(rows []metadataRow) string {
+	if len(rows) == 0 {
+		return ""
+	}
+	ordered := reorderMetadata(rows)
+	pretties := make([]string, len(ordered))
+	values := make([]string, len(ordered))
+	maxKey := 0
+	for i, r := range ordered {
+		key := prettifyMetaKey(r.key)
+		pretties[i] = key
+		if l := len([]rune(key)); l > maxKey {
+			maxKey = l
+		}
+		val := strings.TrimSpace(r.value)
+		if val == "" {
+			val = "—"
+		}
+		val = truncate(val, 90)
+		values[i] = tview.Escape(val)
+	}
+	if maxKey < 8 {
+		maxKey = 8
+	}
+	if maxKey > 18 {
+		maxKey = 18
+	}
+	var b strings.Builder
+	for i := range ordered {
+		key := padRight(truncate(pretties[i], maxKey), maxKey)
+		fmt.Fprintf(&b, "  [slategray]%s[-] [cadetblue]%s[-]\n", key, values[i])
+	}
+	return b.String()
+}
+
+func prettifyMetaKey(key string) string {
+	key = strings.TrimSpace(key)
+	key = strings.ReplaceAll(key, "_", " ")
+	key = strings.ReplaceAll(key, ".", " ")
+	parts := strings.Fields(key)
+	for i, p := range parts {
+		if len(p) == 0 {
+			continue
+		}
+		parts[i] = strings.ToUpper(p[:1]) + strings.ToLower(p[1:])
+	}
+	return strings.Join(parts, " ")
+}
+
+func padRight(s string, width int) string {
+	if width <= 0 {
+		return s
+	}
+	r := []rune(s)
+	if len(r) >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-len(r))
+}
+
+func reorderMetadata(rows []metadataRow) []metadataRow {
+	if len(rows) == 0 {
+		return rows
+	}
+	titleRows := make([]metadataRow, 0, 1)
+	others := make([]metadataRow, 0, len(rows))
+	for _, r := range rows {
+		if strings.EqualFold(r.key, "title") {
+			titleRows = append(titleRows, r)
+		} else {
+			others = append(others, r)
+		}
+	}
+	return append(titleRows, others...)
+}
+
 func detailProgressBar(item spindle.QueueItem) string {
-	percent := item.Progress.Percent
-	if percent < 0 {
-		percent = 0
-	}
-	if percent > 100 {
-		percent = 100
-	}
+	percent := clampPercent(item.Progress.Percent)
 	const barWidth = 24
 	filled := int(percent/100*barWidth + 0.5)
 	if filled < 0 {

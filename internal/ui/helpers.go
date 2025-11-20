@@ -70,6 +70,9 @@ func center(width, height int, primitive tview.Primitive) tview.Primitive {
 }
 
 func humanizeDuration(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
 	switch {
 	case d < time.Second:
 		return "now"
@@ -77,8 +80,23 @@ func humanizeDuration(d time.Duration) string {
 		return fmt.Sprintf("%ds", int(d.Seconds()))
 	case d < time.Hour:
 		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		h := int(d.Hours())
+		m := int(d.Minutes()) % 60
+		if m == 0 {
+			return fmt.Sprintf("%dh", h)
+		}
+		return fmt.Sprintf("%dh %dm", h, m)
+	case d < 7*24*time.Hour:
+		day := int(d.Hours()) / 24
+		h := int(d.Hours()) % 24
+		if h == 0 {
+			return fmt.Sprintf("%dd", day)
+		}
+		return fmt.Sprintf("%dd %dh", day, h)
 	default:
-		return fmt.Sprintf("%dh", int(d.Hours()))
+		day := int(d.Hours()) / 24
+		return fmt.Sprintf("%dd", day)
 	}
 }
 
