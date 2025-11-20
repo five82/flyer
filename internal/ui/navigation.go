@@ -332,6 +332,7 @@ func summarizeMetadata(raw json.RawMessage) []metadataRow {
 	skip := map[string]struct{}{
 		"vote_average": {},
 		"vote_count":   {},
+		"overview":     {},
 	}
 	keys := make([]string, 0, len(obj))
 	for k := range obj {
