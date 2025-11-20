@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,21 +15,20 @@ import (
 const detailLabelWidth = 9
 
 func (vm *viewModel) showDetailView() {
-	vm.currentView = "detail"
-	vm.mainContent.SwitchToPage("detail")
+	// In dual-pane mode there is always a detail pane; treat this as focusing it.
+	vm.currentView = "queue"
+	vm.mainContent.SwitchToPage("queue")
 	vm.clearSearch()
 	row, _ := vm.table.GetSelection()
 	vm.updateDetail(row)
-	vm.app.SetFocus(vm.detail)
-	vm.setCommandBar("detail")
+	vm.focusDetailPane()
 }
 
 func (vm *viewModel) showQueueView() {
 	vm.currentView = "queue"
 	vm.mainContent.SwitchToPage("queue")
 	vm.clearSearch()
-	vm.app.SetFocus(vm.table)
-	vm.setCommandBar("queue")
+	vm.focusQueuePane()
 }
 
 func (vm *viewModel) showLogsView() {
@@ -73,13 +73,22 @@ func (vm *viewModel) showEncodingLogsView() {
 	vm.app.SetFocus(vm.logView)
 }
 
+func (vm *viewModel) focusQueuePane() {
+	vm.app.SetFocus(vm.table)
+	vm.setCommandBar("queue")
+}
+
+func (vm *viewModel) focusDetailPane() {
+	vm.app.SetFocus(vm.detail)
+	vm.setCommandBar("detail")
+}
+
 func (vm *viewModel) toggleFocus() {
-	switch vm.currentView {
-	case "queue":
-		vm.showDetailView()
-	case "detail":
+	focus := vm.app.GetFocus()
+	switch focus {
+	case vm.table:
 		vm.showDaemonLogsView()
-	case "logs":
+	case vm.logView:
 		switch vm.logMode {
 		case logSourceDaemon:
 			vm.showEncodingLogsView()
@@ -88,6 +97,8 @@ func (vm *viewModel) toggleFocus() {
 		default:
 			vm.showQueueView()
 		}
+	default:
+		vm.focusQueuePane()
 	}
 }
 
@@ -148,24 +159,24 @@ func (vm *viewModel) updateDetail(row int) {
 		fmt.Fprintf(&b, "[slategray]%s[-] %s\n", padLabel(label), value)
 	}
 
+	// Title and chips
 	title := composeTitle(item)
 	writeRow("Title", fmt.Sprintf("[white]%s[-]", tview.Escape(title)))
+	status := statusChip(item.Status)
+	lane := laneChip(determineLane(item.Status))
+	b.WriteString(fmt.Sprintf("[slategray]%s[-] %s  %s  [gray]ID %d[-]\n", padLabel("Status"), status, lane, item.ID))
 
-	statusColor := colorForStatus(item.Status)
-	lane := determineLane(item.Status)
-	writeRow("Status", fmt.Sprintf("[%s]%s[-]   [slategray]Lane[-] [%s]%s[-]", statusColor, strings.ToUpper(item.Status), colorForLane(lane), strings.ToUpper(lane)))
-
+	// Progress line with roomy bar and full stage message
 	stage := strings.TrimSpace(item.Progress.Stage)
 	if stage == "" {
 		stage = titleCase(item.Status)
 	}
 	stageMsg := strings.TrimSpace(item.Progress.Message)
-	progress := formatProgressBar(item)
-	progressLine := progress
+	progress := detailProgressBar(item)
 	if stageMsg != "" {
-		progressLine = fmt.Sprintf("%s  [#6c757d]%s[-]", progress, tview.Escape(truncate(stageMsg, 40)))
+		progress = fmt.Sprintf("%s  [#6c757d]%s[-]", progress, tview.Escape(truncate(stageMsg, 140)))
 	}
-	writeRow("Progress", progressLine)
+	writeRow("Progress", progress)
 
 	if strings.TrimSpace(item.ErrorMessage) != "" {
 		writeRow("Error", fmt.Sprintf("[red]%s[-]", tview.Escape(item.ErrorMessage)))
@@ -178,11 +189,17 @@ func (vm *viewModel) updateDetail(row int) {
 		writeRow("Review", fmt.Sprintf("[darkorange]%s[-]", tview.Escape(reason)))
 	}
 
-	// Outputs
-	writeRow("Rip", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(truncateMiddle(item.RippedFile, 48))))
-	writeRow("Encoded", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(truncateMiddle(item.EncodedFile, 48))))
-	writeRow("Final", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(truncateMiddle(item.FinalFile, 48))))
-	writeRow("Bg Log", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(truncateMiddle(item.BackgroundLogPath, 48))))
+	// Paths & artifacts (favor concise/meaningful pieces)
+	ripName := strings.TrimSpace(item.RippedFile)
+	if ripName != "" {
+		ripName = filepath.Base(ripName)
+		writeRow("Rip", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(ripName)))
+	}
+	if strings.TrimSpace(item.FinalFile) != "" {
+		writeRow("Final", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(item.FinalFile)))
+	}
+	writeRow("Source", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(truncateMiddle(item.SourcePath, 64))))
+	writeRow("Fingerprint", fmt.Sprintf("[lightskyblue]%s[-]", tview.Escape(truncate(item.DiscFingerprint, 48))))
 
 	// Mini timeline
 	created := item.ParsedCreatedAt()
@@ -225,6 +242,26 @@ func (vm *viewModel) updateDetail(row int) {
 	}
 
 	vm.detail.SetText(b.String())
+}
+
+func detailProgressBar(item spindle.QueueItem) string {
+	percent := item.Progress.Percent
+	if percent < 0 {
+		percent = 0
+	}
+	if percent > 100 {
+		percent = 100
+	}
+	const barWidth = 24
+	filled := int(percent/100*barWidth + 0.5)
+	if filled < 0 {
+		filled = 0
+	}
+	if filled > barWidth {
+		filled = barWidth
+	}
+	bar := "[" + strings.Repeat("=", filled) + strings.Repeat(".", barWidth-filled) + "]"
+	return fmt.Sprintf("[%s]%s[-] %3.0f%%", colorForStatus(item.Status), bar, percent)
 }
 
 func (vm *viewModel) refreshLogs(force bool) {

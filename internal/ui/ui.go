@@ -123,9 +123,6 @@ func Run(ctx context.Context, opts Options) error {
 			case 'e':
 				app.Stop()
 				return nil
-			case 'd':
-				model.showDetailView()
-				return nil
 			case 'l':
 				model.toggleLogSource()
 				return nil
@@ -188,7 +185,7 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 			if !snapshot.LastUpdated.IsZero() {
 				last = snapshot.LastUpdated.Format("15:04:05")
 			}
-			vm.statusView.SetText(fmt.Sprintf("[red::b]spindle unavailable[-]\n[magenta::b]Retrying:[-] [orange]%s[-]\n[gray]Check %s or daemon logs", last, tview.Escape(vm.options.Config.DaemonLogPath())))
+			vm.statusView.SetText(fmt.Sprintf("[red::b]spindle unavailable[-]  [magenta::b]retrying[-] [orange]%s[-]\n[gray]Check %s or daemon logs", last, tview.Escape(vm.options.Config.DaemonLogPath())))
 			return
 		}
 		vm.statusView.SetText("[yellow::b]waiting for spindle status…[-]")
@@ -218,8 +215,28 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 		reviewColor = "[yellow]"
 	}
 
-	statusText := fmt.Sprintf("[mediumpurple]Daemon:[-]     %s\n[mediumpurple]PID:[-]        [lightgray]%d[-]\n[mediumpurple]Updated:[-]    [lightgray]%s[-]\n[mediumpurple]Pending:[-]    [lightgray]%d[-]\n[mediumpurple]Processing:[-] [lightgray]%d[-]\n[mediumpurple]Failed:[-]     %s%d[-]\n[mediumpurple]Review:[-]     %s%d[-]\n[mediumpurple]Completed:[-]  [lightgray]%d[-]",
-		daemonStatus, snapshot.Status.PID, snapshot.LastUpdated.Format("15:04:05"), pending, processing, failedColor, failed, reviewColor, review, completed)
+	parts := []string{
+		fmt.Sprintf("[mediumpurple]daemon[-] %s", daemonStatus),
+		fmt.Sprintf("[mediumpurple]pid[-] [lightgray]%d[-]", snapshot.Status.PID),
+		fmt.Sprintf("[mediumpurple]pending[-] [lightgray]%d[-]", pending),
+		fmt.Sprintf("[mediumpurple]proc[-] [lightgray]%d[-]", processing),
+		fmt.Sprintf("[mediumpurple]fail[-] %s%d[-]", failedColor, failed),
+		fmt.Sprintf("[mediumpurple]review[-] %s%d[-]", reviewColor, review),
+		fmt.Sprintf("[mediumpurple]done[-] [lightgray]%d[-]", completed),
+		fmt.Sprintf("[mediumpurple]updated[-] [lightgray]%s[-]", snapshot.LastUpdated.Format("15:04:05")),
+	}
+	if vm.options.RefreshEvery > 0 {
+		parts = append(parts, fmt.Sprintf("[mediumpurple]poll[-] [lightgray]%s[-]", vm.options.RefreshEvery))
+	}
+	if !vm.lastRefresh.IsZero() {
+		ago := time.Since(vm.lastRefresh)
+		if ago < 0 {
+			ago = 0
+		}
+		parts = append(parts, fmt.Sprintf("[mediumpurple]last[-] [lightgray]%s ago[-]", humanizeDuration(ago)))
+	}
+	statusText := strings.Join(parts, "  │  ")
+
 	// Stage / dependency health summary
 	var unhealthy []string
 	for _, sh := range snapshot.Status.Workflow.StageHealth {
@@ -237,20 +254,10 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 		}
 	}
 	if len(unhealthy) > 0 {
-		statusText += "\n[orangered::b]Health:[-] [red]" + truncate(strings.Join(unhealthy, " | "), 80) + "[-]"
-	}
-	if vm.options.RefreshEvery > 0 {
-		statusText += fmt.Sprintf("\n[mediumpurple]Poll:[-] [lightgray]%s[-]", vm.options.RefreshEvery)
-	}
-	if !vm.lastRefresh.IsZero() {
-		ago := time.Since(vm.lastRefresh)
-		if ago < 0 {
-			ago = 0
-		}
-		statusText += fmt.Sprintf("  [mediumpurple]Last:[-] [lightgray]%s ago[-]", humanizeDuration(ago))
+		statusText += "\n[orangered::b]health[-] [red]" + truncate(strings.Join(unhealthy, " | "), 90) + "[-]"
 	}
 	if snapshot.LastError != nil {
-		statusText += fmt.Sprintf("\n[white::b]Error:[-] [red]%v[-]", snapshot.LastError)
+		statusText += fmt.Sprintf("\n[white::b]error[-] [red]%v[-]", snapshot.LastError)
 	}
 	vm.statusView.SetText(statusText)
 }

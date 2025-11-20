@@ -13,7 +13,6 @@ func (vm *viewModel) showHelp() {
 	// k9s-style help text with bracketed keys in column layout
 	helpCommands := []struct{ key, desc string }{
 		{"q", "Queue View"},
-		{"d", "Detail View"},
 		{"l", "Toggle Log Source (Daemon→Encoding→Item)"},
 		{"r", "Encoding Log View"},
 		{"p", "Problems Drawer"},
@@ -22,7 +21,7 @@ func (vm *viewModel) showHelp() {
 		{"/", "Start New Search"},
 		{"n", "Next Search Match"},
 		{"N", "Previous Search Match"},
-		{"Tab", "Cycle Views (Queue→Detail→Daemon→Encoding→Item)"},
+		{"Tab", "Cycle Focus (Queue→Daemon→Encoding→Item)"},
 		{"ESC", "Return to Queue View"},
 		{"e", "Exit"},
 		{"Ctrl+C", "Exit"},

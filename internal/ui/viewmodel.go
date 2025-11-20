@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -20,7 +21,7 @@ type viewModel struct {
 	// Header components
 	header      *tview.Flex
 	statusView  *tview.TextView
-	cmdView     *tview.Table
+	cmdBar      *tview.TextView
 	logoView    *tview.TextView
 	lastRefresh time.Time
 
@@ -76,19 +77,19 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	tview.Styles.MoreContrastBackgroundColor = tcell.ColorBlack
 	tview.Styles.PrimaryTextColor = tcell.ColorDefault // Allow dynamic colors
 
-	// Header components (k9s-style)
-	statusView := tview.NewTextView().SetDynamicColors(true).SetWrap(true)
+	// Header components (compact toolbar)
+	statusView := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	statusView.SetTextAlign(tview.AlignLeft)
 	statusView.SetBackgroundColor(tcell.ColorBlack)
 	statusView.SetTextColor(tcell.ColorPurple) // Set default to purple
 
-	// Commands section using Table (k9s Menu pattern)
-	cmdView := tview.NewTable()
-	cmdView.SetBackgroundColor(tcell.ColorBlack)
-	// Content filled later based on current view
+	// Commands section as a single-line toolbar
+	cmdBar := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	cmdBar.SetBackgroundColor(tcell.ColorBlack)
+	cmdBar.SetTextAlign(tview.AlignLeft)
 
 	logoView := tview.NewTextView()
-	logoView.SetTextAlign(tview.AlignRight)
+	logoView.SetTextAlign(tview.AlignLeft)
 	logoView.SetDynamicColors(true)
 	logoView.SetRegions(true)
 	logoView.SetBackgroundColor(tcell.ColorBlack)
@@ -143,7 +144,7 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		app:              app,
 		options:          opts,
 		statusView:       statusView,
-		cmdView:          cmdView,
+		cmdBar:           cmdBar,
 		logoView:         logoView,
 		table:            table,
 		detail:           detail,
@@ -157,7 +158,10 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	}
 
 	vm.table.SetSelectedFunc(func(row, column int) {
-		vm.showDetailView()
+		vm.updateDetail(row)
+	})
+	vm.table.SetSelectionChangedFunc(func(row, column int) {
+		vm.updateDetail(row)
 	})
 
 	// k9s-style focus handling to highlight active component
@@ -191,15 +195,19 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 }
 
 func (vm *viewModel) buildMainLayout() tview.Primitive {
-	// Header: give status and commands room; keep logo flexible to avoid wrapping figlet output
-	vm.header = tview.NewFlex().SetDirection(tview.FlexColumn)
+	// Header: dense two-line bar (stats + commands) with compact logo
+	headerTop := tview.NewFlex().SetDirection(tview.FlexColumn)
+	headerTop.SetBackgroundColor(tcell.ColorBlack)
+	headerTop.
+		AddItem(vm.logoView, 8, 0, false).
+		AddItem(nil, 1, 0, false).
+		AddItem(vm.statusView, 0, 1, false)
+
+	vm.header = tview.NewFlex().SetDirection(tview.FlexRow)
 	vm.header.SetBackgroundColor(tcell.ColorBlack)
 	vm.header.
-		AddItem(nil, 1, 0, false).           // padding
-		AddItem(vm.statusView, 0, 4, false). // flex status
-		AddItem(vm.cmdView, 0, 6, false).    // flex commands
-		AddItem(vm.logoView, 0, 2, false).   // flex logo so figlet fits
-		AddItem(nil, 1, 0, false)            // padding
+		AddItem(headerTop, 0, 1, false).
+		AddItem(vm.cmdBar, 1, 0, false)
 
 	// Create log view container with search status
 	logContainer := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -209,18 +217,24 @@ func (vm *viewModel) buildMainLayout() tview.Primitive {
 		AddItem(vm.searchStatus, 1, 0, false) // Search status bar at bottom
 
 	// Create main content pages for different views
+	// Dual-pane queue view: table + detail side-by-side
+	queuePane := tview.NewFlex().SetDirection(tview.FlexColumn)
+	queuePane.SetBackgroundColor(tcell.ColorBlack)
+	queuePane.
+		AddItem(vm.table, 0, 40, true).
+		AddItem(vm.detail, 0, 60, false)
+
 	vm.mainContent = tview.NewPages()
 	vm.mainContent.SetBackgroundColor(tcell.ColorBlack)
-	vm.mainContent.AddPage("queue", vm.table, true, true)
-	vm.mainContent.AddPage("detail", vm.detail, true, false)
+	vm.mainContent.AddPage("queue", queuePane, true, true)
 	vm.mainContent.AddPage("logs", logContainer, true, false)
 
 	// Main layout: header + content + optional problems drawer
 	vm.mainLayout = tview.NewFlex().SetDirection(tview.FlexRow)
 	vm.mainLayout.SetBackgroundColor(tcell.ColorBlack)
 	vm.mainLayout.
-		AddItem(vm.header, 0, 1, false).
-		AddItem(vm.mainContent, 0, 3, true).
+		AddItem(vm.header, 3, 0, false). // keep header to ~2-3 rows max
+		AddItem(vm.mainContent, 0, 1, true).
 		AddItem(vm.problemDrawer, 0, 0, false) // height managed dynamically
 
 	// Start with the drawer hidden.
@@ -246,8 +260,6 @@ func (vm *viewModel) ensureSelection() {
 }
 
 func (vm *viewModel) setCommandBar(view string) {
-	vm.cmdView.Clear()
-
 	type cmd struct{ key, desc string }
 	commands := []cmd{}
 	switch view {
@@ -284,7 +296,6 @@ func (vm *viewModel) setCommandBar(view string) {
 			filterLabel = "Processing"
 		}
 		commands = []cmd{
-			{"<d>", "Detail"},
 			{"<l>", "Logs"},
 			{"<r>", "Encoding"},
 			{"<i>", "Item Log"},
@@ -296,33 +307,9 @@ func (vm *viewModel) setCommandBar(view string) {
 		}
 	}
 
-	const maxRows = 5
-	colCount := (len(commands) / maxRows) + 1
-	maxKeyWidth := make([]int, colCount)
-	for i, cmd := range commands {
-		col := i / maxRows
-		if len(cmd.key) > maxKeyWidth[col] {
-			maxKeyWidth[col] = len(cmd.key)
-		}
+	segments := make([]string, 0, len(commands))
+	for _, cmd := range commands {
+		segments = append(segments, fmt.Sprintf("[dodgerblue]%s[-] [slategray]%s[-]", cmd.key, cmd.desc))
 	}
-	for i, cmd := range commands {
-		row := i % maxRows
-		col := i / maxRows
-		paddedKey := fmt.Sprintf("%-*s", maxKeyWidth[col], cmd.key)
-		cell := tview.NewTableCell(fmt.Sprintf(" [::b][dodgerblue]%s[slategray]  %s ", paddedKey, cmd.desc))
-		cell.SetBackgroundColor(tcell.ColorBlack)
-		cell.SetExpansion(1)
-		vm.cmdView.SetCell(row, col, cell)
-	}
-	// fill empties
-	for row := 0; row < maxRows; row++ {
-		for col := 0; col < colCount; col++ {
-			if vm.cmdView.GetCell(row, col) == nil {
-				empty := tview.NewTableCell("")
-				empty.SetBackgroundColor(tcell.ColorBlack)
-				empty.SetExpansion(1)
-				vm.cmdView.SetCell(row, col, empty)
-			}
-		}
-	}
+	vm.cmdBar.SetText(strings.Join(segments, "  •  "))
 }

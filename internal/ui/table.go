@@ -56,11 +56,7 @@ func (vm *viewModel) renderTable() {
 	}{
 		{"!", tview.AlignCenter, 1}, // gutter marker
 		{"ID", tview.AlignRight, 1},
-		{"Title", tview.AlignLeft, 4},
-		{"Stage", tview.AlignLeft, 3},
-		{"Progress", tview.AlignLeft, 3},
-		{"Status", tview.AlignLeft, 2},
-		{"Updated", tview.AlignLeft, 2},
+		{"Title", tview.AlignLeft, 6},
 		{"Flags", tview.AlignLeft, 1},
 	}
 
@@ -109,18 +105,12 @@ func (vm *viewModel) renderTable() {
 		return rows[i].ID > rows[j].ID
 	})
 
-	now := time.Now()
-
 	for rowIdx, item := range rows {
 		displayRow := rowIdx + 1
 		vm.table.SetCell(displayRow, 0, makeCell(gutterMarker(item), tview.AlignCenter, 1))
 		vm.table.SetCell(displayRow, 1, makeCell(fmt.Sprintf("[#94a3b8]%d[-]", item.ID), tview.AlignRight, 1))
-		vm.table.SetCell(displayRow, 2, makeCell(formatTitle(item), tview.AlignLeft, 4))
-		vm.table.SetCell(displayRow, 3, makeCell(formatStage(item), tview.AlignLeft, 3))
-		vm.table.SetCell(displayRow, 4, makeCell(formatProgressBar(item), tview.AlignLeft, 3))
-		vm.table.SetCell(displayRow, 5, makeCell(formatStatus(item), tview.AlignLeft, 2))
-		vm.table.SetCell(displayRow, 6, makeCell(formatUpdated(now, item), tview.AlignLeft, 2))
-		vm.table.SetCell(displayRow, 7, makeCell(formatFlags(item), tview.AlignLeft, 1))
+		vm.table.SetCell(displayRow, 2, makeCell(formatTitle(item), tview.AlignLeft, 6))
+		vm.table.SetCell(displayRow, 3, makeCell(formatFlags(item), tview.AlignLeft, 1))
 	}
 
 	vm.displayItems = rows
@@ -146,7 +136,7 @@ func filterItems(items []spindle.QueueItem, keep func(spindle.QueueItem) bool) [
 
 func formatTitle(item spindle.QueueItem) string {
 	title := composeTitle(item)
-	title = truncate(title, 50)
+	title = truncate(title, 32)
 	color := "#e2e8f0"
 	if item.NeedsReview {
 		color = "#f39c12"
@@ -199,7 +189,7 @@ func formatProgressBar(item spindle.QueueItem) string {
 	if percent > 100 {
 		percent = 100
 	}
-	const barWidth = 14
+	const barWidth = 10
 	filled := int(percent/100*barWidth + 0.5)
 	if filled < 0 {
 		filled = 0
@@ -217,17 +207,8 @@ func formatStatus(item spindle.QueueItem) string {
 		status = "Unknown"
 	}
 
-	lane := strings.TrimSpace(item.ProcessingLane)
-	if lane == "" {
-		lane = determineLane(item.Status)
-	}
-	laneLower := strings.ToLower(strings.TrimSpace(lane))
-	chip := statusChip(item.Status)
-	if laneLower != "" {
-		laneLabel := titleCase(laneLower)
-		return fmt.Sprintf("%s [#6c757d]·[-] [%s]%s[-]", chip, colorForLane(laneLower), tview.Escape(laneLabel))
-	}
-	return chip
+	// Keep table compact: only show status chip; lane handled in detail pane
+	return statusChip(item.Status)
 }
 
 func formatUpdated(now time.Time, item spindle.QueueItem) string {
@@ -287,6 +268,14 @@ func statusChip(status string) string {
 		text = "UNKNOWN"
 	}
 	return fmt.Sprintf("[black:%s] %s [-:-]", color, tview.Escape(text))
+}
+
+func laneChip(lane string) string {
+	l := strings.ToLower(strings.TrimSpace(lane))
+	if l == "" {
+		return ""
+	}
+	return fmt.Sprintf("[black:%s] %s [-:-]", colorForLane(l), tview.Escape(strings.ToUpper(l)))
 }
 
 func badge(text, color string) string {
