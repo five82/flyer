@@ -167,12 +167,12 @@ func (vm *viewModel) update(snapshot state.Snapshot) {
 	vm.updateProblems(snapshot.Queue)
 	vm.renderTable()
 	vm.ensureSelection()
-	vm.lastRefresh = snapshot.LastUpdated
-
-	if vm.currentView == "detail" {
+	if len(vm.displayItems) > 0 {
 		row, _ := vm.table.GetSelection()
 		vm.updateDetail(row)
 	}
+	vm.lastRefresh = snapshot.LastUpdated
+
 	if vm.currentView == "logs" {
 		vm.refreshLogs(false)
 	}
