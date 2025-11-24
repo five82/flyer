@@ -13,23 +13,23 @@ import (
 )
 
 var statusPalette = map[string]string{
-	"pending":     "#7f8c8d",
-	"identifying": "#74b9ff",
-	"identified":  "#74b9ff",
-	"ripping":     "#0abde3",
-	"ripped":      "#38ada9",
-	"encoding":    "#f6c90e",
-	"encoded":     "#2ecc71",
-	"organizing":  "#27ae60",
-	"completed":   "#27ae60",
-	"failed":      "#ff6b6b",
-	"review":      "#f39c12",
+	"pending":     "#94a3b8", // Slate-400
+	"identifying": "#38bdf8", // Sky-400
+	"identified":  "#38bdf8", // Sky-400
+	"ripping":     "#818cf8", // Indigo-400
+	"ripped":      "#a78bfa", // Violet-400
+	"encoding":    "#f472b6", // Pink-400
+	"encoded":     "#34d399", // Emerald-400
+	"organizing":  "#2dd4bf", // Teal-400
+	"completed":   "#4ade80", // Green-400
+	"failed":      "#f87171", // Red-400
+	"review":      "#fbbf24", // Amber-400
 }
 
 var lanePalette = map[string]string{
-	"foreground": "#74b9ff",
-	"background": "#5b7083",
-	"attention":  "#f39c12",
+	"foreground": "#38bdf8", // Sky-400
+	"background": "#64748b", // Slate-500
+	"attention":  "#fbbf24", // Amber-400
 }
 
 var statusPriority = map[string]int{
@@ -60,9 +60,9 @@ func (vm *viewModel) renderTable() {
 		{"Flags", tview.AlignLeft, 1},
 	}
 
-	headerBackground := tcell.ColorRoyalBlue
+	headerBackground := tcell.ColorSlateGray
 	for col, column := range columns {
-		header := tview.NewTableCell(fmt.Sprintf("[#f1f5f9::b]%s[-]", column.label)).
+		header := tview.NewTableCell(fmt.Sprintf("[#f8fafc::b]%s[-]", column.label)).
 			SetSelectable(false).
 			SetAlign(column.align).
 			SetExpansion(column.expansion).
@@ -137,19 +137,19 @@ func filterItems(items []spindle.QueueItem, keep func(spindle.QueueItem) bool) [
 func formatTitle(item spindle.QueueItem) string {
 	title := composeTitle(item)
 	title = truncate(title, 32)
-	color := "#e2e8f0"
+	color := "#e2e8f0" // Slate-200
 	if item.NeedsReview {
-		color = "#f39c12"
+		color = "#fbbf24" // Amber-400
 	}
 	return fmt.Sprintf("[%s]%s[-]", color, tview.Escape(title))
 }
 
 func gutterMarker(item spindle.QueueItem) string {
 	if strings.TrimSpace(item.ErrorMessage) != "" {
-		return badge("!", "#ff6b6b")
+		return badge("!", "#f87171") // Red-400
 	}
 	if item.NeedsReview {
-		return badge("R", "#f39c12")
+		return badge("R", "#fbbf24") // Amber-400
 	}
 	return ""
 }
@@ -243,13 +243,13 @@ func formatUpdated(now time.Time, item spindle.QueueItem) string {
 func formatFlags(item spindle.QueueItem) string {
 	var flags []string
 	if item.NeedsReview {
-		flags = append(flags, badge("REV", "#f39c12"))
+		flags = append(flags, badge("REV", "#fbbf24")) // Amber-400
 	}
 	if strings.TrimSpace(item.ErrorMessage) != "" {
-		flags = append(flags, badge("ERR", "#ff6b6b"))
+		flags = append(flags, badge("ERR", "#f87171")) // Red-400
 	}
 	if strings.TrimSpace(item.BackgroundLogPath) != "" {
-		flags = append(flags, badge("LOG", "#74b9ff"))
+		flags = append(flags, badge("LOG", "#38bdf8")) // Sky-400
 	}
 	return strings.Join(flags, " ")
 }
@@ -258,7 +258,7 @@ func colorForStatus(status string) string {
 	if color, ok := statusPalette[strings.ToLower(strings.TrimSpace(status))]; ok {
 		return color
 	}
-	return "#cbd5f5"
+	return "#94a3b8" // Slate-400
 }
 
 func statusChip(status string) string {
@@ -286,7 +286,7 @@ func colorForLane(lane string) string {
 	if color, ok := lanePalette[strings.ToLower(strings.TrimSpace(lane))]; ok {
 		return color
 	}
-	return "#94a3b8"
+	return "#64748b" // Slate-500
 }
 
 func statusRank(status string) int {

@@ -149,7 +149,7 @@ func (vm *viewModel) returnToCurrentView() {
 
 func (vm *viewModel) updateDetail(row int) {
 	if row <= 0 || row-1 >= len(vm.displayItems) {
-		vm.detail.SetText("[cadetblue]Select an item to view details[-]")
+		vm.detail.SetText("[#64748b]Select an item to view details[-]")
 		return
 	}
 	item := vm.displayItems[row-1]
@@ -159,14 +159,14 @@ func (vm *viewModel) updateDetail(row int) {
 		if b.Len() > 0 {
 			b.WriteString("\n")
 		}
-		fmt.Fprintf(&b, "[slategray::b]%s[-:-:-]\n", title)
+		fmt.Fprintf(&b, "[#cbd5e1::b]%s[-:-:-]\n", title) // Slate-300, bold
 	}
 
 	writeRow := func(label, value string) {
 		if strings.TrimSpace(value) == "" {
 			return
 		}
-		fmt.Fprintf(&b, "[slategray]%s[-] %s\n", padLabel(label), value)
+		fmt.Fprintf(&b, "[#94a3b8]%s[-] %s\n", padLabel(label), value) // Slate-400
 	}
 
 	formatPath := func(path string) string {
@@ -178,33 +178,33 @@ func (vm *viewModel) updateDetail(row int) {
 		if base == "." || base == "/" || base == "" {
 			base = path
 		}
-		return fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(base))
+		return fmt.Sprintf("[#38bdf8]%s[-]", tview.Escape(base)) // Sky-400
 	}
 
 	formatLogPath := func(path, missing string) string {
 		path = strings.TrimSpace(path)
 		if path == "" {
-			return fmt.Sprintf("[gray]%s[-]", missing)
+			return fmt.Sprintf("[#475569]%s[-]", missing) // Slate-600
 		}
-		return fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(truncateMiddle(path, 72)))
+		return fmt.Sprintf("[#38bdf8]%s[-]", tview.Escape(truncateMiddle(path, 72)))
 	}
 
 	// Title and chips
 	writeSection("Summary")
 	title := composeTitle(item)
-	titleValue := fmt.Sprintf("[white]%s[-]", tview.Escape(title))
+	titleValue := fmt.Sprintf("[#f8fafc]%s[-]", tview.Escape(title)) // Slate-50
 	if item.NeedsReview {
-		titleValue += " " + badge("REVIEW", "#f39c12")
+		titleValue += " " + badge("REVIEW", "#fbbf24")
 	}
 	if strings.TrimSpace(item.ErrorMessage) != "" {
-		titleValue += " " + badge("ERROR", "#ff6b6b")
+		titleValue += " " + badge("ERROR", "#f87171")
 	}
 	writeRow("Title", titleValue)
 
 	status := statusChip(item.Status)
 	lane := laneChip(determineLane(item.Status))
 	percent := clampPercent(item.Progress.Percent)
-	statusLine := fmt.Sprintf("%s  %s  [gray]ID %d[-]  [#6c757d]%3.0f%%[-]", status, lane, item.ID, percent)
+	statusLine := fmt.Sprintf("%s  %s  [#64748b]ID %d[-]  [#94a3b8]%3.0f%%[-]", status, lane, item.ID, percent)
 	writeRow("Status", statusLine)
 
 	// Progress block
@@ -213,19 +213,19 @@ func (vm *viewModel) updateDetail(row int) {
 	if stage == "" {
 		stage = titleCase(item.Status)
 	}
-	writeRow("Stage", fmt.Sprintf("[cadetblue]%s[-]", tview.Escape(stage)))
+	writeRow("Stage", fmt.Sprintf("[#38bdf8]%s[-]", tview.Escape(stage)))
 
 	progress := detailProgressBar(item)
 	stageMsg := strings.TrimSpace(item.Progress.Message)
 	writeRow("Progress", progress)
 	if stageMsg != "" {
-		writeRow("Note", fmt.Sprintf("[#6c757d]%s[-]", tview.Escape(stageMsg)))
+		writeRow("Note", fmt.Sprintf("[#94a3b8]%s[-]", tview.Escape(stageMsg)))
 	}
 
 	// Issues block
 	if strings.TrimSpace(item.ErrorMessage) != "" {
 		writeSection("Issues")
-		writeRow("Error", fmt.Sprintf("[red]%s[-]", tview.Escape(item.ErrorMessage)))
+		writeRow("Error", fmt.Sprintf("[#f87171]%s[-]", tview.Escape(item.ErrorMessage)))
 	}
 	if item.NeedsReview {
 		if strings.TrimSpace(item.ErrorMessage) == "" {
@@ -235,7 +235,7 @@ func (vm *viewModel) updateDetail(row int) {
 		if reason == "" {
 			reason = "Needs operator review"
 		}
-		writeRow("Review", fmt.Sprintf("[darkorange]%s[-]", tview.Escape(reason)))
+		writeRow("Review", fmt.Sprintf("[#fbbf24]%s[-]", tview.Escape(reason)))
 	}
 
 	// Artifacts
@@ -261,7 +261,7 @@ func (vm *viewModel) updateDetail(row int) {
 	created := item.ParsedCreatedAt()
 	if !created.IsZero() {
 		writeSection("Timeline")
-		fmt.Fprintf(&b, "  [slategray]Created[-] [cadetblue]%s[-] [#6c757d](%s ago)[-]\n", formatLocalTimestamp(created), humanizeDuration(time.Since(created)))
+		fmt.Fprintf(&b, "  [#94a3b8]Created[-] [#38bdf8]%s[-] [#64748b](%s ago)[-]\n", formatLocalTimestamp(created), humanizeDuration(time.Since(created)))
 	}
 
 	// Rip spec summary
@@ -271,12 +271,12 @@ func (vm *viewModel) updateDetail(row int) {
 			writeSection("Rip Spec")
 		}
 		if summary.ContentKey != "" {
-			fmt.Fprintf(&b, "  [slategray]Key[-]   [cadetblue]%s[-]\n", summary.ContentKey)
+			fmt.Fprintf(&b, "  [#94a3b8]Key[-]   [#38bdf8]%s[-]\n", summary.ContentKey)
 		}
 		count := len(summary.Titles)
 		for i, title := range summary.Titles {
 			if i >= maxTitles {
-				fmt.Fprintf(&b, "  [slategray]…[-] [#6c757d]+%d more titles[-]\n", count-maxTitles)
+				fmt.Fprintf(&b, "  [#94a3b8]…[-] [#64748b]+%d more titles[-]\n", count-maxTitles)
 				break
 			}
 			name := strings.TrimSpace(title.Name)
@@ -289,9 +289,9 @@ func (vm *viewModel) updateDetail(row int) {
 			}
 			minutes := title.Duration / 60
 			seconds := title.Duration % 60
-			fmt.Fprintf(&b, "  [cadetblue]- %s[-] [dodgerblue]%02d:%02d[-]", tview.Escape(name), minutes, seconds)
+			fmt.Fprintf(&b, "  [#38bdf8]- %s[-] [#818cf8]%02d:%02d[-]", tview.Escape(name), minutes, seconds)
 			if fingerprint != "" {
-				fmt.Fprintf(&b, " [lightskyblue]%s[-]", fingerprint)
+				fmt.Fprintf(&b, " [#94a3b8]%s[-]", fingerprint)
 			}
 			b.WriteString("\n")
 		}
@@ -410,7 +410,7 @@ func formatMetadata(rows []metadataRow) string {
 	var b strings.Builder
 	for i := range ordered {
 		key := padRight(truncate(pretties[i], maxKey), maxKey)
-		fmt.Fprintf(&b, "  [slategray]%s[-] [cadetblue]%s[-]\n", key, values[i])
+		fmt.Fprintf(&b, "  [#94a3b8]%s[-] [#38bdf8]%s[-]\n", key, values[i])
 	}
 	return b.String()
 }
@@ -537,11 +537,11 @@ func (vm *viewModel) selectedItem() *spindle.QueueItem {
 func (vm *viewModel) updateLogTitle() {
 	switch vm.logMode {
 	case logSourceItem:
-		vm.logView.SetTitle(" [lightskyblue]Item Log[-] ")
+		vm.logView.SetTitle(" [::b]Item Log[::-] ")
 	case logSourceEncoding:
-		vm.logView.SetTitle(" [lightskyblue]Encoding Log[-] ")
+		vm.logView.SetTitle(" [::b]Encoding Log[::-] ")
 	default:
-		vm.logView.SetTitle(" [lightskyblue]Daemon Log[-] ")
+		vm.logView.SetTitle(" [::b]Daemon Log[::-] ")
 	}
 }
 

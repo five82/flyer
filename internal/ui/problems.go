@@ -93,7 +93,7 @@ func (vm *viewModel) updateProblems(queue []spindle.QueueItem) {
 func (vm *viewModel) renderProblemTable(entries []problemEntry) {
 	vm.problemTable.Clear()
 
-	headerColor := tcell.ColorMaroon
+	headerColor := tcell.ColorSlateGray
 	headers := []struct {
 		title string
 		align int
@@ -105,7 +105,7 @@ func (vm *viewModel) renderProblemTable(entries []problemEntry) {
 	}
 
 	for col, hdr := range headers {
-		cell := tview.NewTableCell(fmt.Sprintf("[#f1f5f9::b]%s[-]", hdr.title)).
+		cell := tview.NewTableCell(fmt.Sprintf("[#f8fafc::b]%s[-]", hdr.title)).
 			SetAlign(hdr.align).
 			SetSelectable(false).
 			SetBackgroundColor(headerColor)
@@ -123,7 +123,7 @@ func (vm *viewModel) renderProblemTable(entries []problemEntry) {
 
 		shortcut := ""
 		if entry.Shortcut != 0 {
-			shortcut = fmt.Sprintf("[yellow::b]%c[-]", entry.Shortcut)
+			shortcut = fmt.Sprintf("[#fbbf24::b]%c[-]", entry.Shortcut)
 		}
 
 		status := strings.ToUpper(entry.Item.Status)
@@ -132,7 +132,7 @@ func (vm *viewModel) renderProblemTable(entries []problemEntry) {
 		reason := truncate(entry.Reason, 60)
 		reasonColor := "#fbbf24"
 		if entry.Kind == problemFailed {
-			reasonColor = "#ff6b6b"
+			reasonColor = "#f87171"
 		}
 
 		vm.problemTable.SetCell(row, 0, makeCell(shortcut, tview.AlignCenter, 1))
@@ -141,11 +141,11 @@ func (vm *viewModel) renderProblemTable(entries []problemEntry) {
 		vm.problemTable.SetCell(row, 3, makeCell(fmt.Sprintf("[%s]%s[-]", reasonColor, tview.Escape(reason)), tview.AlignLeft, 4))
 	}
 
-	titleColor := "lightskyblue"
+	titleColor := "::b" // default bold
 	if len(entries) > 0 && entries[0].Kind == problemFailed {
-		titleColor = "red"
+		titleColor = "#f87171::b"
 	}
-	vm.problemTable.SetTitle(fmt.Sprintf(" [%s]Problems (%d)[-] ", titleColor, len(entries)))
+	vm.problemTable.SetTitle(fmt.Sprintf(" [%s]Problems (%d)[::-] ", titleColor, len(entries)))
 }
 
 func (vm *viewModel) renderProblemSummary(entries []problemEntry) {

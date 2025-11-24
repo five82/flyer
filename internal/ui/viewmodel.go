@@ -82,7 +82,7 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	statusView := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	statusView.SetTextAlign(tview.AlignLeft)
 	statusView.SetBackgroundColor(tcell.ColorBlack)
-	statusView.SetTextColor(tcell.ColorPurple) // Set default to purple
+	statusView.SetTextColor(tcell.ColorWhite) // Default to white
 
 	// Commands section as a single-line toolbar
 	cmdBar := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
@@ -98,22 +98,22 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 
 	// Main content components (k9s-style)
 	table := tview.NewTable()
-	table.SetBorder(true).SetTitle(" [lightskyblue]Queue[-] ")
+	table.SetBorder(true).SetTitle(" [::b]Queue[::-] ")
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
 	table.SetBackgroundColor(tcell.ColorBlack)
 	// k9s-style border color
-	table.SetBorderColor(tcell.ColorLightSkyBlue)
+	table.SetBorderColor(tcell.ColorSlateGray)
 
 	detail := tview.NewTextView().SetDynamicColors(true).SetWrap(true)
-	detail.SetBorder(true).SetTitle(" [lightskyblue]Details[-] ")
+	detail.SetBorder(true).SetTitle(" [::b]Details[::-] ")
 	detail.SetBackgroundColor(tcell.ColorBlack)
-	detail.SetBorderColor(tcell.ColorLightSkyBlue)
+	detail.SetBorderColor(tcell.ColorSlateGray)
 
 	logView := tview.NewTextView().SetDynamicColors(true)
-	logView.SetBorder(true).SetTitle(" [lightskyblue]Daemon Log[-] ")
+	logView.SetBorder(true).SetTitle(" [::b]Daemon Log[::-] ")
 	logView.SetBackgroundColor(tcell.ColorBlack)
-	logView.SetBorderColor(tcell.ColorLightSkyBlue)
+	logView.SetBorderColor(tcell.ColorSlateGray)
 	logView.ScrollToEnd()
 
 	// Search status bar (vim-style at bottom)
@@ -124,7 +124,7 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	// Problems drawer components
 	problemsTable := tview.NewTable()
 	problemsTable.SetBorder(true)
-	problemsTable.SetTitle(" [lightskyblue]Problems[-] ")
+	problemsTable.SetTitle(" [::b]Problems[::-] ")
 	problemsTable.SetBorderColor(tcell.ColorIndianRed)
 	problemsTable.SetBackgroundColor(tcell.ColorBlack)
 	problemsTable.SetSelectable(false, false)
@@ -172,21 +172,21 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 
 	// k9s-style focus handling to highlight active component
 	vm.table.SetFocusFunc(func() {
-		vm.table.SetBorderColor(tcell.ColorLightSkyBlue)
-		vm.detail.SetBorderColor(tcell.ColorLightSkyBlue)
-		vm.logView.SetBorderColor(tcell.ColorLightSkyBlue)
+		vm.table.SetBorderColor(tcell.ColorSkyblue)
+		vm.detail.SetBorderColor(tcell.ColorSlateGray)
+		vm.logView.SetBorderColor(tcell.ColorSlateGray)
 	})
 
 	vm.detail.SetFocusFunc(func() {
-		vm.table.SetBorderColor(tcell.ColorLightSkyBlue)
-		vm.detail.SetBorderColor(tcell.ColorLightSkyBlue)
-		vm.logView.SetBorderColor(tcell.ColorLightSkyBlue)
+		vm.table.SetBorderColor(tcell.ColorSlateGray)
+		vm.detail.SetBorderColor(tcell.ColorSkyblue)
+		vm.logView.SetBorderColor(tcell.ColorSlateGray)
 	})
 
 	vm.logView.SetFocusFunc(func() {
-		vm.table.SetBorderColor(tcell.ColorLightSkyBlue)
-		vm.detail.SetBorderColor(tcell.ColorLightSkyBlue)
-		vm.logView.SetBorderColor(tcell.ColorLightSkyBlue)
+		vm.table.SetBorderColor(tcell.ColorSlateGray)
+		vm.detail.SetBorderColor(tcell.ColorSlateGray)
+		vm.logView.SetBorderColor(tcell.ColorSkyblue)
 	})
 
 	vm.root = tview.NewPages()
@@ -317,7 +317,7 @@ func (vm *viewModel) setCommandBar(view string) {
 
 	segments := make([]string, 0, len(commands))
 	for _, cmd := range commands {
-		segments = append(segments, fmt.Sprintf("[dodgerblue]%s[-] [slategray]%s[-]", cmd.key, cmd.desc))
+		segments = append(segments, fmt.Sprintf("[#38bdf8]%s[-] [#64748b]%s[-]", cmd.key, cmd.desc)) // Sky-400, Slate-500
 	}
 	vm.cmdBar.SetText(strings.Join(segments, "  •  "))
 }
