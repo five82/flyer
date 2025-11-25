@@ -5,56 +5,150 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
 func (vm *viewModel) showHelp() {
-	// k9s-style help text with bracketed keys in column layout
-	helpCommands := []struct{ key, desc string }{
-		{"q", "Queue View"},
-		{"l", "Toggle Log Source (Daemon→Encoding→Item)"},
-		{"r", "Encoding Log View"},
-		{"p", "Problems Drawer"},
-		{"h/?", "Help"},
-		{"i", "Item Logs (Highlighted)"},
-		{"/", "Start New Search"},
-		{"n", "Next Search Match"},
-		{"N", "Previous Search Match"},
-		{"Tab", "Cycle Pane (Queue↔Detail↔Logs)"},
-		{"ESC", "Return to Queue View"},
-		{"e", "Exit"},
-		{"Ctrl+C", "Exit"},
+	helpSections := []struct {
+		title   string
+		entries []struct{ key, desc string }
+	}{
+		{
+			title: "Navigation",
+			entries: []struct{ key, desc string }{
+				{"Tab", "Cycle pane focus (Queue ↔ Detail ↔ Logs)"},
+				{"ESC", "Return focus to queue"},
+				{"q", "Jump to queue table"},
+			},
+		},
+		{
+			title: "Logs & Details",
+			entries: []struct{ key, desc string }{
+				{"l", "Rotate log source (Daemon → Encoding → Item)"},
+				{"r", "Show encoding log view"},
+				{"i", "Open highlighted item's logs"},
+				{"p", "Toggle problems drawer"},
+			},
+		},
+		{
+			title: "Search & Filters",
+			entries: []struct{ key, desc string }{
+				{"/", "Start a new search"},
+				{"n / N", "Next / previous match"},
+				{"f", "Cycle queue filter (All → Active → Failed)"},
+				{"1-9", "Jump to matching problem shortcut"},
+			},
+		},
+		{
+			title: "System",
+			entries: []struct{ key, desc string }{
+				{"h or ?", "Show this help"},
+				{"e", "Exit Flyer"},
+				{"Ctrl+C", "Quit application"},
+			},
+		},
 	}
 
-	// Create formatted help text
-	var helpLines []string
-	maxRows := 4
-	for i, cmd := range helpCommands {
-		row := i % maxRows
-		col := i / maxRows
+	keyColor := hexToColor(vm.theme.Text.AccentSoft)
+	descColor := hexToColor(vm.theme.Text.Primary)
+	headerColor := hexToColor(vm.theme.Text.Secondary)
+	mutedColor := hexToColor(vm.theme.Text.Muted)
 
-		text := fmt.Sprintf("[%s]<%s>[%s] %s", vm.theme.Text.AccentSoft, cmd.key, vm.theme.Text.Muted, cmd.desc)
-		for len(helpLines) <= row {
-			helpLines = append(helpLines, "")
+	table := tview.NewTable()
+	table.SetBorders(false)
+	table.SetBackgroundColor(vm.theme.SurfaceColor())
+	table.SetSelectable(false, false)
+	table.SetFixed(0, 0)
+	table.SetEvaluateAllRows(true)
+
+	row := 0
+	for idx, section := range helpSections {
+		header := tview.NewTableCell(fmt.Sprintf(" %s ", section.title)).
+			SetTextColor(headerColor).
+			SetAttributes(tcell.AttrBold).
+			SetAlign(tview.AlignLeft).
+			SetSelectable(false)
+		table.SetCell(row, 0, header)
+		table.SetCell(row, 1, tview.NewTableCell("").SetSelectable(false))
+		row++
+		for _, entry := range section.entries {
+			keyCell := tview.NewTableCell(entry.key).
+				SetTextColor(keyColor).
+				SetAlign(tview.AlignRight).
+				SetSelectable(false).
+				SetAttributes(tcell.AttrBold)
+			descCell := tview.NewTableCell(entry.desc).
+				SetTextColor(descColor).
+				SetAlign(tview.AlignLeft).
+				SetSelectable(false).
+				SetExpansion(1)
+			table.SetCell(row, 0, keyCell)
+			table.SetCell(row, 1, descCell)
+			row++
 		}
-		if col > 0 {
-			helpLines[row] += "  |  " + text
-		} else {
-			helpLines[row] = text
+		if idx < len(helpSections)-1 {
+			table.SetCell(row, 0, tview.NewTableCell("").SetSelectable(false))
+			row++
 		}
 	}
 
-	text := strings.Join(helpLines, "\n")
-	modal := tview.NewModal().SetText(text).AddButtons([]string{"Close"})
-	modal.SetBorderColor(vm.theme.BorderFocusColor())
-	modal.SetBackgroundColor(vm.theme.SurfaceColor())
-	modal.SetTextColor(hexToColor(vm.theme.Text.AccentSoft))
-	modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+	hint := tview.NewTextView().
+		SetDynamicColors(true).
+		SetText(fmt.Sprintf("[%s]Press Esc, Enter, or q to close", vm.theme.Text.Muted)).
+		SetTextAlign(tview.AlignCenter)
+	hint.SetBackgroundColor(vm.theme.SurfaceColor())
+	hint.SetTextColor(mutedColor)
+
+	content := tview.NewFlex().SetDirection(tview.FlexRow)
+	content.SetBorder(true).
+		SetTitle(" [::b]Flyer Shortcuts[::-] ").
+		SetBorderColor(vm.theme.BorderFocusColor()).
+		SetBackgroundColor(vm.theme.SurfaceColor())
+	content.AddItem(table, 0, 1, true)
+	content.AddItem(hint, 1, 0, false)
+
+	closeModal := func() {
 		vm.root.RemovePage("modal")
 		vm.returnToCurrentView()
+	}
+
+	content.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Key() == tcell.KeyEsc,
+			event.Key() == tcell.KeyEnter,
+			event.Key() == tcell.KeyCtrlC,
+			strings.EqualFold(string(event.Rune()), "q"):
+			closeModal()
+			return nil
+		}
+		return event
 	})
+
+	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Key() == tcell.KeyEsc,
+			event.Key() == tcell.KeyEnter,
+			event.Key() == tcell.KeyCtrlC,
+			event.Rune() == 'q',
+			event.Rune() == 'Q':
+			closeModal()
+			return nil
+		}
+		return event
+	})
+
+	height := row + 6
+	if height < 12 {
+		height = 12
+	}
+	if height > 24 {
+		height = 24
+	}
+
 	vm.root.RemovePage("modal")
-	vm.root.AddPage("modal", center(75, 7, modal), true, true)
+	vm.root.AddPage("modal", center(80, height, content), true, true)
+	vm.app.SetFocus(table)
 }
 
 func center(width, height int, primitive tview.Primitive) tview.Primitive {

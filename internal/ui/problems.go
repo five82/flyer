@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/five82/flyer/internal/spindle"
@@ -369,16 +370,47 @@ func (vm *viewModel) showNoProblemsNotice() {
 	vm.mainLayout.ResizeItem(vm.problemBar, 0, 0)
 	vm.problemsOpen = false
 
-	modal := tview.NewModal().
+	message := tview.NewTextView().
+		SetDynamicColors(true).
 		SetText(fmt.Sprintf("[%s]No failed or review items to show.", vm.theme.Text.Muted)).
-		AddButtons([]string{"Close"})
-	modal.SetBackgroundColor(vm.theme.SurfaceColor())
-	modal.SetBorderColor(vm.theme.BorderFocusColor())
-	modal.SetTextColor(hexToColor(vm.theme.Text.AccentSoft))
-	modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+		SetTextAlign(tview.AlignCenter)
+	message.SetBackgroundColor(vm.theme.SurfaceColor())
+	message.SetTextColor(hexToColor(vm.theme.Text.Primary))
+
+	hint := tview.NewTextView().
+		SetDynamicColors(true).
+		SetText(fmt.Sprintf("[%s]Press Esc, Enter, or q to close", vm.theme.Text.Muted)).
+		SetTextAlign(tview.AlignCenter)
+	hint.SetBackgroundColor(vm.theme.SurfaceColor())
+	hint.SetTextColor(hexToColor(vm.theme.Text.Muted))
+
+	content := tview.NewFlex().SetDirection(tview.FlexRow)
+	content.SetBorder(true).
+		SetTitle(" [::b]Problems Drawer[::-] ").
+		SetBorderColor(vm.theme.BorderFocusColor()).
+		SetBackgroundColor(vm.theme.SurfaceColor())
+	content.AddItem(message, 0, 1, true)
+	content.AddItem(hint, 1, 0, false)
+
+	closeModal := func() {
 		vm.root.RemovePage("problems-empty")
 		vm.returnToCurrentView()
+	}
+
+	content.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Key() == tcell.KeyEsc,
+			event.Key() == tcell.KeyEnter,
+			event.Key() == tcell.KeyCtrlC,
+			event.Rune() == 'q',
+			event.Rune() == 'Q':
+			closeModal()
+			return nil
+		}
+		return event
 	})
+
 	vm.root.RemovePage("problems-empty")
-	vm.root.AddPage("problems-empty", center(50, 5, modal), true, true)
+	vm.root.AddPage("problems-empty", center(50, 7, content), true, true)
+	vm.app.SetFocus(content)
 }
