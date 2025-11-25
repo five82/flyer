@@ -77,6 +77,36 @@ type QueueProgress struct {
 	Message string  `json:"message"`
 }
 
+// LogEvent represents a single log entry from /api/logs.
+type LogEvent struct {
+	Sequence  uint64            `json:"seq"`
+	Timestamp string            `json:"ts"`
+	Level     string            `json:"level"`
+	Message   string            `json:"msg"`
+	Component string            `json:"component"`
+	Stage     string            `json:"stage"`
+	ItemID    int64             `json:"item_id"`
+	Fields    map[string]string `json:"fields"`
+	Details   []DetailField     `json:"details"`
+}
+
+// ParsedTime returns the timestamp as time.Time when possible.
+func (e LogEvent) ParsedTime() time.Time {
+	return parseTime(e.Timestamp)
+}
+
+// DetailField mirrors the API detail payloads.
+type DetailField struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+// LogBatch aggregates a slice of log events with the next sequence cursor.
+type LogBatch struct {
+	Events []LogEvent `json:"events"`
+	Next   uint64     `json:"next"`
+}
+
 // RipSpecSummary describes the subset of rip spec details Flyer cares about.
 type RipSpecSummary struct {
 	ContentKey string             `json:"content_key"`

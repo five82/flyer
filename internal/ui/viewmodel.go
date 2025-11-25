@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -15,6 +16,8 @@ import (
 type viewModel struct {
 	// Core application state
 	app     *tview.Application
+	ctx     context.Context
+	client  *spindle.Client
 	options Options
 	root    *tview.Pages
 
@@ -53,10 +56,13 @@ type viewModel struct {
 	filterMode   queueFilter
 
 	// Log viewing state
-	logMode     logSource
-	lastLogPath string
-	lastLogSet  time.Time
-	rawLogLines []string
+	logMode          logSource
+	lastLogPath      string
+	lastLogKey       string
+	lastLogSet       time.Time
+	rawLogLines      []string
+	logCursor        map[string]uint64
+	currentItemLogID int64
 
 	// Problems drawer state
 	problemEntries   []problemEntry
@@ -143,8 +149,15 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		AddItem(problemsTable, 0, 1, false).
 		AddItem(problemSummary, 1, 0, false)
 
+	ctx := opts.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	vm := &viewModel{
 		app:              app,
+		ctx:              ctx,
+		client:           opts.Client,
 		options:          opts,
 		statusView:       statusView,
 		cmdBar:           cmdBar,
@@ -160,6 +173,7 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		currentView:      "queue",
 		problemShortcuts: map[rune]int64{},
 		theme:            theme,
+		logCursor:        make(map[string]uint64),
 	}
 
 	vm.table.SetSelectedFunc(func(row, column int) {

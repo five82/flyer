@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -49,7 +50,7 @@ func (vm *viewModel) showItemLogsView() {
 	// Force item log mode
 	vm.logMode = logSourceItem
 	vm.updateLogTitle()
-	vm.lastLogPath = ""
+	vm.resetLogBuffer()
 	vm.refreshLogs(true)
 	vm.app.SetFocus(vm.logView)
 }
@@ -60,7 +61,7 @@ func (vm *viewModel) showDaemonLogsView() {
 	// Force daemon log mode
 	vm.logMode = logSourceDaemon
 	vm.updateLogTitle()
-	vm.lastLogPath = ""
+	vm.resetLogBuffer()
 	vm.refreshLogs(true)
 	vm.app.SetFocus(vm.logView)
 }
@@ -71,7 +72,7 @@ func (vm *viewModel) showEncodingLogsView() {
 	// Force encoding log mode
 	vm.logMode = logSourceEncoding
 	vm.updateLogTitle()
-	vm.lastLogPath = ""
+	vm.resetLogBuffer()
 	vm.refreshLogs(true)
 	vm.app.SetFocus(vm.logView)
 }
@@ -117,7 +118,7 @@ func (vm *viewModel) toggleLogSource() {
 		vm.logMode = logSourceDaemon
 	}
 	vm.updateLogTitle()
-	vm.lastLogPath = ""
+	vm.resetLogBuffer()
 	// Always show logs view when toggling log source
 	vm.showLogsView()
 }
@@ -474,6 +475,14 @@ func (vm *viewModel) detailProgressBar(item spindle.QueueItem) string {
 }
 
 func (vm *viewModel) refreshLogs(force bool) {
+	if vm.logMode == logSourceEncoding || vm.client == nil {
+		vm.refreshFileLogs(force)
+		return
+	}
+	vm.refreshStreamLogs(force)
+}
+
+func (vm *viewModel) refreshFileLogs(force bool) {
 	var path string
 	switch vm.logMode {
 	case logSourceDaemon:
@@ -523,6 +532,70 @@ func (vm *viewModel) refreshLogs(force bool) {
 	vm.lastLogSet = time.Now()
 }
 
+func (vm *viewModel) refreshStreamLogs(force bool) {
+	if vm.searchMode || vm.searchRegex != nil {
+		vm.updateLogStatus(false, "api stream")
+		return
+	}
+	if !force && time.Since(vm.lastLogSet) < 400*time.Millisecond {
+		return
+	}
+
+	key := vm.streamLogKey()
+	if key == "" {
+		vm.logView.SetText("No background log for this item")
+		vm.updateLogStatus(false, "")
+		vm.rawLogLines = nil
+		vm.lastLogKey = ""
+		return
+	}
+
+	itemID := vm.currentItemID()
+	req := spindle.LogQuery{
+		Since: vm.logCursor[key],
+		Limit: maxLogLines,
+	}
+	if vm.logMode == logSourceItem && itemID > 0 {
+		req.ItemID = itemID
+	}
+
+	ctx := vm.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	batch, err := vm.client.FetchLogs(reqCtx, req)
+	if err != nil {
+		vm.logView.SetText(fmt.Sprintf("Error fetching logs: %v", err))
+		vm.updateLogStatus(false, "api stream")
+		return
+	}
+
+	if key != vm.lastLogKey || req.Since == 0 {
+		vm.rawLogLines = nil
+	}
+	vm.lastLogKey = key
+	vm.logCursor[key] = batch.Next
+
+	newLines := formatLogEvents(batch.Events)
+	if len(newLines) > 0 {
+		vm.rawLogLines = append(vm.rawLogLines, newLines...)
+		if len(vm.rawLogLines) > maxLogLines {
+			vm.rawLogLines = vm.rawLogLines[len(vm.rawLogLines)-maxLogLines:]
+		}
+	}
+	if len(vm.rawLogLines) == 0 {
+		vm.logView.SetText("No log entries available")
+		vm.updateLogStatus(false, "api stream")
+		return
+	}
+	colorized := logtail.ColorizeLines(vm.rawLogLines)
+	vm.displayLog(colorized, "api stream")
+	vm.lastLogSet = time.Now()
+}
+
 func (vm *viewModel) displayLog(colorizedLines []string, path string) {
 	vm.logView.SetText(strings.Join(colorizedLines, "\n"))
 	vm.updateLogStatus(true, path)
@@ -550,6 +623,45 @@ func (vm *viewModel) updateLogTitle() {
 
 func padLabel(label string) string {
 	return fmt.Sprintf("%-*s", detailLabelWidth, label+":")
+}
+
+func (vm *viewModel) resetLogBuffer() {
+	vm.rawLogLines = nil
+	vm.lastLogPath = ""
+	vm.lastLogKey = ""
+	vm.logCursor = make(map[string]uint64)
+}
+
+func (vm *viewModel) streamLogKey() string {
+	switch vm.logMode {
+	case logSourceDaemon:
+		return "daemon"
+	case logSourceItem:
+		item := vm.selectedItem()
+		if item == nil {
+			vm.currentItemLogID = 0
+			return ""
+		}
+		if vm.currentItemLogID != item.ID {
+			vm.currentItemLogID = item.ID
+		}
+		return fmt.Sprintf("item-%d", item.ID)
+	default:
+		return ""
+	}
+}
+
+func (vm *viewModel) currentItemID() int64 {
+	if vm.logMode != logSourceItem {
+		return 0
+	}
+	item := vm.selectedItem()
+	if item == nil {
+		vm.currentItemLogID = 0
+		return 0
+	}
+	vm.currentItemLogID = item.ID
+	return item.ID
 }
 
 // updateLogStatus refreshes the footer line without clobbering active search info.

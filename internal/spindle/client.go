@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -62,8 +63,51 @@ func (c *Client) FetchQueue(ctx context.Context) ([]QueueItem, error) {
 	return payload.Items, nil
 }
 
+// LogQuery configures /api/logs requests.
+type LogQuery struct {
+	Since     uint64
+	Limit     int
+	Follow    bool
+	ItemID    int64
+	Component string
+}
+
+// FetchLogs retrieves log events using the daemon's streaming API.
+func (c *Client) FetchLogs(ctx context.Context, query LogQuery) (LogBatch, error) {
+	if c == nil {
+		return LogBatch{}, fmt.Errorf("client is nil")
+	}
+	values := url.Values{}
+	if query.Since > 0 {
+		values.Set("since", strconv.FormatUint(query.Since, 10))
+	}
+	if query.Limit > 0 {
+		values.Set("limit", strconv.Itoa(query.Limit))
+	}
+	if query.Follow {
+		values.Set("follow", "1")
+	}
+	if query.ItemID > 0 {
+		values.Set("item", strconv.FormatInt(query.ItemID, 10))
+	}
+	if component := strings.TrimSpace(query.Component); component != "" {
+		values.Set("component", component)
+	}
+	rel := &url.URL{Path: "/api/logs", RawQuery: values.Encode()}
+	var payload LogBatch
+	if err := c.doURL(ctx, http.MethodGet, rel, &payload); err != nil {
+		return LogBatch{}, err
+	}
+	return payload, nil
+}
+
 func (c *Client) do(ctx context.Context, method, path string, dest any) error {
-	reqURL := c.baseURL.ResolveReference(&url.URL{Path: path})
+	rel := &url.URL{Path: path}
+	return c.doURL(ctx, method, rel, dest)
+}
+
+func (c *Client) doURL(ctx context.Context, method string, rel *url.URL, dest any) error {
+	reqURL := c.baseURL.ResolveReference(rel)
 	req, err := http.NewRequestWithContext(ctx, method, reqURL.String(), nil)
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
@@ -78,7 +122,7 @@ func (c *Client) do(ctx context.Context, method, path string, dest any) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("api %s returned status %d", path, resp.StatusCode)
+		return fmt.Errorf("api %s returned status %d", rel.String(), resp.StatusCode)
 	}
 	if dest == nil {
 		return nil

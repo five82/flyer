@@ -10,12 +10,15 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/five82/flyer/internal/config"
+	"github.com/five82/flyer/internal/spindle"
 	"github.com/five82/flyer/internal/state"
 )
 
 // Options configure the UI runtime.
 type Options struct {
 	Store         *state.Store
+	Client        *spindle.Client
+	Context       context.Context
 	DaemonLogPath string
 	DraptoLogPath string
 	Config        config.Config
@@ -47,6 +50,10 @@ const (
 func Run(ctx context.Context, opts Options) error {
 	if opts.Store == nil {
 		return fmt.Errorf("ui requires a data store")
+	}
+
+	if opts.Context == nil {
+		opts.Context = ctx
 	}
 
 	app := tview.NewApplication()

@@ -44,6 +44,8 @@ func Run(ctx context.Context, opts Options) error {
 
 	uiOpts := ui.Options{
 		Store:         store,
+		Client:        client,
+		Context:       ctx,
 		DaemonLogPath: cfg.DaemonLogPath(),
 		DraptoLogPath: cfg.DraptoLogPath(),
 		Config:        cfg,
