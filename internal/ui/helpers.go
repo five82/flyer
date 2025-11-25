@@ -25,8 +25,7 @@ func (vm *viewModel) showHelp() {
 		{
 			title: "Logs & Details",
 			entries: []struct{ key, desc string }{
-				{"l", "Rotate log source (Daemon → Encoding → Item)"},
-				{"r", "Show encoding log view"},
+				{"l", "Rotate log source (Daemon ↔ Item)"},
 				{"i", "Open highlighted item's logs"},
 				{"p", "Toggle problems drawer"},
 			},

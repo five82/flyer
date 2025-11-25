@@ -60,7 +60,6 @@
 //	opts := ui.Options{
 //		Store:         stateStore,
 //		DaemonLogPath: "/var/log/spindle/daemon.log",
-//		DraptoLogPath: "/var/log/spindle/drapto.log",
 //		Config:        cfg,
 //		RefreshEvery:  time.Second,
 //	}
@@ -72,8 +71,7 @@
 //
 //   - q: Queue view
 //   - d: Detail view for selected item
-//   - l: Toggle log source (daemon/encoding/item)
-//   - r: Jump to encoding log
+//   - l: Toggle log source (daemon/item)
 //   - i: Show logs for selected item
 //   - Tab: Cycle through views
 //   - /: Start search (in log view)

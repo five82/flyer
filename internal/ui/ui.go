@@ -20,7 +20,6 @@ type Options struct {
 	Client        *spindle.Client
 	Context       context.Context
 	DaemonLogPath string
-	DraptoLogPath string
 	Config        config.Config
 	RefreshEvery  time.Duration
 }
@@ -35,7 +34,6 @@ type queueFilter int
 
 const (
 	logSourceDaemon logSource = iota
-	logSourceEncoding
 	logSourceItem
 )
 
@@ -135,9 +133,6 @@ func Run(ctx context.Context, opts Options) error {
 				return nil
 			case 'p':
 				model.toggleProblemsDrawer()
-				return nil
-			case 'r':
-				model.showEncodingLogsView()
 				return nil
 			case 'i':
 				model.showItemLogsView()

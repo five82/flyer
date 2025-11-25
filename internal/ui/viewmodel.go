@@ -320,7 +320,6 @@ func (vm *viewModel) setCommandBar(view string) {
 		}
 		commands = []cmd{
 			{"<l>", "Logs"},
-			{"<r>", "Encoding"},
 			{"<i>", "Item Log"},
 			{"<f>", "Filter: " + filterLabel},
 			{"<p>", "Problems"},

@@ -80,14 +80,6 @@ func (c Config) DaemonLogPath() string {
 	return filepath.Join(c.LogDir, "spindle.log")
 }
 
-// DraptoLogPath returns the path to the Drapto encoder log pointer.
-func (c Config) DraptoLogPath() string {
-	if strings.TrimSpace(c.LogDir) == "" {
-		return mustExpand(defaultLogDir + "/drapto.log")
-	}
-	return filepath.Join(c.LogDir, "drapto.log")
-}
-
 func resolvePath(path string) (string, error) {
 	if strings.TrimSpace(path) == "" {
 		return expandPath(defaultConfigPath)

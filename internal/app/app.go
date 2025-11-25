@@ -47,7 +47,6 @@ func Run(ctx context.Context, opts Options) error {
 		Client:        client,
 		Context:       ctx,
 		DaemonLogPath: cfg.DaemonLogPath(),
-		DraptoLogPath: cfg.DraptoLogPath(),
 		Config:        cfg,
 		RefreshEvery:  interval,
 	}

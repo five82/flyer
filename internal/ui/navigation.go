@@ -66,17 +66,6 @@ func (vm *viewModel) showDaemonLogsView() {
 	vm.app.SetFocus(vm.logView)
 }
 
-func (vm *viewModel) showEncodingLogsView() {
-	vm.currentView = "logs"
-	vm.mainContent.SwitchToPage("logs")
-	// Force encoding log mode
-	vm.logMode = logSourceEncoding
-	vm.updateLogTitle()
-	vm.resetLogBuffer()
-	vm.refreshLogs(true)
-	vm.app.SetFocus(vm.logView)
-}
-
 func (vm *viewModel) focusQueuePane() {
 	vm.app.SetFocus(vm.table)
 	vm.setCommandBar("queue")
@@ -95,12 +84,9 @@ func (vm *viewModel) toggleFocus() {
 	case vm.detail:
 		vm.showDaemonLogsView()
 	case vm.logView:
-		switch vm.logMode {
-		case logSourceDaemon:
-			vm.showEncodingLogsView()
-		case logSourceEncoding:
+		if vm.logMode == logSourceDaemon {
 			vm.showItemLogsView()
-		default:
+		} else {
 			vm.showQueueView()
 		}
 	default:
@@ -109,12 +95,9 @@ func (vm *viewModel) toggleFocus() {
 }
 
 func (vm *viewModel) toggleLogSource() {
-	switch vm.logMode {
-	case logSourceDaemon:
-		vm.logMode = logSourceEncoding
-	case logSourceEncoding:
+	if vm.logMode == logSourceDaemon {
 		vm.logMode = logSourceItem
-	default:
+	} else {
 		vm.logMode = logSourceDaemon
 	}
 	vm.updateLogTitle()
@@ -252,7 +235,6 @@ func (vm *viewModel) updateDetail(row int) {
 	// Logs
 	writeSection("Logs")
 	writeRow("Daemon", formatLogPath(vm.options.DaemonLogPath, "not configured"))
-	writeRow("Encoding", formatLogPath(vm.options.DraptoLogPath, "not configured"))
 	writeRow("Item", formatLogPath(item.BackgroundLogPath, "not available for this item"))
 
 	// Metadata
@@ -475,7 +457,7 @@ func (vm *viewModel) detailProgressBar(item spindle.QueueItem) string {
 }
 
 func (vm *viewModel) refreshLogs(force bool) {
-	if vm.logMode == logSourceEncoding || vm.client == nil {
+	if vm.logMode == logSourceDaemon || vm.client == nil {
 		vm.refreshFileLogs(force)
 		return
 	}
@@ -487,8 +469,6 @@ func (vm *viewModel) refreshFileLogs(force bool) {
 	switch vm.logMode {
 	case logSourceDaemon:
 		path = vm.options.DaemonLogPath
-	case logSourceEncoding:
-		path = vm.options.DraptoLogPath
 	case logSourceItem:
 		item := vm.selectedItem()
 		if item == nil || strings.TrimSpace(item.BackgroundLogPath) == "" {
@@ -500,8 +480,6 @@ func (vm *viewModel) refreshFileLogs(force bool) {
 	}
 	if path == "" {
 		switch vm.logMode {
-		case logSourceEncoding:
-			vm.logView.SetText("Encoding log path not configured")
 		case logSourceItem:
 			vm.logView.SetText("No background log for this item")
 		default:
@@ -614,8 +592,6 @@ func (vm *viewModel) updateLogTitle() {
 	switch vm.logMode {
 	case logSourceItem:
 		vm.logView.SetTitle(" [::b]Item Log[::-] ")
-	case logSourceEncoding:
-		vm.logView.SetTitle(" [::b]Encoding Log[::-] ")
 	default:
 		vm.logView.SetTitle(" [::b]Daemon Log[::-] ")
 	}
@@ -674,8 +650,6 @@ func (vm *viewModel) updateLogStatus(active bool, path string) {
 	switch vm.logMode {
 	case logSourceItem:
 		src = "Item"
-	case logSourceEncoding:
-		src = "Encoding"
 	default:
 		src = "Daemon"
 	}
