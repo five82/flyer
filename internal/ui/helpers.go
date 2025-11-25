@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -21,7 +20,7 @@ func (vm *viewModel) showHelp() {
 		{"/", "Start New Search"},
 		{"n", "Next Search Match"},
 		{"N", "Previous Search Match"},
-		{"Tab", "Cycle Focus (Queue→Daemon→Encoding→Item)"},
+		{"Tab", "Cycle Pane (Queue↔Detail↔Logs)"},
 		{"ESC", "Return to Queue View"},
 		{"e", "Exit"},
 		{"Ctrl+C", "Exit"},
@@ -34,7 +33,7 @@ func (vm *viewModel) showHelp() {
 		row := i % maxRows
 		col := i / maxRows
 
-		text := fmt.Sprintf("[dodgerblue]<%s>[gray] %s", cmd.key, cmd.desc)
+		text := fmt.Sprintf("[%s]<%s>[%s] %s", vm.theme.Text.AccentSoft, cmd.key, vm.theme.Text.Muted, cmd.desc)
 		for len(helpLines) <= row {
 			helpLines = append(helpLines, "")
 		}
@@ -47,10 +46,9 @@ func (vm *viewModel) showHelp() {
 
 	text := strings.Join(helpLines, "\n")
 	modal := tview.NewModal().SetText(text).AddButtons([]string{"Close"})
-	// k9s-style modal styling
-	modal.SetBorderColor(tcell.ColorDodgerBlue)
-	modal.SetBackgroundColor(tcell.ColorBlack)
-	modal.SetTextColor(tcell.ColorDodgerBlue)
+	modal.SetBorderColor(vm.theme.BorderFocusColor())
+	modal.SetBackgroundColor(vm.theme.SurfaceColor())
+	modal.SetTextColor(hexToColor(vm.theme.Text.AccentSoft))
 	modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 		vm.root.RemovePage("modal")
 		vm.returnToCurrentView()

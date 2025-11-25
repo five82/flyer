@@ -90,6 +90,8 @@ func (vm *viewModel) toggleFocus() {
 	focus := vm.app.GetFocus()
 	switch focus {
 	case vm.table:
+		vm.focusDetailPane()
+	case vm.detail:
 		vm.showDaemonLogsView()
 	case vm.logView:
 		switch vm.logMode {
@@ -149,24 +151,25 @@ func (vm *viewModel) returnToCurrentView() {
 
 func (vm *viewModel) updateDetail(row int) {
 	if row <= 0 || row-1 >= len(vm.displayItems) {
-		vm.detail.SetText("[#64748b]Select an item to view details[-]")
+		vm.detail.SetText(fmt.Sprintf("[%s]Select an item to view details[-]", vm.theme.Text.Faint))
 		return
 	}
 	item := vm.displayItems[row-1]
 	var b strings.Builder
+	text := vm.theme.Text
 
 	writeSection := func(title string) {
 		if b.Len() > 0 {
 			b.WriteString("\n")
 		}
-		fmt.Fprintf(&b, "[#cbd5e1::b]%s[-:-:-]\n", title) // Slate-300, bold
+		fmt.Fprintf(&b, "[%s::b]%s[-:-:-]\n", text.Secondary, title)
 	}
 
 	writeRow := func(label, value string) {
 		if strings.TrimSpace(value) == "" {
 			return
 		}
-		fmt.Fprintf(&b, "[#94a3b8]%s[-] %s\n", padLabel(label), value) // Slate-400
+		fmt.Fprintf(&b, "[%s]%s[-] %s\n", text.Muted, padLabel(label), value)
 	}
 
 	formatPath := func(path string) string {
@@ -178,33 +181,33 @@ func (vm *viewModel) updateDetail(row int) {
 		if base == "." || base == "/" || base == "" {
 			base = path
 		}
-		return fmt.Sprintf("[#38bdf8]%s[-]", tview.Escape(base)) // Sky-400
+		return fmt.Sprintf("[%s]%s[-]", text.Accent, tview.Escape(base))
 	}
 
 	formatLogPath := func(path, missing string) string {
 		path = strings.TrimSpace(path)
 		if path == "" {
-			return fmt.Sprintf("[#475569]%s[-]", missing) // Slate-600
+			return fmt.Sprintf("[%s]%s[-]", text.Faint, missing)
 		}
-		return fmt.Sprintf("[#38bdf8]%s[-]", tview.Escape(truncateMiddle(path, 72)))
+		return fmt.Sprintf("[%s]%s[-]", text.Accent, tview.Escape(truncateMiddle(path, 72)))
 	}
 
 	// Title and chips
 	writeSection("Summary")
 	title := composeTitle(item)
-	titleValue := fmt.Sprintf("[#f8fafc]%s[-]", tview.Escape(title)) // Slate-50
+	titleValue := fmt.Sprintf("[%s]%s[-]", text.Heading, tview.Escape(title))
 	if item.NeedsReview {
-		titleValue += " " + badge("REVIEW", "#fbbf24")
+		titleValue += " " + vm.badge("REVIEW", vm.theme.Badges.Review)
 	}
 	if strings.TrimSpace(item.ErrorMessage) != "" {
-		titleValue += " " + badge("ERROR", "#f87171")
+		titleValue += " " + vm.badge("ERROR", vm.theme.Badges.Error)
 	}
 	writeRow("Title", titleValue)
 
-	status := statusChip(item.Status)
-	lane := laneChip(determineLane(item.Status))
+	status := vm.statusChip(item.Status)
+	lane := vm.laneChip(determineLane(item.Status))
 	percent := clampPercent(item.Progress.Percent)
-	statusLine := fmt.Sprintf("%s  %s  [#64748b]ID %d[-]  [#94a3b8]%3.0f%%[-]", status, lane, item.ID, percent)
+	statusLine := fmt.Sprintf("%s  %s  [%s]ID %d[-]  [%s]%3.0f%%[-]", status, lane, text.Faint, item.ID, text.Muted, percent)
 	writeRow("Status", statusLine)
 
 	// Progress block
@@ -213,19 +216,19 @@ func (vm *viewModel) updateDetail(row int) {
 	if stage == "" {
 		stage = titleCase(item.Status)
 	}
-	writeRow("Stage", fmt.Sprintf("[#38bdf8]%s[-]", tview.Escape(stage)))
+	writeRow("Stage", fmt.Sprintf("[%s]%s[-]", text.Accent, tview.Escape(stage)))
 
-	progress := detailProgressBar(item)
+	progress := vm.detailProgressBar(item)
 	stageMsg := strings.TrimSpace(item.Progress.Message)
 	writeRow("Progress", progress)
 	if stageMsg != "" {
-		writeRow("Note", fmt.Sprintf("[#94a3b8]%s[-]", tview.Escape(stageMsg)))
+		writeRow("Note", fmt.Sprintf("[%s]%s[-]", text.Muted, tview.Escape(stageMsg)))
 	}
 
 	// Issues block
 	if strings.TrimSpace(item.ErrorMessage) != "" {
 		writeSection("Issues")
-		writeRow("Error", fmt.Sprintf("[#f87171]%s[-]", tview.Escape(item.ErrorMessage)))
+		writeRow("Error", fmt.Sprintf("[%s]%s[-]", text.Danger, tview.Escape(item.ErrorMessage)))
 	}
 	if item.NeedsReview {
 		if strings.TrimSpace(item.ErrorMessage) == "" {
@@ -235,7 +238,7 @@ func (vm *viewModel) updateDetail(row int) {
 		if reason == "" {
 			reason = "Needs operator review"
 		}
-		writeRow("Review", fmt.Sprintf("[#fbbf24]%s[-]", tview.Escape(reason)))
+		writeRow("Review", fmt.Sprintf("[%s]%s[-]", text.Warning, tview.Escape(reason)))
 	}
 
 	// Artifacts
@@ -254,14 +257,14 @@ func (vm *viewModel) updateDetail(row int) {
 	// Metadata
 	if metaRows := summarizeMetadata(item.Metadata); len(metaRows) > 0 {
 		writeSection("Metadata")
-		b.WriteString(formatMetadata(metaRows))
+		b.WriteString(vm.formatMetadata(metaRows))
 	}
 
 	// Mini timeline
 	created := item.ParsedCreatedAt()
 	if !created.IsZero() {
 		writeSection("Timeline")
-		fmt.Fprintf(&b, "  [#94a3b8]Created[-] [#38bdf8]%s[-] [#64748b](%s ago)[-]\n", formatLocalTimestamp(created), humanizeDuration(time.Since(created)))
+		fmt.Fprintf(&b, "  [%s]Created[-] [%s]%s[-] [%s](%s ago)[-]\n", text.Muted, text.Accent, formatLocalTimestamp(created), text.Faint, humanizeDuration(time.Since(created)))
 	}
 
 	// Rip spec summary
@@ -271,12 +274,12 @@ func (vm *viewModel) updateDetail(row int) {
 			writeSection("Rip Spec")
 		}
 		if summary.ContentKey != "" {
-			fmt.Fprintf(&b, "  [#94a3b8]Key[-]   [#38bdf8]%s[-]\n", summary.ContentKey)
+			fmt.Fprintf(&b, "  [%s]Key[-]   [%s]%s[-]\n", text.Muted, text.Accent, summary.ContentKey)
 		}
 		count := len(summary.Titles)
 		for i, title := range summary.Titles {
 			if i >= maxTitles {
-				fmt.Fprintf(&b, "  [#94a3b8]…[-] [#64748b]+%d more titles[-]\n", count-maxTitles)
+				fmt.Fprintf(&b, "  [%s]…[-] [%s]+%d more titles[-]\n", text.Muted, text.Faint, count-maxTitles)
 				break
 			}
 			name := strings.TrimSpace(title.Name)
@@ -289,9 +292,9 @@ func (vm *viewModel) updateDetail(row int) {
 			}
 			minutes := title.Duration / 60
 			seconds := title.Duration % 60
-			fmt.Fprintf(&b, "  [#38bdf8]- %s[-] [#818cf8]%02d:%02d[-]", tview.Escape(name), minutes, seconds)
+			fmt.Fprintf(&b, "  [%s]- %s[-] [%s]%02d:%02d[-]", text.Accent, tview.Escape(name), text.AccentSoft, minutes, seconds)
 			if fingerprint != "" {
-				fmt.Fprintf(&b, " [#94a3b8]%s[-]", fingerprint)
+				fmt.Fprintf(&b, " [%s]%s[-]", text.Muted, fingerprint)
 			}
 			b.WriteString("\n")
 		}
@@ -380,7 +383,7 @@ func formatLocalTimestamp(t time.Time) string {
 	return t.Local().Format("Mon Jan 2 2006 15:04")
 }
 
-func formatMetadata(rows []metadataRow) string {
+func (vm *viewModel) formatMetadata(rows []metadataRow) string {
 	if len(rows) == 0 {
 		return ""
 	}
@@ -410,7 +413,7 @@ func formatMetadata(rows []metadataRow) string {
 	var b strings.Builder
 	for i := range ordered {
 		key := padRight(truncate(pretties[i], maxKey), maxKey)
-		fmt.Fprintf(&b, "  [#94a3b8]%s[-] [#38bdf8]%s[-]\n", key, values[i])
+		fmt.Fprintf(&b, "  [%s]%s[-] [%s]%s[-]\n", vm.theme.Text.Muted, key, vm.theme.Text.Accent, values[i])
 	}
 	return b.String()
 }
@@ -456,7 +459,7 @@ func reorderMetadata(rows []metadataRow) []metadataRow {
 	return append(titleRows, others...)
 }
 
-func detailProgressBar(item spindle.QueueItem) string {
+func (vm *viewModel) detailProgressBar(item spindle.QueueItem) string {
 	percent := clampPercent(item.Progress.Percent)
 	const barWidth = 24
 	filled := int(percent/100*barWidth + 0.5)
@@ -467,7 +470,7 @@ func detailProgressBar(item spindle.QueueItem) string {
 		filled = barWidth
 	}
 	bar := "[" + strings.Repeat("=", filled) + strings.Repeat(".", barWidth-filled) + "]"
-	return fmt.Sprintf("[%s]%s[-] %3.0f%%", colorForStatus(item.Status), bar, percent)
+	return fmt.Sprintf("[%s]%s[-] %3.0f%%", vm.colorForStatus(item.Status), bar, percent)
 }
 
 func (vm *viewModel) refreshLogs(force bool) {
@@ -565,9 +568,15 @@ func (vm *viewModel) updateLogStatus(active bool, path string) {
 		src = "Daemon"
 	}
 	lineCount := len(vm.rawLogLines)
-	status := fmt.Sprintf("[gray]%s log • %d lines • auto-tail %s[-]", src, lineCount, ternary(active, "on", "off"))
+	status := fmt.Sprintf("[%s]%s log[-] [%s]%d lines[-] [%s]auto-tail %s[-]",
+		vm.theme.Text.Faint,
+		src,
+		vm.theme.Text.Muted,
+		lineCount,
+		vm.theme.Text.Faint,
+		ternary(active, "on", "off"))
 	if path != "" {
-		status += fmt.Sprintf(" • %s", truncate(path, 40))
+		status += fmt.Sprintf(" • [%s]%s[-]", vm.theme.Text.AccentSoft, truncate(path, 40))
 	}
 	vm.searchStatus.SetText(status)
 }

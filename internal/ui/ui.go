@@ -179,16 +179,24 @@ func (vm *viewModel) update(snapshot state.Snapshot) {
 }
 
 func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
+	text := vm.theme.Text
+	surface := vm.theme.Base.Surface
 	if !snapshot.HasStatus {
 		if snapshot.LastError != nil {
 			last := "soon"
 			if !snapshot.LastUpdated.IsZero() {
 				last = snapshot.LastUpdated.Format("15:04:05")
 			}
-			vm.statusView.SetText(fmt.Sprintf("[#f87171::b] SPINDLE UNAVAILABLE [-]  [#fbbf24::b]Retrying...[-] [#94a3b8]%s[-]\n[#64748b]Check %s or daemon logs", last, tview.Escape(vm.options.Config.DaemonLogPath())))
+			vm.statusView.SetText(fmt.Sprintf("[%s::b] SPINDLE UNAVAILABLE [-]  [%s::b]Retrying...[-] [%s]%s[-]\n[%s]Check %s or daemon logs",
+				text.Danger,
+				text.Warning,
+				text.Muted,
+				last,
+				text.Faint,
+				tview.Escape(vm.options.Config.DaemonLogPath())))
 			return
 		}
-		vm.statusView.SetText("[#fbbf24::b] Waiting for Spindle status...[-]")
+		vm.statusView.SetText(fmt.Sprintf("[%s::b] Waiting for Spindle status...[-]", text.Warning))
 		return
 	}
 	stats := snapshot.Status.Workflow.QueueStats
@@ -198,48 +206,42 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 	review := stats["review"]
 	completed := stats["completed"]
 
-	// Daemon Status Pill
-	daemonStatus := "[#f87171::b] OFF [-]" // Red
+	daemonStatus := fmt.Sprintf("[%s:%s:b] OFF [-]", text.Danger, surface)
 	if snapshot.Status.Running {
-		daemonStatus = "[#4ade80:black:b] ON [-]" // Green
+		daemonStatus = fmt.Sprintf("[%s:%s:b] ON [-]", text.Success, surface)
 	}
 
-	// Stats Pills
-	// Using Slate-700 background (#334155) for pills to stand out against black
-
 	makePill := func(label string, value int, color string) string {
-		valColor := "#e2e8f0" // Slate-200
+		valColor := text.Secondary
 		if value > 0 && color != "" {
 			valColor = color
 		}
-		return fmt.Sprintf("[#94a3b8]%s[-] [%s]%d[-]", label, valColor, value)
+		return fmt.Sprintf("[%s]%s[-] [%s]%d[-]", text.Faint, label, valColor, value)
 	}
 
 	parts := []string{
 		fmt.Sprintf("DAEMON %s", daemonStatus),
-		fmt.Sprintf("[#94a3b8]PID[-] [#e2e8f0]%d[-]", snapshot.Status.PID),
-		makePill("PEND", pending, "#e2e8f0"),
-		makePill("PROC", processing, "#38bdf8"), // Sky-400
-		makePill("FAIL", failed, "#f87171"),     // Red-400
-		makePill("REV", review, "#fbbf24"),      // Amber-400
-		makePill("DONE", completed, "#4ade80"),  // Green-400
+		fmt.Sprintf("[%s]PID[-] [%s]%d[-]", text.Faint, text.Primary, snapshot.Status.PID),
+		makePill("PEND", pending, text.Primary),
+		makePill("PROC", processing, vm.colorForStatus("encoding")),
+		makePill("FAIL", failed, text.Danger),
+		makePill("REV", review, text.Warning),
+		makePill("DONE", completed, text.Success),
 	}
 
 	statusText := strings.Join(parts, "   ")
 
-	// Right side: Timestamps
-	timeInfo := fmt.Sprintf("[#64748b]UPDATED[-] [#94a3b8]%s[-]", snapshot.LastUpdated.Format("15:04:05"))
+	timeInfo := fmt.Sprintf("[%s]UPDATED[-] [%s]%s[-]", text.Faint, text.Secondary, snapshot.LastUpdated.Format("15:04:05"))
 	if !vm.lastRefresh.IsZero() {
 		ago := time.Since(vm.lastRefresh)
 		if ago < 0 {
 			ago = 0
 		}
-		timeInfo += fmt.Sprintf("  [#64748b]LAG[-] [#94a3b8]%v[-]", ago.Round(time.Millisecond*100))
+		timeInfo += fmt.Sprintf("  [%s]LAG[-] [%s]%v[-]", text.Faint, text.Secondary, ago.Round(100*time.Millisecond))
 	}
 
 	statusText += "\n" + timeInfo
 
-	// Stage / dependency health summary
 	var unhealthy []string
 	for _, sh := range snapshot.Status.Workflow.StageHealth {
 		if !sh.Ready {
@@ -256,10 +258,10 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 		}
 	}
 	if len(unhealthy) > 0 {
-		statusText += "   [#f87171::b]HEALTH[-] [#f87171]" + truncate(strings.Join(unhealthy, " | "), 90) + "[-]"
+		statusText += "   " + fmt.Sprintf("[%s::b]HEALTH[-] [%s]%s[-]", text.Danger, text.Danger, truncate(strings.Join(unhealthy, " | "), 90))
 	}
 	if snapshot.LastError != nil {
-		statusText += fmt.Sprintf("   [#f87171::b]ERROR[-] [#f87171]%v[-]", snapshot.LastError)
+		statusText += fmt.Sprintf("   [%s::b]ERROR[-] [%s]%v[-]", text.Danger, text.Danger, snapshot.LastError)
 	}
 	vm.statusView.SetText(statusText)
 }

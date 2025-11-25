@@ -35,6 +35,7 @@ type viewModel struct {
 	problemBar     *tview.TextView
 	problemDrawer  *tview.Flex
 	mainLayout     *tview.Flex
+	theme          Theme
 
 	// Search state
 	searchInput        *tview.InputField
@@ -64,6 +65,8 @@ type viewModel struct {
 }
 
 func newViewModel(app *tview.Application, opts Options) *viewModel {
+	theme := defaultTheme()
+
 	// Override focus borders to use single lines instead of double lines
 	tview.Borders.HorizontalFocus = tview.Borders.Horizontal
 	tview.Borders.VerticalFocus = tview.Borders.Vertical
@@ -72,75 +75,70 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	tview.Borders.BottomLeftFocus = tview.Borders.BottomLeft
 	tview.Borders.BottomRightFocus = tview.Borders.BottomRight
 
-	// Set default focus colors to be less intrusive
-	tview.Styles.PrimitiveBackgroundColor = tcell.ColorBlack
-	tview.Styles.ContrastBackgroundColor = tcell.ColorBlack
-	tview.Styles.MoreContrastBackgroundColor = tcell.ColorBlack
-	tview.Styles.PrimaryTextColor = tcell.ColorDefault // Allow dynamic colors
+	tview.Styles.PrimitiveBackgroundColor = theme.BackgroundColor()
+	tview.Styles.ContrastBackgroundColor = theme.SurfaceColor()
+	tview.Styles.MoreContrastBackgroundColor = theme.SurfaceAltColor()
+	tview.Styles.PrimaryTextColor = tcell.ColorDefault
 
-	// Header components (compact toolbar)
 	statusView := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	statusView.SetTextAlign(tview.AlignLeft)
-	statusView.SetBackgroundColor(tcell.ColorBlack)
-	statusView.SetTextColor(tcell.ColorWhite) // Default to white
+	statusView.SetBackgroundColor(theme.SurfaceColor())
+	statusView.SetTextColor(hexToColor(theme.Text.Primary))
 
-	// Commands section as a single-line toolbar
 	cmdBar := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
-	cmdBar.SetBackgroundColor(tcell.ColorBlack)
+	cmdBar.SetBackgroundColor(theme.SurfaceColor())
 	cmdBar.SetTextAlign(tview.AlignLeft)
+	cmdBar.SetTextColor(hexToColor(theme.Text.Secondary))
 
 	logoView := tview.NewTextView()
 	logoView.SetTextAlign(tview.AlignLeft)
 	logoView.SetDynamicColors(true)
 	logoView.SetRegions(true)
-	logoView.SetBackgroundColor(tcell.ColorBlack)
-	logoView.SetText(createLogo())
+	logoView.SetBackgroundColor(theme.SurfaceColor())
+	logoView.SetText(createLogo(theme))
 
-	// Main content components (k9s-style)
 	table := tview.NewTable()
 	table.SetBorder(true).SetTitle(" [::b]Queue[::-] ")
 	table.SetSelectable(true, false)
 	table.SetFixed(1, 0)
-	table.SetBackgroundColor(tcell.ColorBlack)
-	// k9s-style border color
-	table.SetBorderColor(tcell.ColorSlateGray)
+	table.SetBackgroundColor(theme.SurfaceColor())
+	table.SetBorderColor(theme.TableBorderColor())
+	table.SetSelectedStyle(tcell.StyleDefault.Background(theme.TableSelectionBackground()).Foreground(theme.TableSelectionTextColor()))
 
 	detail := tview.NewTextView().SetDynamicColors(true).SetWrap(true)
 	detail.SetBorder(true).SetTitle(" [::b]Details[::-] ")
-	detail.SetBackgroundColor(tcell.ColorBlack)
-	detail.SetBorderColor(tcell.ColorSlateGray)
+	detail.SetBackgroundColor(theme.SurfaceAltColor())
+	detail.SetBorderColor(theme.TableBorderColor())
 
 	logView := tview.NewTextView().SetDynamicColors(true)
 	logView.SetBorder(true).SetTitle(" [::b]Daemon Log[::-] ")
-	logView.SetBackgroundColor(tcell.ColorBlack)
-	logView.SetBorderColor(tcell.ColorSlateGray)
+	logView.SetBackgroundColor(theme.SurfaceAltColor())
+	logView.SetBorderColor(theme.TableBorderColor())
 	logView.ScrollToEnd()
 
-	// Search status bar (vim-style at bottom)
 	searchStatus := tview.NewTextView().SetDynamicColors(true)
-	searchStatus.SetBackgroundColor(tcell.ColorBlack)
-	searchStatus.SetTextColor(tcell.ColorWhite)
+	searchStatus.SetBackgroundColor(theme.SurfaceColor())
+	searchStatus.SetTextColor(hexToColor(theme.Text.Secondary))
 
-	// Problems drawer components
 	problemsTable := tview.NewTable()
 	problemsTable.SetBorder(true)
 	problemsTable.SetTitle(" [::b]Problems[::-] ")
-	problemsTable.SetBorderColor(tcell.ColorIndianRed)
-	problemsTable.SetBackgroundColor(tcell.ColorBlack)
+	problemsTable.SetBorderColor(theme.ProblemBorderColor())
+	problemsTable.SetBackgroundColor(theme.SurfaceColor())
 	problemsTable.SetSelectable(false, false)
 	problemsTable.SetFixed(1, 0)
 
 	problemSummary := tview.NewTextView().SetDynamicColors(true)
-	problemSummary.SetBackgroundColor(tcell.ColorBlack)
-	problemSummary.SetTextColor(tcell.ColorWhite)
+	problemSummary.SetBackgroundColor(theme.SurfaceColor())
+	problemSummary.SetTextColor(hexToColor(theme.Text.Primary))
 	problemSummary.SetWrap(false)
 
 	problemBar := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
-	problemBar.SetBackgroundColor(tcell.ColorBlack)
-	problemBar.SetTextColor(tcell.ColorWhite)
+	problemBar.SetBackgroundColor(hexToColor(theme.Problems.BarBackground))
+	problemBar.SetTextColor(hexToColor(theme.Problems.BarText))
 
 	problemDrawer := tview.NewFlex().SetDirection(tview.FlexRow)
-	problemDrawer.SetBackgroundColor(tcell.ColorBlack)
+	problemDrawer.SetBackgroundColor(theme.SurfaceColor())
 	problemDrawer.
 		AddItem(problemsTable, 0, 1, false).
 		AddItem(problemSummary, 1, 0, false)
@@ -161,6 +159,7 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		problemDrawer:    problemDrawer,
 		currentView:      "queue",
 		problemShortcuts: map[rune]int64{},
+		theme:            theme,
 	}
 
 	vm.table.SetSelectedFunc(func(row, column int) {
@@ -170,27 +169,26 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		vm.updateDetail(row)
 	})
 
-	// k9s-style focus handling to highlight active component
 	vm.table.SetFocusFunc(func() {
-		vm.table.SetBorderColor(tcell.ColorSkyblue)
-		vm.detail.SetBorderColor(tcell.ColorSlateGray)
-		vm.logView.SetBorderColor(tcell.ColorSlateGray)
+		vm.table.SetBorderColor(vm.theme.TableBorderFocusColor())
+		vm.detail.SetBorderColor(vm.theme.TableBorderColor())
+		vm.logView.SetBorderColor(vm.theme.TableBorderColor())
 	})
 
 	vm.detail.SetFocusFunc(func() {
-		vm.table.SetBorderColor(tcell.ColorSlateGray)
-		vm.detail.SetBorderColor(tcell.ColorSkyblue)
-		vm.logView.SetBorderColor(tcell.ColorSlateGray)
+		vm.table.SetBorderColor(vm.theme.TableBorderColor())
+		vm.detail.SetBorderColor(vm.theme.TableBorderFocusColor())
+		vm.logView.SetBorderColor(vm.theme.TableBorderColor())
 	})
 
 	vm.logView.SetFocusFunc(func() {
-		vm.table.SetBorderColor(tcell.ColorSlateGray)
-		vm.detail.SetBorderColor(tcell.ColorSlateGray)
-		vm.logView.SetBorderColor(tcell.ColorSkyblue)
+		vm.table.SetBorderColor(vm.theme.TableBorderColor())
+		vm.detail.SetBorderColor(vm.theme.TableBorderColor())
+		vm.logView.SetBorderColor(vm.theme.TableBorderFocusColor())
 	})
 
 	vm.root = tview.NewPages()
-	vm.root.SetBackgroundColor(tcell.ColorBlack)
+	vm.root.SetBackgroundColor(theme.BackgroundColor())
 	vm.root.AddPage("main", vm.buildMainLayout(), true, true)
 
 	app.SetRoot(vm.root, true)
@@ -203,21 +201,21 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 func (vm *viewModel) buildMainLayout() tview.Primitive {
 	// Header: dense two-line bar (stats + commands) with compact logo
 	headerTop := tview.NewFlex().SetDirection(tview.FlexColumn)
-	headerTop.SetBackgroundColor(tcell.ColorBlack)
+	headerTop.SetBackgroundColor(vm.theme.SurfaceColor())
 	headerTop.
 		AddItem(vm.logoView, 8, 0, false).
 		AddItem(nil, 1, 0, false).
 		AddItem(vm.statusView, 0, 1, false)
 
 	vm.header = tview.NewFlex().SetDirection(tview.FlexRow)
-	vm.header.SetBackgroundColor(tcell.ColorBlack)
+	vm.header.SetBackgroundColor(vm.theme.SurfaceColor())
 	vm.header.
 		AddItem(headerTop, 0, 1, false).
 		AddItem(vm.cmdBar, 1, 0, false)
 
 	// Create log view container with search status
 	logContainer := tview.NewFlex().SetDirection(tview.FlexRow)
-	logContainer.SetBackgroundColor(tcell.ColorBlack)
+	logContainer.SetBackgroundColor(vm.theme.SurfaceColor())
 	logContainer.
 		AddItem(vm.logView, 0, 1, true).      // Main log content
 		AddItem(vm.searchStatus, 1, 0, false) // Search status bar at bottom
@@ -225,19 +223,19 @@ func (vm *viewModel) buildMainLayout() tview.Primitive {
 	// Create main content pages for different views
 	// Dual-pane queue view: table + detail side-by-side
 	queuePane := tview.NewFlex().SetDirection(tview.FlexColumn)
-	queuePane.SetBackgroundColor(tcell.ColorBlack)
+	queuePane.SetBackgroundColor(vm.theme.SurfaceColor())
 	queuePane.
 		AddItem(vm.table, 0, 40, true).
 		AddItem(vm.detail, 0, 60, false)
 
 	vm.mainContent = tview.NewPages()
-	vm.mainContent.SetBackgroundColor(tcell.ColorBlack)
+	vm.mainContent.SetBackgroundColor(vm.theme.SurfaceColor())
 	vm.mainContent.AddPage("queue", queuePane, true, true)
 	vm.mainContent.AddPage("logs", logContainer, true, false)
 
 	// Main layout: header + content + optional problems drawer
 	vm.mainLayout = tview.NewFlex().SetDirection(tview.FlexRow)
-	vm.mainLayout.SetBackgroundColor(tcell.ColorBlack)
+	vm.mainLayout.SetBackgroundColor(vm.theme.BackgroundColor())
 	vm.mainLayout.
 		AddItem(vm.header, 3, 0, false). // keep header to ~2-3 rows max
 		AddItem(vm.problemBar, 1, 0, false).
@@ -255,7 +253,10 @@ func (vm *viewModel) ensureSelection() {
 	rows := vm.table.GetRowCount() - 1 // excludes header
 	if rows == 0 {
 		vm.table.Select(0, 0)
-		vm.detail.SetText("[cadetblue]Queue is empty.[-]\nAdd discs to Spindle or check logs at:\n[dodgerblue]" + tview.Escape(vm.options.Config.DaemonLogPath()) + "[-]")
+		vm.detail.SetText(fmt.Sprintf("[%s]Queue is empty.[-]\nAdd discs to Spindle or check logs at:\n[%s]%s[-]",
+			vm.theme.Text.Muted,
+			vm.theme.Text.Accent,
+			tview.Escape(vm.options.Config.DaemonLogPath())))
 		return
 	}
 	row, _ := vm.table.GetSelection()
@@ -274,7 +275,7 @@ func (vm *viewModel) setCommandBar(view string) {
 	case "logs":
 		commands = []cmd{
 			{"<l>", "Cycle Logs"},
-			{"<Tab>", "Switch"},
+			{"<Tab>", "Switch Pane"},
 			{"</>", "Search"},
 			{"<n>/<N>", "Next/Prev"},
 			{"<p>", "Problems"},
@@ -287,7 +288,7 @@ func (vm *viewModel) setCommandBar(view string) {
 			{"<q>", "Queue"},
 			{"<l>", "Logs"},
 			{"<i>", "Item Log"},
-			{"<Tab>", "Switch"},
+			{"<Tab>", "Switch Pane"},
 			{"<f>", "Filter"},
 			{"<p>", "Problems"},
 			{"<h>", "Help"},
@@ -309,7 +310,7 @@ func (vm *viewModel) setCommandBar(view string) {
 			{"<i>", "Item Log"},
 			{"<f>", "Filter: " + filterLabel},
 			{"<p>", "Problems"},
-			{"<Tab>", "Switch"},
+			{"<Tab>", "Switch Pane"},
 			{"<h>", "Help"},
 			{"<e>", "Exit"},
 		}
@@ -317,7 +318,7 @@ func (vm *viewModel) setCommandBar(view string) {
 
 	segments := make([]string, 0, len(commands))
 	for _, cmd := range commands {
-		segments = append(segments, fmt.Sprintf("[#38bdf8]%s[-] [#64748b]%s[-]", cmd.key, cmd.desc)) // Sky-400, Slate-500
+		segments = append(segments, fmt.Sprintf("[%s]%s[-] [%s]%s[-]", vm.theme.Text.AccentSoft, cmd.key, vm.theme.Text.Faint, cmd.desc))
 	}
 	vm.cmdBar.SetText(strings.Join(segments, "  •  "))
 }

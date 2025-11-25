@@ -5,7 +5,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/five82/flyer/internal/spindle"
@@ -93,7 +92,8 @@ func (vm *viewModel) updateProblems(queue []spindle.QueueItem) {
 func (vm *viewModel) renderProblemTable(entries []problemEntry) {
 	vm.problemTable.Clear()
 
-	headerColor := tcell.ColorSlateGray
+	headerColor := vm.theme.ProblemHeaderBackground()
+	headerText := vm.theme.ProblemHeaderTextColor()
 	headers := []struct {
 		title string
 		align int
@@ -105,10 +105,11 @@ func (vm *viewModel) renderProblemTable(entries []problemEntry) {
 	}
 
 	for col, hdr := range headers {
-		cell := tview.NewTableCell(fmt.Sprintf("[#f8fafc::b]%s[-]", hdr.title)).
+		cell := tview.NewTableCell(fmt.Sprintf("[%s::b]%s[-]", vm.theme.Text.Heading, hdr.title)).
 			SetAlign(hdr.align).
 			SetSelectable(false).
-			SetBackgroundColor(headerColor)
+			SetBackgroundColor(headerColor).
+			SetTextColor(headerText)
 		vm.problemTable.SetCell(0, col, cell)
 	}
 
@@ -123,34 +124,34 @@ func (vm *viewModel) renderProblemTable(entries []problemEntry) {
 
 		shortcut := ""
 		if entry.Shortcut != 0 {
-			shortcut = fmt.Sprintf("[#fbbf24::b]%c[-]", entry.Shortcut)
+			shortcut = fmt.Sprintf("[%s::b]%c[-]", vm.theme.Problems.Shortcut, entry.Shortcut)
 		}
 
 		status := strings.ToUpper(entry.Item.Status)
-		statusCell := fmt.Sprintf("[%s]%s[-]", colorForStatus(entry.Item.Status), tview.Escape(status))
+		statusCell := fmt.Sprintf("[%s]%s[-]", vm.colorForStatus(entry.Item.Status), tview.Escape(status))
 
 		reason := truncate(entry.Reason, 60)
-		reasonColor := "#fbbf24"
+		reasonColor := vm.theme.Problems.Warning
 		if entry.Kind == problemFailed {
-			reasonColor = "#f87171"
+			reasonColor = vm.theme.Problems.Danger
 		}
 
-		vm.problemTable.SetCell(row, 0, makeCell(shortcut, tview.AlignCenter, 1))
-		vm.problemTable.SetCell(row, 1, makeCell(fmt.Sprintf("[#94a3b8]%d[-]", entry.Item.ID), tview.AlignRight, 1))
-		vm.problemTable.SetCell(row, 2, makeCell(statusCell, tview.AlignLeft, 1))
-		vm.problemTable.SetCell(row, 3, makeCell(fmt.Sprintf("[%s]%s[-]", reasonColor, tview.Escape(reason)), tview.AlignLeft, 4))
+		vm.problemTable.SetCell(row, 0, vm.makeCell(shortcut, tview.AlignCenter, 1))
+		vm.problemTable.SetCell(row, 1, vm.makeCell(fmt.Sprintf("[%s]%d[-]", vm.theme.Text.Muted, entry.Item.ID), tview.AlignRight, 1))
+		vm.problemTable.SetCell(row, 2, vm.makeCell(statusCell, tview.AlignLeft, 1))
+		vm.problemTable.SetCell(row, 3, vm.makeCell(fmt.Sprintf("[%s]%s[-]", reasonColor, tview.Escape(reason)), tview.AlignLeft, 4))
 	}
 
-	titleColor := "::b" // default bold
+	titleColor := fmt.Sprintf("%s::b", vm.theme.Text.Secondary)
 	if len(entries) > 0 && entries[0].Kind == problemFailed {
-		titleColor = "#f87171::b"
+		titleColor = fmt.Sprintf("%s::b", vm.theme.Text.Danger)
 	}
 	vm.problemTable.SetTitle(fmt.Sprintf(" [%s]Problems (%d)[::-] ", titleColor, len(entries)))
 }
 
 func (vm *viewModel) renderProblemSummary(entries []problemEntry) {
 	if len(entries) == 0 {
-		vm.problemSummary.SetText("[gray]No failed or review items.")
+		vm.problemSummary.SetText(fmt.Sprintf("[%s]No failed or review items.", vm.theme.Text.Muted))
 		return
 	}
 
@@ -167,10 +168,10 @@ func (vm *viewModel) renderProblemSummary(entries []problemEntry) {
 
 	parts := []string{}
 	if countFailed > 0 {
-		parts = append(parts, fmt.Sprintf("[red]%d failed[-]", countFailed))
+		parts = append(parts, fmt.Sprintf("[%s]%d failed[-]", vm.theme.Text.Danger, countFailed))
 	}
 	if countReview > 0 {
-		parts = append(parts, fmt.Sprintf("[darkorange]%d review[-]", countReview))
+		parts = append(parts, fmt.Sprintf("[%s]%d review[-]", vm.theme.Text.Warning, countReview))
 	}
 
 	statusLine := strings.Join(parts, "  |  ")
@@ -178,7 +179,14 @@ func (vm *viewModel) renderProblemSummary(entries []problemEntry) {
 		statusLine += "  •  "
 	}
 
-	vm.problemSummary.SetText(fmt.Sprintf("%s[gray]Reasons:[-] %s    [slategray](press [dodgerblue]p[-] to toggle, [dodgerblue]1-9[-] to jump)", statusLine, reasons))
+	vm.problemSummary.SetText(fmt.Sprintf("%s[%s]Reasons:[-] [%s]%s[-]    [%s](press [%s]p[-] to toggle, [%s]1-9[-] to jump)",
+		statusLine,
+		vm.theme.Text.Muted,
+		vm.theme.Text.Secondary,
+		reasons,
+		vm.theme.Text.Faint,
+		vm.theme.Text.AccentSoft,
+		vm.theme.Text.AccentSoft))
 }
 
 // renderProblemBar surfaces a one-line ribbon when problems exist so it isn't hidden.
@@ -205,10 +213,10 @@ func (vm *viewModel) renderProblemBar(entries []problemEntry) {
 
 	parts := []string{}
 	if countFailed > 0 {
-		parts = append(parts, fmt.Sprintf("[red::b]%d failed[-]", countFailed))
+		parts = append(parts, fmt.Sprintf("[%s::b]%d failed[-]", vm.theme.Text.Danger, countFailed))
 	}
 	if countReview > 0 {
-		parts = append(parts, fmt.Sprintf("[darkorange::b]%d review[-]", countReview))
+		parts = append(parts, fmt.Sprintf("[%s::b]%d review[-]", vm.theme.Text.Warning, countReview))
 	}
 
 	statusLine := strings.Join(parts, "  |  ")
@@ -216,8 +224,8 @@ func (vm *viewModel) renderProblemBar(entries []problemEntry) {
 		statusLine += "  •  "
 	}
 
-	hint := "[slategray](p to expand, 1-9 to jump)[-]"
-	vm.problemBar.SetText(fmt.Sprintf("%s[gray]Reasons:[-] %s    %s", statusLine, reasons, hint))
+	hint := fmt.Sprintf("[%s](p to expand, 1-9 to jump)[-]", vm.theme.Text.Faint)
+	vm.problemBar.SetText(fmt.Sprintf("%s[%s]Reasons:[-] [%s]%s[-]    %s", statusLine, vm.theme.Text.Muted, vm.theme.Text.Secondary, reasons, hint))
 	vm.mainLayout.ResizeItem(vm.problemBar, 1, 0)
 }
 
@@ -355,18 +363,18 @@ func prettifyReason(reason string) string {
 
 // showNoProblemsNotice surfaces feedback when the drawer is empty.
 func (vm *viewModel) showNoProblemsNotice() {
-	vm.problemSummary.SetText("[gray]No failed or review items.")
+	vm.problemSummary.SetText(fmt.Sprintf("[%s]No failed or review items.", vm.theme.Text.Muted))
 	vm.problemBar.SetText("")
 	vm.mainLayout.ResizeItem(vm.problemDrawer, 0, 0)
 	vm.mainLayout.ResizeItem(vm.problemBar, 0, 0)
 	vm.problemsOpen = false
 
 	modal := tview.NewModal().
-		SetText("[gray]No failed or review items to show.").
+		SetText(fmt.Sprintf("[%s]No failed or review items to show.", vm.theme.Text.Muted)).
 		AddButtons([]string{"Close"})
-	modal.SetBackgroundColor(tcell.ColorBlack)
-	modal.SetBorderColor(tcell.ColorDodgerBlue)
-	modal.SetTextColor(tcell.ColorDodgerBlue)
+	modal.SetBackgroundColor(vm.theme.SurfaceColor())
+	modal.SetBorderColor(vm.theme.BorderFocusColor())
+	modal.SetTextColor(hexToColor(vm.theme.Text.AccentSoft))
 	modal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 		vm.root.RemovePage("problems-empty")
 		vm.returnToCurrentView()

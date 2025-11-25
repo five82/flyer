@@ -12,26 +12,6 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
-var statusPalette = map[string]string{
-	"pending":     "#94a3b8", // Slate-400
-	"identifying": "#38bdf8", // Sky-400
-	"identified":  "#38bdf8", // Sky-400
-	"ripping":     "#818cf8", // Indigo-400
-	"ripped":      "#a78bfa", // Violet-400
-	"encoding":    "#f472b6", // Pink-400
-	"encoded":     "#34d399", // Emerald-400
-	"organizing":  "#2dd4bf", // Teal-400
-	"completed":   "#4ade80", // Green-400
-	"failed":      "#f87171", // Red-400
-	"review":      "#fbbf24", // Amber-400
-}
-
-var lanePalette = map[string]string{
-	"foreground": "#38bdf8", // Sky-400
-	"background": "#64748b", // Slate-500
-	"attention":  "#fbbf24", // Amber-400
-}
-
 var statusPriority = map[string]int{
 	"failed":      0,
 	"review":      1,
@@ -60,13 +40,15 @@ func (vm *viewModel) renderTable() {
 		{"Flags", tview.AlignLeft, 1},
 	}
 
-	headerBackground := tcell.ColorSlateGray
+	headerBackground := vm.theme.TableHeaderBackground()
+	headerText := vm.theme.TableHeaderTextColor()
 	for col, column := range columns {
-		header := tview.NewTableCell(fmt.Sprintf("[#f8fafc::b]%s[-]", column.label)).
+		header := tview.NewTableCell(fmt.Sprintf("[%s::b]%s[-]", vm.theme.Text.Heading, column.label)).
 			SetSelectable(false).
 			SetAlign(column.align).
 			SetExpansion(column.expansion).
-			SetBackgroundColor(headerBackground)
+			SetBackgroundColor(headerBackground).
+			SetTextColor(headerText)
 		vm.table.SetCell(0, col, header)
 	}
 
@@ -107,21 +89,21 @@ func (vm *viewModel) renderTable() {
 
 	for rowIdx, item := range rows {
 		displayRow := rowIdx + 1
-		vm.table.SetCell(displayRow, 0, makeCell(gutterMarker(item), tview.AlignCenter, 1))
-		vm.table.SetCell(displayRow, 1, makeCell(fmt.Sprintf("[#94a3b8]%d[-]", item.ID), tview.AlignRight, 1))
-		vm.table.SetCell(displayRow, 2, makeCell(formatTitle(item), tview.AlignLeft, 6))
-		vm.table.SetCell(displayRow, 3, makeCell(formatFlags(item), tview.AlignLeft, 1))
+		vm.table.SetCell(displayRow, 0, vm.makeCell(vm.gutterMarker(item), tview.AlignCenter, 1))
+		vm.table.SetCell(displayRow, 1, vm.makeCell(fmt.Sprintf("[%s]%d[-]", vm.theme.Text.Muted, item.ID), tview.AlignRight, 1))
+		vm.table.SetCell(displayRow, 2, vm.makeCell(vm.formatTitle(item), tview.AlignLeft, 6))
+		vm.table.SetCell(displayRow, 3, vm.makeCell(vm.formatFlags(item), tview.AlignLeft, 1))
 	}
 
 	vm.displayItems = rows
 	vm.table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorSteelBlue).Foreground(tcell.ColorWhite))
 }
 
-func makeCell(content string, align, expansion int) *tview.TableCell {
+func (vm *viewModel) makeCell(content string, align, expansion int) *tview.TableCell {
 	return tview.NewTableCell(content).
 		SetAlign(align).
 		SetExpansion(expansion).
-		SetBackgroundColor(tcell.ColorBlack)
+		SetBackgroundColor(vm.theme.SurfaceColor())
 }
 
 func filterItems(items []spindle.QueueItem, keep func(spindle.QueueItem) bool) []spindle.QueueItem {
@@ -134,27 +116,27 @@ func filterItems(items []spindle.QueueItem, keep func(spindle.QueueItem) bool) [
 	return out
 }
 
-func formatTitle(item spindle.QueueItem) string {
+func (vm *viewModel) formatTitle(item spindle.QueueItem) string {
 	title := composeTitle(item)
 	title = truncate(title, 32)
-	color := "#e2e8f0" // Slate-200
+	color := vm.theme.Text.Primary
 	if item.NeedsReview {
-		color = "#fbbf24" // Amber-400
+		color = vm.theme.Badges.Review
 	}
 	return fmt.Sprintf("[%s]%s[-]", color, tview.Escape(title))
 }
 
-func gutterMarker(item spindle.QueueItem) string {
+func (vm *viewModel) gutterMarker(item spindle.QueueItem) string {
 	if strings.TrimSpace(item.ErrorMessage) != "" {
-		return badge("!", "#f87171") // Red-400
+		return vm.badge("!", vm.theme.Badges.Error)
 	}
 	if item.NeedsReview {
-		return badge("R", "#fbbf24") // Amber-400
+		return vm.badge("R", vm.theme.Badges.Review)
 	}
 	return ""
 }
 
-func formatStage(item spindle.QueueItem) string {
+func (vm *viewModel) formatStage(item spindle.QueueItem) string {
 	stage := strings.TrimSpace(item.Progress.Stage)
 	if stage == "" {
 		stage = item.Status
@@ -163,25 +145,25 @@ func formatStage(item spindle.QueueItem) string {
 	stage = truncate(stage, 22)
 
 	detail := strings.TrimSpace(item.Progress.Message)
-	detailColor := "#9aa5b1"
+	detailColor := vm.theme.Text.Muted
 
 	if strings.TrimSpace(item.ErrorMessage) != "" {
 		detail = item.ErrorMessage
-		detailColor = "#ff6b6b"
+		detailColor = vm.theme.Text.Danger
 	} else if item.NeedsReview && strings.TrimSpace(item.ReviewReason) != "" {
 		detail = item.ReviewReason
-		detailColor = "#f39c12"
+		detailColor = vm.theme.Text.Warning
 	}
 
 	if detail != "" {
 		detail = truncate(detail, 36)
-		return fmt.Sprintf("[%s]%s[-] [#6c757d]·[-] [%s]%s[-]", colorForStatus(item.Status), tview.Escape(stage), detailColor, tview.Escape(detail))
+		return fmt.Sprintf("[%s]%s[-] [%s]·[-] [%s]%s[-]", vm.colorForStatus(item.Status), tview.Escape(stage), vm.theme.Text.Faint, detailColor, tview.Escape(detail))
 	}
 
-	return fmt.Sprintf("[%s]%s[-]", colorForStatus(item.Status), tview.Escape(stage))
+	return fmt.Sprintf("[%s]%s[-]", vm.colorForStatus(item.Status), tview.Escape(stage))
 }
 
-func formatProgressBar(item spindle.QueueItem) string {
+func (vm *viewModel) formatProgressBar(item spindle.QueueItem) string {
 	percent := item.Progress.Percent
 	if percent < 0 {
 		percent = 0
@@ -198,95 +180,88 @@ func formatProgressBar(item spindle.QueueItem) string {
 		filled = barWidth
 	}
 	bar := "[" + strings.Repeat("=", filled) + strings.Repeat(".", barWidth-filled) + "]"
-	return fmt.Sprintf("[%s]%s[-] %3.0f%%", colorForStatus(item.Status), bar, percent)
+	return fmt.Sprintf("[%s]%s[-] %3.0f%%", vm.colorForStatus(item.Status), bar, percent)
 }
 
-func formatStatus(item spindle.QueueItem) string {
+func (vm *viewModel) formatStatus(item spindle.QueueItem) string {
 	status := titleCase(item.Status)
 	if status == "" {
 		status = "Unknown"
 	}
-
-	// Keep table compact: only show status chip; lane handled in detail pane
-	return statusChip(item.Status)
+	return vm.statusChip(item.Status)
 }
 
-func formatUpdated(now time.Time, item spindle.QueueItem) string {
+func (vm *viewModel) formatUpdated(now time.Time, item spindle.QueueItem) string {
 	ts := mostRecentTimestamp(item)
 	if ts.IsZero() {
-		return "[#94a3b8]-[-]"
+		return fmt.Sprintf("[%s]-[-]", vm.theme.Text.Muted)
 	}
 	diff := now.Sub(ts)
 	if diff < 0 {
 		diff = 0
 	}
+	color := vm.theme.Text.Muted
 	switch {
 	case diff < time.Minute:
-		return "[#94a3b8]just now[-]"
+		return fmt.Sprintf("[%s]just now[-]", color)
 	case diff < time.Hour:
-		return fmt.Sprintf("[#94a3b8]%dm ago[-]", int(diff.Minutes()))
+		return fmt.Sprintf("[%s]%dm ago[-]", color, int(diff.Minutes()))
 	case diff < 24*time.Hour:
-		return fmt.Sprintf("[#94a3b8]%dh ago[-]", int(diff.Hours()))
+		return fmt.Sprintf("[%s]%dh ago[-]", color, int(diff.Hours()))
 	case diff < 7*24*time.Hour:
-		return fmt.Sprintf("[#94a3b8]%dd ago[-]", int(diff.Hours()/24))
+		return fmt.Sprintf("[%s]%dd ago[-]", color, int(diff.Hours()/24))
 	case diff < 30*24*time.Hour:
 		weeks := int(diff.Hours() / (24 * 7))
 		if weeks < 1 {
 			weeks = 1
 		}
-		return fmt.Sprintf("[#94a3b8]%dw ago[-]", weeks)
+		return fmt.Sprintf("[%s]%dw ago[-]", color, weeks)
 	default:
-		return fmt.Sprintf("[#94a3b8]%s[-]", ts.Format("Jan 02"))
+		return fmt.Sprintf("[%s]%s[-]", color, ts.Format("Jan 02"))
 	}
 }
 
-func formatFlags(item spindle.QueueItem) string {
+func (vm *viewModel) formatFlags(item spindle.QueueItem) string {
 	var flags []string
 	if item.NeedsReview {
-		flags = append(flags, badge("REV", "#fbbf24")) // Amber-400
+		flags = append(flags, vm.badge("REV", vm.theme.Badges.Review))
 	}
 	if strings.TrimSpace(item.ErrorMessage) != "" {
-		flags = append(flags, badge("ERR", "#f87171")) // Red-400
+		flags = append(flags, vm.badge("ERR", vm.theme.Badges.Error))
 	}
 	if strings.TrimSpace(item.BackgroundLogPath) != "" {
-		flags = append(flags, badge("LOG", "#38bdf8")) // Sky-400
+		flags = append(flags, vm.badge("LOG", vm.theme.Badges.Log))
 	}
 	return strings.Join(flags, " ")
 }
 
-func colorForStatus(status string) string {
-	if color, ok := statusPalette[strings.ToLower(strings.TrimSpace(status))]; ok {
-		return color
-	}
-	return "#94a3b8" // Slate-400
+func (vm *viewModel) colorForStatus(status string) string {
+	return vm.theme.StatusColor(status)
 }
 
-func statusChip(status string) string {
-	color := colorForStatus(status)
+func (vm *viewModel) statusChip(status string) string {
+	color := vm.colorForStatus(status)
 	text := strings.ToUpper(titleCase(status))
 	if text == "" {
 		text = "UNKNOWN"
 	}
-	return fmt.Sprintf("[black:%s] %s [-:-]", color, tview.Escape(text))
+	return fmt.Sprintf("[%s:%s] %s [-:-]", vm.theme.Base.Background, color, tview.Escape(text))
 }
 
-func laneChip(lane string) string {
+func (vm *viewModel) laneChip(lane string) string {
 	l := strings.ToLower(strings.TrimSpace(lane))
 	if l == "" {
 		return ""
 	}
-	return fmt.Sprintf("[black:%s] %s [-:-]", colorForLane(l), tview.Escape(strings.ToUpper(l)))
+	return fmt.Sprintf("[%s:%s] %s [-:-]", vm.theme.Base.Background, vm.colorForLane(l), tview.Escape(strings.ToUpper(l)))
 }
 
-func badge(text, color string) string {
-	return fmt.Sprintf("[black:%s] %s [-:-]", color, text)
+func (vm *viewModel) badge(text, color string) string {
+	return fmt.Sprintf("[%s:%s] %s [-:-]", vm.theme.Base.Background, color, text)
 }
 
-func colorForLane(lane string) string {
-	if color, ok := lanePalette[strings.ToLower(strings.TrimSpace(lane))]; ok {
-		return color
-	}
-	return "#64748b" // Slate-500
+func (vm *viewModel) colorForLane(lane string) string {
+	return vm.theme.LaneColor(lane)
 }
 
 func statusRank(status string) int {

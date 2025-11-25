@@ -20,12 +20,13 @@ func (vm *viewModel) startSearch() {
 	vm.searchInput = tview.NewInputField()
 	vm.searchInput.SetLabel("/")
 	vm.searchInput.SetFieldWidth(40)
-	vm.searchInput.SetBackgroundColor(tcell.ColorBlack)
-	vm.searchInput.SetFieldTextColor(tcell.ColorWhite)
+	vm.searchInput.SetBackgroundColor(vm.theme.SurfaceColor())
+	vm.searchInput.SetFieldBackgroundColor(vm.theme.SurfaceAltColor())
+	vm.searchInput.SetFieldTextColor(hexToColor(vm.theme.Text.Primary))
 
 	// Create a simple container for the search input
 	searchContainer := tview.NewFlex().SetDirection(tview.FlexRow)
-	searchContainer.SetBackgroundColor(tcell.ColorBlack)
+	searchContainer.SetBackgroundColor(vm.theme.SurfaceColor())
 	searchContainer.AddItem(nil, 0, 1, false) // Push to bottom
 	searchContainer.AddItem(vm.searchInput, 1, 0, true)
 
@@ -71,7 +72,7 @@ func (vm *viewModel) performSearch() {
 		vm.highlightSearchMatch()
 		vm.updateSearchStatus()
 	} else {
-		vm.searchStatus.SetText(fmt.Sprintf("[red]Pattern not found: %s[-]", searchText))
+		vm.searchStatus.SetText(fmt.Sprintf("[%s]Pattern not found: %s[-]", vm.theme.Search.Error, searchText))
 	}
 }
 
@@ -100,8 +101,14 @@ func (vm *viewModel) updateSearchStatus() {
 
 	matchNum := vm.currentSearchMatch + 1
 	totalMatches := len(vm.searchMatches)
-	vm.searchStatus.SetText(fmt.Sprintf("[dodgerblue]/%s[-] - [yellow]%d/%d[-] - Press [dodgerblue]n[-] for next, [dodgerblue]N[-] for previous",
-		vm.lastSearchPattern, matchNum, totalMatches))
+	vm.searchStatus.SetText(fmt.Sprintf("[%s]/%s[-] - [%s]%d/%d[-] - Press [%s]n[-] for next, [%s]N[-] for previous",
+		vm.theme.Search.Prompt,
+		vm.lastSearchPattern,
+		vm.theme.Search.Count,
+		matchNum,
+		totalMatches,
+		vm.theme.Search.Match,
+		vm.theme.Search.Match))
 }
 
 func (vm *viewModel) findSearchMatches() {
@@ -150,9 +157,9 @@ func (vm *viewModel) highlightSearchMatch() {
 		colored := logtail.ColorizeLine(line)
 		if vm.searchRegex.MatchString(line) {
 			if i == targetLine {
-				colored = "[black:yellow]" + colored + "[-:-]"
+				colored = fmt.Sprintf("[%s:%s]%s[-:-]", vm.theme.Search.HighlightActiveFg, vm.theme.Search.HighlightActiveBg, colored)
 			} else {
-				colored = "[red]" + colored + "[-]"
+				colored = fmt.Sprintf("[%s]%s[-]", vm.theme.Search.HighlightPassiveFg, colored)
 			}
 		}
 		highlighted[i] = colored
