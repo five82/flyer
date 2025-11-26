@@ -232,6 +232,9 @@ func (vm *viewModel) formatFlags(item spindle.QueueItem) string {
 	if strings.TrimSpace(item.BackgroundLogPath) != "" {
 		flags = append(flags, vm.badge("LOG", vm.theme.Badges.Log))
 	}
+	if badge := vm.episodeProgressBadge(item); badge != "" {
+		flags = append(flags, badge)
+	}
 	return strings.Join(flags, " ")
 }
 
@@ -258,6 +261,26 @@ func (vm *viewModel) laneChip(lane string) string {
 
 func (vm *viewModel) badge(text, color string) string {
 	return fmt.Sprintf("[%s:%s] %s [-:-]", vm.theme.Base.Background, color, text)
+}
+
+func (vm *viewModel) episodeProgressBadge(item spindle.QueueItem) string {
+	_, totals := item.EpisodeSnapshot()
+	if totals.Planned < 2 {
+		return ""
+	}
+	completed := totals.Final
+	color := vm.theme.StatusColor("pending")
+	if totals.Final == totals.Planned && totals.Planned > 0 {
+		color = vm.theme.StatusColor("completed")
+	} else if totals.Encoded > 0 {
+		completed = totals.Encoded
+		color = vm.theme.StatusColor("encoding")
+	} else if totals.Ripped > 0 {
+		completed = totals.Ripped
+		color = vm.theme.StatusColor("ripping")
+	}
+	label := fmt.Sprintf("EP %d/%d", completed, totals.Planned)
+	return vm.badge(label, color)
 }
 
 func (vm *viewModel) colorForLane(lane string) string {

@@ -243,6 +243,16 @@ func (vm *viewModel) updateDetail(row int) {
 		b.WriteString(vm.formatMetadata(metaRows))
 	}
 
+	if episodes, totals := item.EpisodeSnapshot(); len(episodes) > 0 {
+		writeSection("Episodes")
+		if summary := vm.describeEpisodeTotals(totals); summary != "" {
+			fmt.Fprintf(&b, "  [%s]%s[-]\n", text.Muted, summary)
+		}
+		for _, ep := range episodes {
+			b.WriteString(vm.formatEpisodeLine(ep))
+		}
+	}
+
 	// Mini timeline
 	created := item.ParsedCreatedAt()
 	if !created.IsZero() {
@@ -440,6 +450,97 @@ func reorderMetadata(rows []metadataRow) []metadataRow {
 		}
 	}
 	return append(titleRows, others...)
+}
+
+func (vm *viewModel) formatEpisodeLine(ep spindle.EpisodeStatus) string {
+	label := formatEpisodeLabel(ep)
+	stage := vm.episodeStageChip(ep.Stage)
+	title := strings.TrimSpace(ep.Title)
+	if title == "" {
+		title = strings.TrimSpace(ep.OutputBasename)
+	}
+	if title == "" {
+		title = strings.TrimSpace(ep.SourceTitle)
+	}
+	if title == "" {
+		title = "Unlabeled"
+	}
+	extra := []string{}
+	if runtime := formatRuntime(ep.RuntimeSeconds); runtime != "" {
+		extra = append(extra, runtime)
+	}
+	if lang := strings.TrimSpace(ep.SubtitleLanguage); lang != "" {
+		extra = append(extra, strings.ToUpper(lang))
+	}
+	if ep.MatchScore > 0 {
+		extra = append(extra, fmt.Sprintf("score %.2f", ep.MatchScore))
+	}
+	extraText := ""
+	if len(extra) > 0 {
+		extraText = fmt.Sprintf(" [%s](%s)[-]", vm.theme.Text.Faint, strings.Join(extra, " · "))
+	}
+	return fmt.Sprintf("  [%s]%s[-] %s [%s]%s[-]%s\n", vm.theme.Text.Muted, label, stage, vm.theme.Text.Primary, tview.Escape(title), extraText)
+}
+
+func (vm *viewModel) describeEpisodeTotals(totals spindle.EpisodeTotals) string {
+	if totals.Planned == 0 {
+		return ""
+	}
+	parts := []string{fmt.Sprintf("%d planned", totals.Planned)}
+	if totals.Ripped > 0 {
+		parts = append(parts, fmt.Sprintf("%d ripped", totals.Ripped))
+	}
+	if totals.Encoded > 0 {
+		parts = append(parts, fmt.Sprintf("%d encoded", totals.Encoded))
+	}
+	if totals.Final > 0 {
+		parts = append(parts, fmt.Sprintf("%d final", totals.Final))
+	}
+	return strings.Join(parts, " · ")
+}
+
+func (vm *viewModel) episodeStageChip(stage string) string {
+	status := stageToStatus(stage)
+	color := vm.colorForStatus(status)
+	label := strings.ToUpper(strings.TrimSpace(stage))
+	if label == "" {
+		label = "PLANNED"
+	}
+	return fmt.Sprintf("[%s:%s] %s [-:-]", vm.theme.Base.Background, color, label)
+}
+
+func stageToStatus(stage string) string {
+	switch strings.ToLower(strings.TrimSpace(stage)) {
+	case "final":
+		return "completed"
+	case "encoded":
+		return "encoded"
+	case "ripped":
+		return "ripped"
+	default:
+		return "pending"
+	}
+}
+
+func formatEpisodeLabel(ep spindle.EpisodeStatus) string {
+	if ep.Season > 0 && ep.Episode > 0 {
+		return fmt.Sprintf("S%02dE%02d", ep.Season, ep.Episode)
+	}
+	if strings.TrimSpace(ep.Key) != "" {
+		return strings.ToUpper(ep.Key)
+	}
+	return "EP"
+}
+
+func formatRuntime(seconds int) string {
+	if seconds <= 0 {
+		return ""
+	}
+	minutes := seconds / 60
+	if minutes == 0 {
+		return fmt.Sprintf("%ds", seconds)
+	}
+	return fmt.Sprintf("%dm", minutes)
 }
 
 func (vm *viewModel) detailProgressBar(item spindle.QueueItem) string {

@@ -2,6 +2,8 @@ package spindle
 
 import (
 	"encoding/json"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -68,6 +70,9 @@ type QueueItem struct {
 	ReviewReason      string          `json:"reviewReason"`
 	Metadata          json.RawMessage `json:"metadata"`
 	RipSpec           json.RawMessage `json:"ripSpec"`
+	Episodes          []EpisodeStatus `json:"episodes"`
+	EpisodeTotals     *EpisodeTotals  `json:"episodeTotals"`
+	EpisodesSynced    bool            `json:"episodesSynchronized"`
 }
 
 // QueueProgress tracks stage progress for an item.
@@ -75,6 +80,32 @@ type QueueProgress struct {
 	Stage   string  `json:"stage"`
 	Percent float64 `json:"percent"`
 	Message string  `json:"message"`
+}
+
+type EpisodeStatus struct {
+	Key              string  `json:"key"`
+	Season           int     `json:"season"`
+	Episode          int     `json:"episode"`
+	Title            string  `json:"title"`
+	Stage            string  `json:"stage"`
+	RuntimeSeconds   int     `json:"runtimeSeconds"`
+	SourceTitleID    int     `json:"sourceTitleId"`
+	SourceTitle      string  `json:"sourceTitle"`
+	OutputBasename   string  `json:"outputBasename"`
+	RippedPath       string  `json:"rippedPath"`
+	EncodedPath      string  `json:"encodedPath"`
+	FinalPath        string  `json:"finalPath"`
+	SubtitleSource   string  `json:"subtitleSource"`
+	SubtitleLanguage string  `json:"subtitleLanguage"`
+	MatchScore       float64 `json:"matchScore"`
+	MatchedEpisode   int     `json:"matchedEpisode"`
+}
+
+type EpisodeTotals struct {
+	Planned int `json:"planned"`
+	Ripped  int `json:"ripped"`
+	Encoded int `json:"encoded"`
+	Final   int `json:"final"`
 }
 
 // LogEvent represents a single log entry from /api/logs.
@@ -144,6 +175,23 @@ func (q QueueItem) ParsedUpdatedAt() time.Time {
 	return parseTime(q.UpdatedAt)
 }
 
+// EpisodeSnapshot normalizes per-episode data for the UI, deriving it from the
+// raw rip spec when the API fields are unavailable.
+func (q QueueItem) EpisodeSnapshot() ([]EpisodeStatus, EpisodeTotals) {
+	if len(q.Episodes) > 0 {
+		copyEpisodes := make([]EpisodeStatus, len(q.Episodes))
+		copy(copyEpisodes, q.Episodes)
+		if q.EpisodeTotals != nil {
+			return copyEpisodes, *q.EpisodeTotals
+		}
+		return copyEpisodes, tallyEpisodeTotals(copyEpisodes)
+	}
+	if len(q.RipSpec) == 0 {
+		return nil, EpisodeTotals{}
+	}
+	return deriveEpisodesFromRipSpec(q.RipSpec)
+}
+
 func parseTime(value string) time.Time {
 	if value == "" {
 		return time.Time{}
@@ -157,4 +205,152 @@ func parseTime(value string) time.Time {
 		return t
 	}
 	return time.Time{}
+}
+
+func tallyEpisodeTotals(list []EpisodeStatus) EpisodeTotals {
+	var totals EpisodeTotals
+	for range list {
+		totals.Planned++
+	}
+	for _, ep := range list {
+		if strings.TrimSpace(ep.RippedPath) != "" {
+			totals.Ripped++
+		}
+		if strings.TrimSpace(ep.EncodedPath) != "" {
+			totals.Encoded++
+		}
+		if strings.TrimSpace(ep.FinalPath) != "" {
+			totals.Final++
+		}
+	}
+	return totals
+}
+
+func deriveEpisodesFromRipSpec(raw json.RawMessage) ([]EpisodeStatus, EpisodeTotals) {
+	var env ripSpecEnvelope
+	if err := json.Unmarshal(raw, &env); err != nil || len(env.Episodes) == 0 {
+		return nil, EpisodeTotals{}
+	}
+	lookup := env.assetsByKey()
+	titles := env.titleByID()
+	statuses := make([]EpisodeStatus, 0, len(env.Episodes))
+	for _, ep := range env.Episodes {
+		status := EpisodeStatus{
+			Key:            strings.ToLower(strings.TrimSpace(ep.Key)),
+			Season:         ep.Season,
+			Episode:        ep.Episode,
+			Title:          strings.TrimSpace(ep.EpisodeTitle),
+			Stage:          "planned",
+			RuntimeSeconds: ep.RuntimeSeconds,
+			SourceTitleID:  ep.TitleID,
+			OutputBasename: strings.TrimSpace(ep.OutputBasename),
+		}
+		if title, ok := titles[ep.TitleID]; ok {
+			if status.Title == "" {
+				status.Title = strings.TrimSpace(title.EpisodeTitle)
+			}
+			if status.Title == "" {
+				status.Title = strings.TrimSpace(title.Name)
+			}
+			status.SourceTitle = strings.TrimSpace(title.Name)
+			if status.RuntimeSeconds == 0 {
+				status.RuntimeSeconds = title.Duration
+			}
+		}
+		if asset, ok := lookup[status.Key]; ok {
+			if asset.Ripped != "" {
+				status.RippedPath = asset.Ripped
+				status.Stage = "ripped"
+			}
+			if asset.Encoded != "" {
+				status.EncodedPath = asset.Encoded
+				status.Stage = "encoded"
+			}
+			if asset.Final != "" {
+				status.FinalPath = asset.Final
+				status.Stage = "final"
+			}
+		}
+		statuses = append(statuses, status)
+	}
+	sort.SliceStable(statuses, func(i, j int) bool {
+		if statuses[i].Season != statuses[j].Season {
+			return statuses[i].Season < statuses[j].Season
+		}
+		if statuses[i].Episode != statuses[j].Episode {
+			return statuses[i].Episode < statuses[j].Episode
+		}
+		return statuses[i].Key < statuses[j].Key
+	})
+	return statuses, tallyEpisodeTotals(statuses)
+}
+
+type ripSpecEnvelope struct {
+	Titles   []ripSpecTitle   `json:"titles"`
+	Episodes []ripSpecEpisode `json:"episodes"`
+	Assets   ripSpecAssets    `json:"assets"`
+}
+
+type ripSpecTitle struct {
+	ID           int    `json:"id"`
+	Name         string `json:"name"`
+	EpisodeTitle string `json:"episode_title"`
+	Duration     int    `json:"duration"`
+}
+
+type ripSpecEpisode struct {
+	Key            string `json:"key"`
+	TitleID        int    `json:"title_id"`
+	Season         int    `json:"season"`
+	Episode        int    `json:"episode"`
+	EpisodeTitle   string `json:"episode_title"`
+	RuntimeSeconds int    `json:"runtime_seconds"`
+	OutputBasename string `json:"output_basename"`
+}
+
+type ripSpecAssets struct {
+	Ripped  []ripSpecAsset `json:"ripped"`
+	Encoded []ripSpecAsset `json:"encoded"`
+	Final   []ripSpecAsset `json:"final"`
+}
+
+type ripSpecAsset struct {
+	EpisodeKey string `json:"episode_key"`
+	Path       string `json:"path"`
+}
+
+type assetPaths struct {
+	Ripped  string
+	Encoded string
+	Final   string
+}
+
+func (e ripSpecEnvelope) titleByID() map[int]ripSpecTitle {
+	if len(e.Titles) == 0 {
+		return nil
+	}
+	lookup := make(map[int]ripSpecTitle, len(e.Titles))
+	for _, title := range e.Titles {
+		lookup[title.ID] = title
+	}
+	return lookup
+}
+
+func (e ripSpecEnvelope) assetsByKey() map[string]assetPaths {
+	lookup := make(map[string]assetPaths)
+	add := func(list []ripSpecAsset, setter func(assetPaths, string) assetPaths) {
+		for _, asset := range list {
+			key := strings.ToLower(strings.TrimSpace(asset.EpisodeKey))
+			if key == "" {
+				continue
+			}
+			entry := lookup[key]
+			entry = setter(entry, asset.Path)
+			lookup[key] = entry
+		}
+	}
+	add(e.Assets.Ripped, func(a assetPaths, path string) assetPaths { a.Ripped = path; return a })
+	add(e.Assets.Encoded, func(a assetPaths, path string) assetPaths { a.Encoded = path; return a })
+	add(e.Assets.Final, func(a assetPaths, path string) assetPaths { a.Final = path; return a })
+	return lookup
 }
