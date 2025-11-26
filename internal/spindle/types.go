@@ -248,9 +248,10 @@ type LogBatch struct {
 
 // RipSpecSummary describes the subset of rip spec details Flyer cares about.
 type RipSpecSummary struct {
-	ContentKey string             `json:"content_key"`
-	Metadata   map[string]any     `json:"metadata"`
-	Titles     []RipSpecTitleInfo `json:"titles"`
+	ContentKey string                `json:"content_key"`
+	Metadata   map[string]any        `json:"metadata"`
+	Titles     []RipSpecTitleInfo    `json:"titles"`
+	Episodes   []RipSpecEpisodeInfo  `json:"episodes"`
 }
 
 // RipSpecTitleInfo captures per-title fingerprint information.
@@ -258,7 +259,24 @@ type RipSpecTitleInfo struct {
 	ID                 int    `json:"id"`
 	Name               string `json:"name"`
 	Duration           int    `json:"duration"`
+	Playlist           string `json:"playlist"`
+	SegmentCount       int    `json:"segment_count"`
+	SegmentMap         string `json:"segment_map"`
+	Season             int    `json:"season"`
+	Episode            int    `json:"episode"`
+	EpisodeTitle       string `json:"episode_title"`
+	EpisodeAirDate     string `json:"episode_air_date"`
 	ContentFingerprint string `json:"content_fingerprint"`
+}
+
+// RipSpecEpisodeInfo links rip spec episodes to playlist metadata for lookups.
+type RipSpecEpisodeInfo struct {
+	Key            string `json:"key"`
+	TitleID        int    `json:"title_id"`
+	Season         int    `json:"season"`
+	Episode        int    `json:"episode"`
+	EpisodeTitle   string `json:"episode_title"`
+	OutputBasename string `json:"output_basename"`
 }
 
 // ParseRipSpec decodes the rip specification payload if present.

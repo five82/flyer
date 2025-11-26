@@ -140,6 +140,25 @@ func (vm *viewModel) updateDetail(row int) {
 		return
 	}
 	item := vm.displayItems[row-1]
+	summary, ripSpecErr := item.ParseRipSpec()
+	titleLookup := make(map[int]*spindle.RipSpecTitleInfo)
+	episodeTitleIndex := make(map[string]int)
+	if ripSpecErr == nil {
+		for _, title := range summary.Titles {
+			t := title
+			titleLookup[title.ID] = &t
+		}
+		for _, ep := range summary.Episodes {
+			if ep.TitleID <= 0 {
+				continue
+			}
+			key := strings.ToLower(strings.TrimSpace(ep.Key))
+			if key == "" {
+				continue
+			}
+			episodeTitleIndex[key] = ep.TitleID
+		}
+	}
 	var b strings.Builder
 	text := vm.theme.Text
 
@@ -281,7 +300,7 @@ func (vm *viewModel) updateDetail(row int) {
 			fmt.Fprintf(&b, "  [%s]%s[-]\n", text.Muted, summary)
 		}
 		for _, ep := range episodes {
-			b.WriteString(vm.formatEpisodeLine(ep))
+			b.WriteString(vm.formatEpisodeLine(ep, titleLookup, episodeTitleIndex))
 		}
 	}
 
@@ -293,7 +312,7 @@ func (vm *viewModel) updateDetail(row int) {
 	}
 
 	// Rip spec summary
-	if summary, err := item.ParseRipSpec(); err == nil {
+	if ripSpecErr == nil {
 		const maxTitles = 6
 		if summary.ContentKey != "" || len(summary.Titles) > 0 {
 			writeSection("Rip Spec")
@@ -318,6 +337,9 @@ func (vm *viewModel) updateDetail(row int) {
 			minutes := title.Duration / 60
 			seconds := title.Duration % 60
 			fmt.Fprintf(&b, "  [%s]- %s[-] [%s]%02d:%02d[-]", text.Accent, tview.Escape(name), text.AccentSoft, minutes, seconds)
+			if playlist := strings.TrimSpace(title.Playlist); playlist != "" {
+				fmt.Fprintf(&b, " [%s]%s[-]", text.Warning, playlist)
+			}
 			if fingerprint != "" {
 				fmt.Fprintf(&b, " [%s]%s[-]", text.Muted, fingerprint)
 			}
@@ -484,7 +506,7 @@ func reorderMetadata(rows []metadataRow) []metadataRow {
 	return append(titleRows, others...)
 }
 
-func (vm *viewModel) formatEpisodeLine(ep spindle.EpisodeStatus) string {
+func (vm *viewModel) formatEpisodeLine(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) string {
 	label := formatEpisodeLabel(ep)
 	stage := vm.episodeStageChip(ep.Stage)
 	title := strings.TrimSpace(ep.Title)
@@ -507,11 +529,46 @@ func (vm *viewModel) formatEpisodeLine(ep spindle.EpisodeStatus) string {
 	if ep.MatchScore > 0 {
 		extra = append(extra, fmt.Sprintf("score %.2f", ep.MatchScore))
 	}
+	if base := strings.TrimSpace(ep.OutputBasename); base != "" && !strings.EqualFold(base, title) {
+		extra = append(extra, base)
+	}
+	if info := vm.lookupRipTitleInfo(ep, titles, keyLookup); info != nil {
+		titleID := ep.SourceTitleID
+		if titleID <= 0 {
+			titleID = info.ID
+		}
+		if titleID > 0 {
+			extra = append(extra, fmt.Sprintf("T%02d", titleID))
+		}
+		playlist := strings.TrimSpace(info.Playlist)
+		if playlist != "" {
+			extra = append(extra, fmt.Sprintf("mpls %s", playlist))
+		}
+	}
 	extraText := ""
 	if len(extra) > 0 {
 		extraText = fmt.Sprintf(" [%s](%s)[-]", vm.theme.Text.Faint, strings.Join(extra, " · "))
 	}
 	return fmt.Sprintf("  [%s]%s[-] %s [%s]%s[-]%s\n", vm.theme.Text.Muted, label, stage, vm.theme.Text.Primary, tview.Escape(title), extraText)
+}
+
+func (vm *viewModel) lookupRipTitleInfo(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) *spindle.RipSpecTitleInfo {
+	if len(titles) == 0 {
+		return nil
+	}
+	if info, ok := titles[ep.SourceTitleID]; ok && info != nil {
+		return info
+	}
+	key := strings.ToLower(strings.TrimSpace(ep.Key))
+	if key == "" {
+		return nil
+	}
+	if id, ok := keyLookup[key]; ok {
+		if info, ok := titles[id]; ok {
+			return info
+		}
+	}
+	return nil
 }
 
 func (vm *viewModel) describeEpisodeTotals(totals spindle.EpisodeTotals) string {
@@ -543,12 +600,26 @@ func (vm *viewModel) episodeStageChip(stage string) string {
 
 func stageToStatus(stage string) string {
 	switch strings.ToLower(strings.TrimSpace(stage)) {
+	case "ripping":
+		return "ripping"
+	case "encoding":
+		return "encoding"
+	case "subtitling":
+		return "encoding"
+	case "subtitled":
+		return "encoded"
 	case "final":
 		return "completed"
 	case "encoded":
 		return "encoded"
 	case "ripped":
 		return "ripped"
+	case "organizing":
+		return "organizing"
+	case "review":
+		return "review"
+	case "failed":
+		return "failed"
 	default:
 		return "pending"
 	}
