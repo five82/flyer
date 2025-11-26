@@ -215,3 +215,21 @@ func truncateMiddle(value string, limit int) string {
 	suffix := keep - prefix
 	return string(runes[:prefix]) + "…/" + string(runes[len(runes)-suffix:])
 }
+
+func formatBytes(value int64) string {
+	const (
+		kiB = 1024
+		miB = kiB * 1024
+		giB = miB * 1024
+	)
+	switch {
+	case value >= giB:
+		return fmt.Sprintf("%.2f GiB", float64(value)/float64(giB))
+	case value >= miB:
+		return fmt.Sprintf("%.2f MiB", float64(value)/float64(miB))
+	case value >= kiB:
+		return fmt.Sprintf("%.2f KiB", float64(value)/float64(kiB))
+	default:
+		return fmt.Sprintf("%d B", value)
+	}
+}

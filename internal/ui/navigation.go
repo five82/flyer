@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -208,6 +209,9 @@ func (vm *viewModel) updateDetail(row int) {
 	if stageMsg != "" {
 		writeRow("Note", fmt.Sprintf("[%s]%s[-]", text.Muted, tview.Escape(stageMsg)))
 	}
+	if metrics := formatEncodingMetrics(item.Encoding); metrics != "" {
+		writeRow("Metrics", fmt.Sprintf("[%s]%s[-]", text.AccentSoft, tview.Escape(metrics)))
+	}
 
 	// Issues block
 	if strings.TrimSpace(item.ErrorMessage) != "" {
@@ -231,6 +235,34 @@ func (vm *viewModel) updateDetail(row int) {
 	writeRow("Rip", formatPath(item.RippedFile))
 	writeRow("Encoded", formatPath(item.EncodedFile))
 	writeRow("Final", formatPath(item.FinalFile))
+
+	if enc := item.Encoding; hasEncodingDetails(enc) {
+		writeSection("Encoding")
+		if hardware := formatEncodingHardware(enc); hardware != "" {
+			writeRow("Hardware", fmt.Sprintf("[%s]%s[-]", text.Accent, tview.Escape(hardware)))
+		}
+		if cfg := formatEncodingConfig(enc); cfg != "" {
+			writeRow("Config", fmt.Sprintf("[%s]%s[-]", text.Accent, tview.Escape(cfg)))
+		}
+		if source := formatEncodingSource(enc); source != "" {
+			writeRow("Source", fmt.Sprintf("[%s]%s[-]", text.AccentSoft, tview.Escape(source)))
+		}
+		if crop := formatEncodingCrop(enc); crop != "" {
+			writeRow("Crop", fmt.Sprintf("[%s]%s[-]", text.AccentSoft, tview.Escape(crop)))
+		}
+		if validation := formatEncodingValidation(enc); validation != "" {
+			writeRow("Validation", fmt.Sprintf("[%s]%s[-]", text.AccentSoft, tview.Escape(validation)))
+		}
+		if result := formatEncodingResult(enc); result != "" {
+			writeRow("Result", fmt.Sprintf("[%s]%s[-]", text.Accent, tview.Escape(result)))
+		}
+		if warning := strings.TrimSpace(enc.Warning); warning != "" {
+			writeRow("Warning", fmt.Sprintf("[%s]%s[-]", text.Warning, tview.Escape(warning)))
+		}
+		if errSummary := formatEncodingIssue(enc.Error); errSummary != "" {
+			writeRow("Encoder Error", fmt.Sprintf("[%s]%s[-]", text.Danger, tview.Escape(errSummary)))
+		}
+	}
 
 	// Logs
 	writeSection("Logs")
@@ -555,6 +587,198 @@ func (vm *viewModel) detailProgressBar(item spindle.QueueItem) string {
 	}
 	bar := "[" + strings.Repeat("=", filled) + strings.Repeat(".", barWidth-filled) + "]"
 	return fmt.Sprintf("[%s]%s[-] %3.0f%%", vm.colorForStatus(item.Status), bar, percent)
+}
+
+func formatEncodingMetrics(enc *spindle.EncodingStatus) string {
+	if enc == nil {
+		return ""
+	}
+	parts := make([]string, 0, 4)
+	if eta := enc.ETADuration(); eta > 0 {
+		parts = append(parts, fmt.Sprintf("ETA %s", humanizeDuration(eta)))
+	}
+	if enc.Speed > 0 {
+		parts = append(parts, fmt.Sprintf("%.1fx", enc.Speed))
+	}
+	if enc.FPS > 0 {
+		parts = append(parts, fmt.Sprintf("%.0f fps", enc.FPS))
+	}
+	if frames := formatEncodingFrameSummary(enc); frames != "" {
+		parts = append(parts, frames)
+	}
+	if bitrate := strings.TrimSpace(enc.Bitrate); bitrate != "" {
+		parts = append(parts, bitrate)
+	}
+	return strings.Join(parts, " • ")
+}
+
+func hasEncodingDetails(enc *spindle.EncodingStatus) bool {
+	if enc == nil {
+		return false
+	}
+	if enc.Hardware != nil || enc.Config != nil || enc.Video != nil || enc.Crop != nil || enc.Validation != nil || enc.Result != nil || strings.TrimSpace(enc.Warning) != "" || enc.Error != nil {
+		return true
+	}
+	return false
+}
+
+func formatEncodingHardware(enc *spindle.EncodingStatus) string {
+	if enc == nil || enc.Hardware == nil {
+		return ""
+	}
+	return strings.TrimSpace(enc.Hardware.Hostname)
+}
+
+func formatEncodingConfig(enc *spindle.EncodingStatus) string {
+	if enc == nil || enc.Config == nil {
+		return ""
+	}
+	cfg := enc.Config
+	parts := make([]string, 0, 4)
+	if val := strings.TrimSpace(cfg.Encoder); val != "" {
+		parts = append(parts, val)
+	}
+	if val := strings.TrimSpace(cfg.Quality); val != "" {
+		parts = append(parts, val)
+	}
+	if val := strings.TrimSpace(cfg.Preset); val != "" {
+		parts = append(parts, fmt.Sprintf("Preset %s", val))
+	}
+	if val := strings.TrimSpace(cfg.Tune); val != "" {
+		parts = append(parts, fmt.Sprintf("Tune %s", val))
+	}
+	if val := strings.TrimSpace(cfg.AudioCodec); val != "" {
+		parts = append(parts, fmt.Sprintf("Audio %s", val))
+	}
+	return strings.Join(parts, " • ")
+}
+
+func formatEncodingSource(enc *spindle.EncodingStatus) string {
+	if enc == nil || enc.Video == nil {
+		return ""
+	}
+	video := enc.Video
+	parts := make([]string, 0, 3)
+	if res := strings.TrimSpace(video.Resolution); res != "" {
+		category := strings.TrimSpace(video.Category)
+		if category != "" {
+			res = fmt.Sprintf("%s (%s)", res, category)
+		}
+		parts = append(parts, res)
+	}
+	if dur := strings.TrimSpace(video.Duration); dur != "" {
+		parts = append(parts, dur)
+	}
+	if audio := strings.TrimSpace(video.AudioDescription); audio != "" {
+		parts = append(parts, audio)
+	}
+	return strings.Join(parts, " • ")
+}
+
+func formatEncodingCrop(enc *spindle.EncodingStatus) string {
+	if enc == nil || enc.Crop == nil {
+		return ""
+	}
+	crop := enc.Crop
+	summary := strings.TrimSpace(crop.Message)
+	params := strings.TrimSpace(crop.Crop)
+	if params != "" {
+		if summary != "" {
+			summary = fmt.Sprintf("%s (%s)", summary, params)
+		} else {
+			summary = params
+		}
+	}
+	flags := make([]string, 0, 2)
+	if crop.Required {
+		flags = append(flags, "required")
+	}
+	if crop.Disabled {
+		flags = append(flags, "disabled")
+	}
+	if len(flags) > 0 {
+		summary = strings.TrimSpace(summary + " [" + strings.Join(flags, ", ") + "]")
+	}
+	return summary
+}
+
+func formatEncodingValidation(enc *spindle.EncodingStatus) string {
+	if enc == nil || enc.Validation == nil {
+		return ""
+	}
+	if enc.Validation.Passed {
+		return "Passed"
+	}
+	for _, step := range enc.Validation.Steps {
+		if !step.Passed {
+			name := strings.TrimSpace(step.Name)
+			if name == "" {
+				name = "validation"
+			}
+			return fmt.Sprintf("Failed: %s", name)
+		}
+	}
+	return "Failed"
+}
+
+func formatEncodingResult(enc *spindle.EncodingStatus) string {
+	if enc == nil || enc.Result == nil {
+		return ""
+	}
+	res := enc.Result
+	parts := make([]string, 0, 4)
+	if res.OriginalSize > 0 || res.EncodedSize > 0 {
+		size := fmt.Sprintf("%s → %s", formatBytes(res.OriginalSize), formatBytes(res.EncodedSize))
+		if res.SizeReductionPercent != 0 {
+			size = fmt.Sprintf("%s (%.1f%%)", size, res.SizeReductionPercent)
+		}
+		parts = append(parts, size)
+	}
+	if res.AverageSpeed > 0 {
+		parts = append(parts, fmt.Sprintf("avg %.1fx", res.AverageSpeed))
+	}
+	streams := strings.TrimSpace(strings.Join(filterNonEmpty(
+		strings.TrimSpace(res.VideoStream),
+		strings.TrimSpace(res.AudioStream),
+	), " / "))
+	if streams != "" {
+		parts = append(parts, streams)
+	}
+	return strings.Join(parts, " • ")
+}
+
+func formatEncodingFrameSummary(enc *spindle.EncodingStatus) string {
+	if enc == nil || enc.TotalFrames <= 0 || enc.CurrentFrame <= 0 {
+		return ""
+	}
+	percent := int(math.Round(enc.FramePercent() * 100))
+	return fmt.Sprintf("%d/%d frames (%d%%)", enc.CurrentFrame, enc.TotalFrames, percent)
+}
+
+func formatEncodingIssue(issue *spindle.EncodingIssue) string {
+	if issue == nil {
+		return ""
+	}
+	title := strings.TrimSpace(issue.Title)
+	message := strings.TrimSpace(issue.Message)
+	switch {
+	case title != "" && message != "":
+		return fmt.Sprintf("%s – %s", title, message)
+	case message != "":
+		return message
+	default:
+		return title
+	}
+}
+
+func filterNonEmpty(values ...string) []string {
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			out = append(out, strings.TrimSpace(v))
+		}
+	}
+	return out
 }
 
 func (vm *viewModel) refreshLogs(force bool) {

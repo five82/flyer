@@ -58,6 +58,7 @@ type QueueItem struct {
 	Status            string          `json:"status"`
 	ProcessingLane    string          `json:"processingLane"`
 	Progress          QueueProgress   `json:"progress"`
+	Encoding          *EncodingStatus `json:"encoding,omitempty"`
 	ErrorMessage      string          `json:"errorMessage"`
 	CreatedAt         string          `json:"createdAt"`
 	UpdatedAt         string          `json:"updatedAt"`
@@ -80,6 +81,113 @@ type QueueProgress struct {
 	Stage   string  `json:"stage"`
 	Percent float64 `json:"percent"`
 	Message string  `json:"message"`
+}
+
+type EncodingStatus struct {
+	Stage        string              `json:"stage,omitempty"`
+	Message      string              `json:"message,omitempty"`
+	Percent      float64             `json:"percent,omitempty"`
+	ETASeconds   float64             `json:"etaSeconds,omitempty"`
+	Speed        float64             `json:"speed,omitempty"`
+	FPS          float64             `json:"fps,omitempty"`
+	Bitrate      string              `json:"bitrate,omitempty"`
+	TotalFrames  int64               `json:"totalFrames,omitempty"`
+	CurrentFrame int64               `json:"currentFrame,omitempty"`
+	Hardware     *EncodingHardware   `json:"hardware,omitempty"`
+	Video        *EncodingVideo      `json:"video,omitempty"`
+	Crop         *EncodingCrop       `json:"crop,omitempty"`
+	Config       *EncodingConfig     `json:"config,omitempty"`
+	Validation   *EncodingValidation `json:"validation,omitempty"`
+	Warning      string              `json:"warning,omitempty"`
+	Error        *EncodingIssue      `json:"error,omitempty"`
+	Result       *EncodingResult     `json:"result,omitempty"`
+}
+
+type EncodingHardware struct {
+	Hostname string `json:"hostname,omitempty"`
+}
+
+type EncodingVideo struct {
+	InputFile        string `json:"inputFile,omitempty"`
+	OutputFile       string `json:"outputFile,omitempty"`
+	Duration         string `json:"duration,omitempty"`
+	Resolution       string `json:"resolution,omitempty"`
+	Category         string `json:"category,omitempty"`
+	DynamicRange     string `json:"dynamicRange,omitempty"`
+	AudioDescription string `json:"audioDescription,omitempty"`
+}
+
+type EncodingCrop struct {
+	Message  string `json:"message,omitempty"`
+	Crop     string `json:"crop,omitempty"`
+	Required bool   `json:"required,omitempty"`
+	Disabled bool   `json:"disabled,omitempty"`
+}
+
+type EncodingConfig struct {
+	Encoder            string                  `json:"encoder,omitempty"`
+	Preset             string                  `json:"preset,omitempty"`
+	Tune               string                  `json:"tune,omitempty"`
+	Quality            string                  `json:"quality,omitempty"`
+	PixelFormat        string                  `json:"pixelFormat,omitempty"`
+	MatrixCoefficients string                  `json:"matrixCoefficients,omitempty"`
+	AudioCodec         string                  `json:"audioCodec,omitempty"`
+	AudioDescription   string                  `json:"audioDescription,omitempty"`
+	DraptoPreset       string                  `json:"draptoPreset,omitempty"`
+	PresetSettings     []EncodingPresetSetting `json:"presetSettings,omitempty"`
+	SVTParams          string                  `json:"svtParams,omitempty"`
+}
+
+type EncodingPresetSetting struct {
+	Key   string `json:"key,omitempty"`
+	Value string `json:"value,omitempty"`
+}
+
+type EncodingValidation struct {
+	Passed bool                     `json:"passed,omitempty"`
+	Steps  []EncodingValidationStep `json:"steps,omitempty"`
+}
+
+type EncodingValidationStep struct {
+	Name    string `json:"name,omitempty"`
+	Passed  bool   `json:"passed,omitempty"`
+	Details string `json:"details,omitempty"`
+}
+
+type EncodingIssue struct {
+	Title      string `json:"title,omitempty"`
+	Message    string `json:"message,omitempty"`
+	Context    string `json:"context,omitempty"`
+	Suggestion string `json:"suggestion,omitempty"`
+}
+
+type EncodingResult struct {
+	InputFile            string  `json:"inputFile,omitempty"`
+	OutputFile           string  `json:"outputFile,omitempty"`
+	OutputPath           string  `json:"outputPath,omitempty"`
+	OriginalSize         int64   `json:"originalSize,omitempty"`
+	EncodedSize          int64   `json:"encodedSize,omitempty"`
+	VideoStream          string  `json:"videoStream,omitempty"`
+	AudioStream          string  `json:"audioStream,omitempty"`
+	AverageSpeed         float64 `json:"averageSpeed,omitempty"`
+	DurationSeconds      float64 `json:"durationSeconds,omitempty"`
+	SizeReductionPercent float64 `json:"sizeReductionPercent,omitempty"`
+}
+
+// ETADuration returns the ETA as a duration when available.
+func (e *EncodingStatus) ETADuration() time.Duration {
+	if e == nil || e.ETASeconds <= 0 {
+		return 0
+	}
+	return time.Duration(e.ETASeconds * float64(time.Second))
+}
+
+// FramePercent returns the current frame progress [0,1].
+func (e *EncodingStatus) FramePercent() float64 {
+	if e == nil || e.TotalFrames <= 0 || e.CurrentFrame <= 0 {
+		return 0
+	}
+	return float64(e.CurrentFrame) / float64(e.TotalFrames)
 }
 
 type EpisodeStatus struct {
