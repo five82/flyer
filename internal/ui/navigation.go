@@ -853,57 +853,11 @@ func filterNonEmpty(values ...string) []string {
 }
 
 func (vm *viewModel) refreshLogs(force bool) {
-	if vm.logMode == logSourceDaemon || vm.client == nil {
-		vm.refreshFileLogs(force)
+	if vm.client == nil {
+		vm.logView.SetText("Spindle daemon unavailable")
 		return
 	}
 	vm.refreshStreamLogs(force)
-}
-
-func (vm *viewModel) refreshFileLogs(force bool) {
-	var path string
-	switch vm.logMode {
-	case logSourceDaemon:
-		path = vm.options.DaemonLogPath
-	case logSourceItem:
-		item := vm.selectedItem()
-		if item == nil || strings.TrimSpace(item.BackgroundLogPath) == "" {
-			vm.logView.SetText("No background log for this item")
-			vm.lastLogPath = ""
-			return
-		}
-		path = item.BackgroundLogPath
-	}
-	if path == "" {
-		switch vm.logMode {
-		case logSourceItem:
-			vm.logView.SetText("No background log for this item")
-		default:
-			vm.logView.SetText("Log path not configured")
-		}
-		vm.updateLogStatus(false, path)
-		return
-	}
-	if !force && (vm.searchMode || vm.searchRegex != nil) {
-		vm.updateLogStatus(false, path)
-		return
-	}
-	if !force && path == vm.lastLogPath && time.Since(vm.lastLogSet) < 500*time.Millisecond {
-		return
-	}
-	lines, err := logtail.Read(path, maxLogLines)
-	if err != nil {
-		vm.logView.SetText(fmt.Sprintf("Error reading log: %v", err))
-		vm.lastLogPath = path
-		vm.lastLogSet = time.Now()
-		vm.updateLogStatus(false, path)
-		return
-	}
-	vm.rawLogLines = lines
-	colorizedLines := logtail.ColorizeLines(lines)
-	vm.displayLog(colorizedLines, path)
-	vm.lastLogPath = path
-	vm.lastLogSet = time.Now()
 }
 
 func (vm *viewModel) refreshStreamLogs(force bool) {
