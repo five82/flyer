@@ -159,6 +159,12 @@ func (vm *viewModel) updateDetail(row int) {
 			episodeTitleIndex[key] = ep.TitleID
 		}
 	}
+	episodes, totals := item.EpisodeSnapshot()
+	activeEpisodeIndex := vm.activeEpisodeIndex(item, episodes)
+	var focusEpisode *spindle.EpisodeStatus
+	if activeEpisodeIndex >= 0 && activeEpisodeIndex < len(episodes) {
+		focusEpisode = &episodes[activeEpisodeIndex]
+	}
 	var b strings.Builder
 	text := vm.theme.Text
 
@@ -234,6 +240,19 @@ func (vm *viewModel) updateDetail(row int) {
 	if metrics := formatEncodingMetrics(item.Encoding); metrics != "" {
 		writeRow("Metrics", fmt.Sprintf("[%s]%s[-]", text.AccentSoft, tview.Escape(metrics)))
 	}
+	if focusEpisode != nil {
+		writeSection("Episode Focus")
+		writeRow("Episode", vm.formatEpisodeFocusLine(*focusEpisode, titleLookup, episodeTitleIndex))
+		if track := vm.describeEpisodeTrackInfo(focusEpisode, titleLookup, episodeTitleIndex); track != "" {
+			writeRow("Track", track)
+		}
+		if files := vm.describeEpisodeFileStates(focusEpisode); files != "" {
+			writeRow("Files", files)
+		}
+		if subs := vm.describeEpisodeSubtitleInfo(focusEpisode); subs != "" {
+			writeRow("Subs", subs)
+		}
+	}
 
 	// Issues block
 	if strings.TrimSpace(item.ErrorMessage) != "" {
@@ -297,13 +316,13 @@ func (vm *viewModel) updateDetail(row int) {
 		b.WriteString(vm.formatMetadata(metaRows))
 	}
 
-	if episodes, totals := item.EpisodeSnapshot(); len(episodes) > 0 {
+	if len(episodes) > 0 {
 		writeSection("Episodes")
 		if summary := vm.describeEpisodeTotals(totals); summary != "" {
 			fmt.Fprintf(&b, "  [%s]%s[-]\n", text.Muted, summary)
 		}
-		for _, ep := range episodes {
-			b.WriteString(vm.formatEpisodeLine(ep, titleLookup, episodeTitleIndex))
+		for idx, ep := range episodes {
+			b.WriteString(vm.formatEpisodeLine(ep, titleLookup, episodeTitleIndex, idx == activeEpisodeIndex))
 		}
 	}
 
@@ -509,9 +528,22 @@ func reorderMetadata(rows []metadataRow) []metadataRow {
 	return append(titleRows, others...)
 }
 
-func (vm *viewModel) formatEpisodeLine(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) string {
+func (vm *viewModel) formatEpisodeLine(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int, active bool) string {
 	label := formatEpisodeLabel(ep)
 	stage := vm.episodeStageChip(ep.Stage)
+	title, extra, _ := vm.describeEpisode(ep, titles, keyLookup)
+	marker := fmt.Sprintf("[%s]·[-]", vm.theme.Text.Faint)
+	if active {
+		marker = fmt.Sprintf("[%s::b]>[-]", vm.theme.Text.Accent)
+	}
+	extraText := ""
+	if len(extra) > 0 {
+		extraText = fmt.Sprintf(" [%s](%s)[-]", vm.theme.Text.Faint, strings.Join(extra, " · "))
+	}
+	return fmt.Sprintf("%s [%s]%s[-] %s [%s]%s[-]%s\n", marker, vm.theme.Text.Muted, label, stage, vm.theme.Text.Primary, tview.Escape(title), extraText)
+}
+
+func (vm *viewModel) describeEpisode(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) (string, []string, *spindle.RipSpecTitleInfo) {
 	title := strings.TrimSpace(ep.Title)
 	if title == "" {
 		title = strings.TrimSpace(ep.OutputBasename)
@@ -535,7 +567,8 @@ func (vm *viewModel) formatEpisodeLine(ep spindle.EpisodeStatus, titles map[int]
 	if base := strings.TrimSpace(ep.OutputBasename); base != "" && !strings.EqualFold(base, title) {
 		extra = append(extra, base)
 	}
-	if info := vm.lookupRipTitleInfo(ep, titles, keyLookup); info != nil {
+	info := vm.lookupRipTitleInfo(ep, titles, keyLookup)
+	if info != nil {
 		titleID := ep.SourceTitleID
 		if titleID <= 0 {
 			titleID = info.ID
@@ -548,11 +581,239 @@ func (vm *viewModel) formatEpisodeLine(ep spindle.EpisodeStatus, titles map[int]
 			extra = append(extra, fmt.Sprintf("mpls %s", playlist))
 		}
 	}
+	return title, extra, info
+}
+
+func (vm *viewModel) formatEpisodeFocusLine(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) string {
+	badgeColor := vm.colorForStatus(stageToStatus(ep.Stage))
+	badge := vm.badge("NOW", badgeColor)
+	stage := vm.episodeStageChip(ep.Stage)
+	title, extras, _ := vm.describeEpisode(ep, titles, keyLookup)
 	extraText := ""
-	if len(extra) > 0 {
-		extraText = fmt.Sprintf(" [%s](%s)[-]", vm.theme.Text.Faint, strings.Join(extra, " · "))
+	if len(extras) > 0 {
+		extraText = fmt.Sprintf(" [%s](%s)[-]", vm.theme.Text.Faint, strings.Join(extras, " · "))
 	}
-	return fmt.Sprintf("  [%s]%s[-] %s [%s]%s[-]%s\n", vm.theme.Text.Muted, label, stage, vm.theme.Text.Primary, tview.Escape(title), extraText)
+	return fmt.Sprintf("%s %s [%s]%s[-]%s", badge, stage, vm.theme.Text.Primary, tview.Escape(title), extraText)
+}
+
+func (vm *viewModel) describeEpisodeTrackInfo(ep *spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) string {
+	info := vm.lookupRipTitleInfo(*ep, titles, keyLookup)
+	parts := []string{}
+	if info != nil {
+		if info.ID > 0 {
+			parts = append(parts, fmt.Sprintf("Title %02d", info.ID))
+		}
+		if name := strings.TrimSpace(info.Name); name != "" {
+			parts = append(parts, name)
+		}
+		if playlist := strings.TrimSpace(info.Playlist); playlist != "" {
+			parts = append(parts, fmt.Sprintf("mpls %s", playlist))
+		}
+		if info.Duration > 0 {
+			parts = append(parts, formatRuntime(info.Duration))
+		}
+	}
+	if info == nil && ep.SourceTitleID > 0 {
+		parts = append(parts, fmt.Sprintf("Title %02d", ep.SourceTitleID))
+	}
+	if source := strings.TrimSpace(ep.SourceTitle); source != "" {
+		parts = append(parts, source)
+	}
+	if key := strings.TrimSpace(ep.Key); key != "" {
+		parts = append(parts, strings.ToUpper(key))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	for i := range parts {
+		parts[i] = fmt.Sprintf("[%s]%s[-]", vm.theme.Text.Accent, tview.Escape(parts[i]))
+	}
+	return strings.Join(parts, "  ")
+}
+
+func (vm *viewModel) describeEpisodeFileStates(ep *spindle.EpisodeStatus) string {
+	type fileState struct {
+		label  string
+		path   string
+		status string
+	}
+	states := []fileState{
+		{"Rip", ep.RippedPath, "ripped"},
+		{"Encode", ep.EncodedPath, "encoded"},
+		{"Final", ep.FinalPath, "completed"},
+	}
+	chips := make([]string, 0, len(states))
+	for _, st := range states {
+		text := "pending"
+		color := vm.theme.StatusColor("pending")
+		if strings.TrimSpace(st.path) != "" {
+			text = filepath.Base(strings.TrimSpace(st.path))
+			if text == "." || text == "" {
+				text = "ready"
+			}
+			color = vm.theme.StatusColor(st.status)
+		}
+		chips = append(chips, fmt.Sprintf("[%s:%s] %s %s [-:-]", vm.theme.Base.Background, color, st.label, tview.Escape(text)))
+	}
+	return strings.Join(chips, " ")
+}
+
+func (vm *viewModel) describeEpisodeSubtitleInfo(ep *spindle.EpisodeStatus) string {
+	source := strings.TrimSpace(ep.SubtitleSource)
+	lang := strings.TrimSpace(ep.SubtitleLanguage)
+	if source == "" && lang == "" {
+		return ""
+	}
+	parts := []string{}
+	if lang != "" {
+		parts = append(parts, strings.ToUpper(lang))
+	}
+	if source != "" {
+		parts = append(parts, titleCase(source))
+	}
+	return fmt.Sprintf("[%s]%s[-]", vm.theme.Text.AccentSoft, strings.Join(parts, " · "))
+}
+
+func (vm *viewModel) activeEpisodeIndex(item spindle.QueueItem, episodes []spindle.EpisodeStatus) int {
+	if len(episodes) == 0 {
+		return -1
+	}
+	target := normalizeEpisodeStage(item.Progress.Stage)
+	if target == "" {
+		target = normalizeEpisodeStage(item.Status)
+	}
+	if idx := firstEpisodeWithStage(episodes, target); idx >= 0 {
+		return idx
+	}
+	bestIdx := -1
+	bestRank := 1 << 30
+	for i, ep := range episodes {
+		stage := normalizeEpisodeStage(ep.Stage)
+		if stage == "" {
+			stage = "planned"
+		}
+		if stage == "completed" || (stage == "final" && strings.TrimSpace(ep.FinalPath) != "") {
+			continue
+		}
+		rank := episodeStageRank(stage)
+		if rank < bestRank {
+			bestRank = rank
+			bestIdx = i
+		}
+	}
+	if bestIdx >= 0 {
+		return bestIdx
+	}
+	return 0
+}
+
+func firstEpisodeWithStage(episodes []spindle.EpisodeStatus, stage string) int {
+	normalized := normalizeEpisodeStage(stage)
+	if normalized == "" {
+		return -1
+	}
+	for i, ep := range episodes {
+		if normalizeEpisodeStage(ep.Stage) == normalized {
+			return i
+		}
+	}
+	return -1
+}
+
+func normalizeEpisodeStage(stage string) string {
+	s := strings.ToLower(strings.TrimSpace(stage))
+	if s == "" {
+		return ""
+	}
+	switch s {
+	case "pending", "planned", "queued":
+		return "planned"
+	case "identify", "identifying":
+		return "identifying"
+	case "rip", "ripping":
+		return "ripping"
+	case "ripped", "rip_complete":
+		return "ripped"
+	case "encode", "encoding":
+		return "encoding"
+	case "encoded", "encode_complete":
+		return "encoded"
+	case "subtitle", "subtitles", "subtitling":
+		return "subtitling"
+	case "subtitled":
+		return "subtitled"
+	case "organizing", "organize":
+		return "organizing"
+	case "final", "finalizing":
+		return "final"
+	case "completed", "complete":
+		return "completed"
+	case "review":
+		return "review"
+	case "failed", "fail", "error":
+		return "failed"
+	}
+	switch {
+	case strings.Contains(s, "identif"):
+		return "identifying"
+	case strings.Contains(s, "rip"):
+		if strings.Contains(s, "done") || strings.Contains(s, "complete") {
+			return "ripped"
+		}
+		return "ripping"
+	case strings.Contains(s, "encode"):
+		if strings.Contains(s, "done") || strings.Contains(s, "complete") {
+			return "encoded"
+		}
+		return "encoding"
+	case strings.Contains(s, "subtit"):
+		if strings.Contains(s, "done") || strings.Contains(s, "ready") {
+			return "subtitled"
+		}
+		return "subtitling"
+	case strings.Contains(s, "organ"):
+		return "organizing"
+	case strings.Contains(s, "final"):
+		return "final"
+	case strings.Contains(s, "review"):
+		return "review"
+	case strings.Contains(s, "fail") || strings.Contains(s, "error"):
+		return "failed"
+	}
+	return s
+}
+
+func episodeStageRank(stage string) int {
+	switch normalizeEpisodeStage(stage) {
+	case "planned":
+		return 1
+	case "identifying":
+		return 2
+	case "ripping":
+		return 3
+	case "ripped":
+		return 4
+	case "encoding":
+		return 5
+	case "encoded":
+		return 6
+	case "subtitling":
+		return 7
+	case "subtitled":
+		return 8
+	case "organizing":
+		return 9
+	case "final":
+		return 10
+	case "completed":
+		return 11
+	case "review":
+		return 12
+	case "failed":
+		return 13
+	default:
+		return 99
+	}
 }
 
 func (vm *viewModel) lookupRipTitleInfo(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) *spindle.RipSpecTitleInfo {
