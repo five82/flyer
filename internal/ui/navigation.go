@@ -165,6 +165,10 @@ func (vm *viewModel) updateDetail(row int) {
 	if activeEpisodeIndex >= 0 && activeEpisodeIndex < len(episodes) {
 		focusEpisode = &episodes[activeEpisodeIndex]
 	}
+	currentStage := normalizeEpisodeStage(item.Progress.Stage)
+	if currentStage == "" {
+		currentStage = normalizeEpisodeStage(item.Status)
+	}
 	var b strings.Builder
 	text := vm.theme.Text
 
@@ -241,8 +245,9 @@ func (vm *viewModel) updateDetail(row int) {
 		writeRow("Metrics", fmt.Sprintf("[%s]%s[-]", text.AccentSoft, tview.Escape(metrics)))
 	}
 	if focusEpisode != nil {
+		focusStage := vm.effectiveEpisodeStage(*focusEpisode, currentStage)
 		writeSection("Episode Focus")
-		writeRow("Episode", vm.formatEpisodeFocusLine(*focusEpisode, titleLookup, episodeTitleIndex))
+		writeRow("Episode", vm.formatEpisodeFocusLine(*focusEpisode, titleLookup, episodeTitleIndex, focusStage))
 		if track := vm.describeEpisodeTrackInfo(focusEpisode, titleLookup, episodeTitleIndex); track != "" {
 			writeRow("Track", track)
 		}
@@ -322,7 +327,12 @@ func (vm *viewModel) updateDetail(row int) {
 			fmt.Fprintf(&b, "  [%s]%s[-]\n", text.Muted, summary)
 		}
 		for idx, ep := range episodes {
-			b.WriteString(vm.formatEpisodeLine(ep, titleLookup, episodeTitleIndex, idx == activeEpisodeIndex))
+			fallbackStage := ""
+			if idx == activeEpisodeIndex {
+				fallbackStage = currentStage
+			}
+			stage := vm.effectiveEpisodeStage(ep, fallbackStage)
+			b.WriteString(vm.formatEpisodeLine(ep, titleLookup, episodeTitleIndex, idx == activeEpisodeIndex, stage))
 		}
 	}
 
@@ -528,9 +538,9 @@ func reorderMetadata(rows []metadataRow) []metadataRow {
 	return append(titleRows, others...)
 }
 
-func (vm *viewModel) formatEpisodeLine(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int, active bool) string {
+func (vm *viewModel) formatEpisodeLine(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int, active bool, stageName string) string {
 	label := formatEpisodeLabel(ep)
-	stage := vm.episodeStageChip(ep.Stage)
+	stage := vm.episodeStageChip(stageName)
 	title, extra, _ := vm.describeEpisode(ep, titles, keyLookup)
 	marker := fmt.Sprintf("[%s]·[-]", vm.theme.Text.Faint)
 	if active {
@@ -584,10 +594,10 @@ func (vm *viewModel) describeEpisode(ep spindle.EpisodeStatus, titles map[int]*s
 	return title, extra, info
 }
 
-func (vm *viewModel) formatEpisodeFocusLine(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) string {
-	badgeColor := vm.colorForStatus(stageToStatus(ep.Stage))
+func (vm *viewModel) formatEpisodeFocusLine(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int, stageName string) string {
+	badgeColor := vm.colorForStatus(stageToStatus(stageName))
 	badge := vm.badge("NOW", badgeColor)
-	stage := vm.episodeStageChip(ep.Stage)
+	stage := vm.episodeStageChip(stageName)
 	title, extras, _ := vm.describeEpisode(ep, titles, keyLookup)
 	extraText := ""
 	if len(extras) > 0 {
@@ -672,6 +682,38 @@ func (vm *viewModel) describeEpisodeSubtitleInfo(ep *spindle.EpisodeStatus) stri
 		parts = append(parts, titleCase(source))
 	}
 	return fmt.Sprintf("[%s]%s[-]", vm.theme.Text.AccentSoft, strings.Join(parts, " · "))
+}
+
+func (vm *viewModel) effectiveEpisodeStage(ep spindle.EpisodeStatus, fallback string) string {
+	stage := normalizeEpisodeStage(ep.Stage)
+	if stage == "" || stage == "planned" {
+		if derived := deriveEpisodeStageFromArtifacts(ep); derived != "" {
+			stage = derived
+		}
+	}
+	if stage == "" || stage == "planned" {
+		fallback = normalizeEpisodeStage(fallback)
+		if fallback != "" {
+			stage = fallback
+		}
+	}
+	if stage == "" {
+		stage = "planned"
+	}
+	return stage
+}
+
+func deriveEpisodeStageFromArtifacts(ep spindle.EpisodeStatus) string {
+	switch {
+	case strings.TrimSpace(ep.FinalPath) != "":
+		return "final"
+	case strings.TrimSpace(ep.EncodedPath) != "":
+		return "encoded"
+	case strings.TrimSpace(ep.RippedPath) != "":
+		return "ripped"
+	default:
+		return ""
+	}
 }
 
 func (vm *viewModel) activeEpisodeIndex(item spindle.QueueItem, episodes []spindle.EpisodeStatus) int {
