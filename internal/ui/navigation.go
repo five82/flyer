@@ -853,40 +853,75 @@ func filterNonEmpty(values ...string) []string {
 }
 
 func (vm *viewModel) refreshLogs(force bool) {
-	if vm.client == nil {
+	if vm.logMode == logSourceDaemon && vm.client == nil {
 		vm.logView.SetText("Spindle daemon unavailable")
 		return
 	}
-	vm.refreshStreamLogs(force)
-}
-
-func (vm *viewModel) refreshStreamLogs(force bool) {
 	if vm.searchMode || vm.searchRegex != nil {
-		vm.updateLogStatus(false, "api stream")
+		vm.updateLogStatus(false, vm.lastLogPath)
 		return
 	}
 	if !force && time.Since(vm.lastLogSet) < 400*time.Millisecond {
 		return
 	}
 
+	if vm.logMode == logSourceItem {
+		vm.refreshItemLogs()
+		return
+	}
+
+	vm.refreshStreamLogs()
+}
+
+func (vm *viewModel) refreshItemLogs() {
+	item := vm.selectedItem()
+	if item == nil {
+		vm.logView.SetText("Select an item to view logs")
+		vm.rawLogLines = nil
+		vm.updateLogStatus(false, "")
+		return
+	}
+	path := strings.TrimSpace(item.BackgroundLogPath)
+	if path == "" {
+		vm.logView.SetText("No background log for this item")
+		vm.rawLogLines = nil
+		vm.updateLogStatus(false, "")
+		return
+	}
+
+	lines, err := logtail.Read(path, maxLogLines)
+	if err != nil {
+		vm.logView.SetText(fmt.Sprintf("Error reading background log: %v", err))
+		vm.updateLogStatus(false, path)
+		return
+	}
+	if len(lines) == 0 {
+		vm.logView.SetText("No background log entries available")
+		vm.rawLogLines = nil
+		vm.updateLogStatus(false, path)
+		return
+	}
+
+	vm.rawLogLines = append([]string(nil), lines...)
+	colorized := logtail.ColorizeLines(lines)
+	vm.displayLog(colorized, path)
+	vm.lastLogSet = time.Now()
+}
+
+func (vm *viewModel) refreshStreamLogs() {
 	key := vm.streamLogKey()
 	if key == "" {
-		vm.logView.SetText("No background log for this item")
+		vm.logView.SetText("No log source available")
 		vm.updateLogStatus(false, "")
 		vm.rawLogLines = nil
 		vm.lastLogKey = ""
 		return
 	}
 
-	itemID := vm.currentItemID()
 	req := spindle.LogQuery{
 		Since: vm.logCursor[key],
 		Limit: maxLogLines,
 	}
-	if vm.logMode == logSourceItem && itemID > 0 {
-		req.ItemID = itemID
-	}
-
 	ctx := vm.ctx
 	if ctx == nil {
 		ctx = context.Background()
@@ -992,6 +1027,7 @@ func (vm *viewModel) currentItemID() int64 {
 
 // updateLogStatus refreshes the footer line without clobbering active search info.
 func (vm *viewModel) updateLogStatus(active bool, path string) {
+	vm.lastLogPath = path
 	if vm.searchMode || vm.searchRegex != nil {
 		// search status owns the bar
 		return
