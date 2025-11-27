@@ -228,6 +228,9 @@ func (vm *viewModel) updateDetail(row int) {
 	if stageMsg != "" {
 		writeRow("Note", fmt.Sprintf("[%s]%s[-]", text.Muted, tview.Escape(stageMsg)))
 	}
+	if preset := item.DraptoPresetLabel(); preset != "" {
+		writeRow("Preset", fmt.Sprintf("[%s]%s[-]", text.AccentSoft, tview.Escape(preset)))
+	}
 	if metrics := formatEncodingMetrics(item.Encoding); metrics != "" {
 		writeRow("Metrics", fmt.Sprintf("[%s]%s[-]", text.AccentSoft, tview.Escape(metrics)))
 	}
