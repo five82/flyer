@@ -245,7 +245,7 @@ func (vm *viewModel) updateDetail(row int) {
 		writeRow("Metrics", fmt.Sprintf("[%s]%s[-]", text.AccentSoft, tview.Escape(metrics)))
 	}
 	if focusEpisode != nil {
-		focusStage := vm.effectiveEpisodeStage(*focusEpisode, currentStage)
+		focusStage := vm.episodeStage(*focusEpisode, currentStage)
 		writeSection("Episode Focus")
 		writeRow("Episode", vm.formatEpisodeFocusLine(*focusEpisode, titleLookup, episodeTitleIndex, focusStage))
 		if track := vm.describeEpisodeTrackInfo(focusEpisode, titleLookup, episodeTitleIndex); track != "" {
@@ -327,11 +327,7 @@ func (vm *viewModel) updateDetail(row int) {
 			fmt.Fprintf(&b, "  [%s]%s[-]\n", text.Muted, summary)
 		}
 		for idx, ep := range episodes {
-			fallbackStage := ""
-			if idx == activeEpisodeIndex {
-				fallbackStage = currentStage
-			}
-			stage := vm.effectiveEpisodeStage(ep, fallbackStage)
+			stage := vm.episodeStage(ep, currentStage)
 			b.WriteString(vm.formatEpisodeLine(ep, titleLookup, episodeTitleIndex, idx == activeEpisodeIndex, stage))
 		}
 	}
@@ -684,36 +680,15 @@ func (vm *viewModel) describeEpisodeSubtitleInfo(ep *spindle.EpisodeStatus) stri
 	return fmt.Sprintf("[%s]%s[-]", vm.theme.Text.AccentSoft, strings.Join(parts, " · "))
 }
 
-func (vm *viewModel) effectiveEpisodeStage(ep spindle.EpisodeStatus, fallback string) string {
+func (vm *viewModel) episodeStage(ep spindle.EpisodeStatus, fallback string) string {
 	stage := normalizeEpisodeStage(ep.Stage)
-	if stage == "" || stage == "planned" {
-		if derived := deriveEpisodeStageFromArtifacts(ep); derived != "" {
-			stage = derived
-		}
-	}
-	if stage == "" || stage == "planned" {
-		fallback = normalizeEpisodeStage(fallback)
-		if fallback != "" {
-			stage = fallback
-		}
+	if stage == "" {
+		stage = normalizeEpisodeStage(fallback)
 	}
 	if stage == "" {
 		stage = "planned"
 	}
 	return stage
-}
-
-func deriveEpisodeStageFromArtifacts(ep spindle.EpisodeStatus) string {
-	switch {
-	case strings.TrimSpace(ep.FinalPath) != "":
-		return "final"
-	case strings.TrimSpace(ep.EncodedPath) != "":
-		return "encoded"
-	case strings.TrimSpace(ep.RippedPath) != "":
-		return "ripped"
-	default:
-		return ""
-	}
 }
 
 func (vm *viewModel) activeEpisodeIndex(item spindle.QueueItem, episodes []spindle.EpisodeStatus) int {
