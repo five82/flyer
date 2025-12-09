@@ -49,11 +49,9 @@ var (
 
 const detailLinePrefix = "    -"
 
-// Read returns at most maxLines from the end of the file at path.
+// Read returns the last maxLines from the file at path.
+// If maxLines <= 0, the entire file is read.
 func Read(path string, maxLines int) ([]string, error) {
-	if maxLines <= 0 {
-		return nil, nil
-	}
 	file, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -63,30 +61,41 @@ func Read(path string, maxLines int) ([]string, error) {
 	}
 	defer file.Close()
 
-	ring := make([]string, maxLines)
+	var lines []string
 	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	count := 0
-	idx := 0
-	for scanner.Scan() {
-		ring[idx] = scanner.Text()
-		idx = (idx + 1) % maxLines
-		if count < maxLines {
-			count++
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024) // Increase max token size to 10MB to be safe
+
+	if maxLines <= 0 {
+		// Read all lines
+		for scanner.Scan() {
+			lines = append(lines, scanner.Text())
+		}
+	} else {
+		// Ring buffer for tailing
+		ring := make([]string, maxLines)
+		count := 0
+		idx := 0
+		for scanner.Scan() {
+			ring[idx] = scanner.Text()
+			idx = (idx + 1) % maxLines
+			if count < maxLines {
+				count++
+			}
+		}
+		lines = make([]string, count)
+		if count == maxLines {
+			for i := 0; i < count; i++ {
+				lines[i] = ring[(idx+i)%maxLines]
+			}
+		} else {
+			copy(lines, ring[:count])
 		}
 	}
+
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("read log: %w", err)
 	}
 
-	lines := make([]string, count)
-	if count == maxLines {
-		for i := 0; i < count; i++ {
-			lines[i] = ring[(idx+i)%maxLines]
-		}
-	} else {
-		copy(lines, ring[:count])
-	}
 	return lines, nil
 }
 

@@ -25,7 +25,7 @@ type Options struct {
 }
 
 const (
-	maxLogLines       = 400
+	maxLogLines       = 1000000
 	defaultUIInterval = time.Second
 )
 

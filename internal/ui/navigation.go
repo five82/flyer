@@ -430,7 +430,7 @@ func (vm *viewModel) refreshItemLogs() {
 		return
 	}
 
-	lines, err := logtail.Read(path, maxLogLines)
+	lines, err := logtail.Read(path, 0)
 	if err != nil {
 		vm.logView.SetText(fmt.Sprintf("Error reading background log: %v", err))
 		vm.updateLogStatus(false, path)
@@ -486,9 +486,6 @@ func (vm *viewModel) refreshStreamLogs() {
 	newLines := formatLogEvents(batch.Events)
 	if len(newLines) > 0 {
 		vm.rawLogLines = append(vm.rawLogLines, newLines...)
-		if len(vm.rawLogLines) > maxLogLines {
-			vm.rawLogLines = vm.rawLogLines[len(vm.rawLogLines)-maxLogLines:]
-		}
 	}
 	if len(vm.rawLogLines) == 0 {
 		vm.logView.SetText("No log entries available")

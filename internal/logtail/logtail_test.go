@@ -1,8 +1,76 @@
 package logtail
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 )
+
+func TestRead(t *testing.T) {
+	// Create a temporary log file
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "test.log")
+
+	// Write 10 lines of content
+	var content strings.Builder
+	var expectedAll []string
+	for i := 1; i <= 10; i++ {
+		line := fmt.Sprintf("Line %d", i)
+		content.WriteString(line + "\n")
+		expectedAll = append(expectedAll, line)
+	}
+
+	if err := os.WriteFile(logPath, []byte(content.String()), 0644); err != nil {
+		t.Fatalf("failed to create test log file: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		maxLines int
+		expected []string
+	}{
+		{
+			name:     "read all (0)",
+			maxLines: 0,
+			expected: expectedAll,
+		},
+		{
+			name:     "read all (negative)",
+			maxLines: -1,
+			expected: expectedAll,
+		},
+		{
+			name:     "read partial (5)",
+			maxLines: 5,
+			expected: expectedAll[5:],
+		},
+		{
+			name:     "read exactly all (10)",
+			maxLines: 10,
+			expected: expectedAll,
+		},
+		{
+			name:     "read more than exists (20)",
+			maxLines: 20,
+			expected: expectedAll,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Read(logPath, tt.maxLines)
+			if err != nil {
+				t.Fatalf("Read() error = %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.expected) {
+				t.Errorf("Read() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
 
 func TestColorizeLine(t *testing.T) {
 	tests := []struct {
