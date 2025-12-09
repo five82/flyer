@@ -260,7 +260,11 @@ func (vm *viewModel) laneChip(lane string) string {
 }
 
 func (vm *viewModel) badge(text, color string) string {
-	return fmt.Sprintf("[%s:%s] %s [-:-]", vm.theme.Base.Background, color, text)
+	fg := vm.theme.Base.Surface
+	if strings.TrimSpace(fg) == "" {
+		fg = vm.theme.Base.Background
+	}
+	return fmt.Sprintf("[%s:%s] %s [-:-]", color, fg, text)
 }
 
 func (vm *viewModel) episodeProgressBadge(item spindle.QueueItem) string {

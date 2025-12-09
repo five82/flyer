@@ -137,6 +137,12 @@ func Run(ctx context.Context, opts Options) error {
 			case 'i':
 				model.showItemLogsView()
 				return nil
+			case 't':
+				model.toggleEpisodesCollapsed()
+				return nil
+			case 'P':
+				model.togglePathDetail()
+				return nil
 			case 'h':
 				model.showHelp()
 				return nil

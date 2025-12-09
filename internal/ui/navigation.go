@@ -77,6 +77,17 @@ func (vm *viewModel) focusDetailPane() {
 	vm.setCommandBar("detail")
 }
 
+func (vm *viewModel) currentCommandView() string {
+	switch vm.app.GetFocus() {
+	case vm.detail:
+		return "detail"
+	case vm.logView:
+		return "logs"
+	default:
+		return "queue"
+	}
+}
+
 func (vm *viewModel) toggleFocus() {
 	focus := vm.app.GetFocus()
 	switch focus {
@@ -123,6 +134,40 @@ func (vm *viewModel) cycleFilter() {
 	vm.setCommandBar(vm.currentView)
 }
 
+func (vm *viewModel) episodesCollapsed(itemID int64) bool {
+	value, ok := vm.episodeCollapsed[itemID]
+	if !ok {
+		return true
+	}
+	return value
+}
+
+func (vm *viewModel) pathsExpanded(itemID int64) bool {
+	return vm.pathExpanded[itemID]
+}
+
+func (vm *viewModel) toggleEpisodesCollapsed() {
+	item := vm.selectedItem()
+	if item == nil {
+		return
+	}
+	vm.episodeCollapsed[item.ID] = !vm.episodesCollapsed(item.ID)
+	row, _ := vm.table.GetSelection()
+	vm.updateDetail(row)
+	vm.setCommandBar(vm.currentCommandView())
+}
+
+func (vm *viewModel) togglePathDetail() {
+	item := vm.selectedItem()
+	if item == nil {
+		return
+	}
+	vm.pathExpanded[item.ID] = !vm.pathsExpanded(item.ID)
+	row, _ := vm.table.GetSelection()
+	vm.updateDetail(row)
+	vm.setCommandBar(vm.currentCommandView())
+}
+
 func (vm *viewModel) returnToCurrentView() {
 	switch vm.currentView {
 	case "queue":
@@ -137,6 +182,7 @@ func (vm *viewModel) returnToCurrentView() {
 func (vm *viewModel) updateDetail(row int) {
 	if row <= 0 || row-1 >= len(vm.displayItems) {
 		vm.detail.SetText(fmt.Sprintf("[%s]Select an item to view details[-]", vm.theme.Text.Faint))
+		vm.lastDetailID = 0
 		return
 	}
 	item := vm.displayItems[row-1]
@@ -169,6 +215,7 @@ func (vm *viewModel) updateDetail(row int) {
 	if currentStage == "" {
 		currentStage = normalizeEpisodeStage(item.Status)
 	}
+	mediaType := detectMediaType(item.Metadata)
 	var b strings.Builder
 	text := vm.theme.Text
 
@@ -176,6 +223,7 @@ func (vm *viewModel) updateDetail(row int) {
 		if b.Len() > 0 {
 			b.WriteString("\n")
 		}
+		fmt.Fprintf(&b, "[%s]%s[-]\n", text.Faint, strings.Repeat("─", 38))
 		fmt.Fprintf(&b, "[%s::b]%s[-:-:-]\n", text.Secondary, title)
 	}
 
@@ -186,28 +234,20 @@ func (vm *viewModel) updateDetail(row int) {
 		fmt.Fprintf(&b, "[%s]%s[-] %s\n", text.Muted, padLabel(label), value)
 	}
 
-	formatPath := func(path string) string {
-		path = strings.TrimSpace(path)
-		if path == "" {
-			return ""
-		}
-		base := filepath.Base(path)
-		if base == "." || base == "/" || base == "" {
-			base = path
-		}
-		return fmt.Sprintf("[%s]%s[-]", text.Accent, tview.Escape(base))
-	}
-
-	formatLogPath := func(path, missing string) string {
+	formatLogRow := func(path, missing string) string {
 		path = strings.TrimSpace(path)
 		if path == "" {
 			return fmt.Sprintf("[%s]%s[-]", text.Faint, missing)
 		}
-		return fmt.Sprintf("[%s]%s[-]", text.Accent, tview.Escape(truncateMiddle(path, 72)))
+		display := fmt.Sprintf("[%s]%s[-]", text.Accent, tview.Escape(truncateMiddle(path, 64)))
+		if preview := vm.logPreview(path); preview != "" {
+			display = fmt.Sprintf("%s [%s]›[-] [%s]%s[-]", display, text.Faint, text.Muted, tview.Escape(preview))
+		}
+		return display
 	}
 
 	// Title and chips
-	writeSection("Summary")
+	writeSection("Header")
 	title := composeTitle(item)
 	titleValue := fmt.Sprintf("[%s]%s[-]", text.Heading, tview.Escape(title))
 	if item.NeedsReview {
@@ -224,29 +264,25 @@ func (vm *viewModel) updateDetail(row int) {
 	statusLine := fmt.Sprintf("%s  %s  [%s]ID %d[-]  [%s]%3.0f%%[-]", status, lane, text.Faint, item.ID, text.Muted, percent)
 	writeRow("Status", statusLine)
 
-	// Progress block
-	writeSection("Progress")
-	stage := strings.TrimSpace(item.Progress.Stage)
-	if stage == "" {
-		stage = titleCase(item.Status)
-	}
-	writeRow("Stage", fmt.Sprintf("[%s]%s[-]", text.Accent, tview.Escape(stage)))
-
-	progress := vm.detailProgressBar(item)
-	stageMsg := strings.TrimSpace(item.Progress.Message)
-	writeRow("Progress", progress)
-	if stageMsg != "" {
-		writeRow("Note", fmt.Sprintf("[%s]%s[-]", text.Muted, tview.Escape(stageMsg)))
+	// Chip strip (at-a-glance)
+	chips := []string{}
+	if epBadge := vm.episodeProgressBadge(item); epBadge != "" {
+		chips = append(chips, epBadge)
 	}
 	if preset := item.DraptoPresetLabel(); preset != "" {
-		writeRow("Preset", fmt.Sprintf("[%s]%s[-]", text.AccentSoft, tview.Escape(preset)))
+		chips = append(chips, vm.badge(strings.ToUpper(preset), vm.theme.StatusColor("pending")))
 	}
 	if metrics := formatEncodingMetrics(item.Encoding); metrics != "" {
-		writeRow("Metrics", fmt.Sprintf("[%s]%s[-]", text.AccentSoft, tview.Escape(metrics)))
+		chips = append(chips, fmt.Sprintf("[%s]%s[-]", text.Secondary, tview.Escape(metrics)))
 	}
+	if len(chips) > 0 {
+		writeRow("Chips", strings.Join(chips, "  "))
+	}
+
+	// Focus card
 	if focusEpisode != nil {
+		writeSection("Now")
 		focusStage := vm.episodeStage(*focusEpisode, currentStage)
-		writeSection("Episode Focus")
 		writeRow("Episode", vm.formatEpisodeFocusLine(*focusEpisode, titleLookup, episodeTitleIndex, focusStage))
 		if track := vm.describeEpisodeTrackInfo(focusEpisode, titleLookup, episodeTitleIndex); track != "" {
 			writeRow("Track", track)
@@ -257,30 +293,62 @@ func (vm *viewModel) updateDetail(row int) {
 		if subs := vm.describeEpisodeSubtitleInfo(focusEpisode); subs != "" {
 			writeRow("Subs", subs)
 		}
+	} else if mediaType == "movie" || len(episodes) == 0 {
+		if cut := vm.movieFocusLine(summary, currentStage); cut != "" {
+			writeSection("Now")
+			writeRow("Cut", cut)
+			if files := vm.describeItemFileStates(item, currentStage); files != "" {
+				writeRow("Files", files)
+			}
+		}
+	}
+
+	// Progress block
+	writeSection("Progress")
+	stage := strings.TrimSpace(item.Progress.Stage)
+	if stage == "" {
+		stage = titleCase(item.Status)
+	}
+	writeRow("Stage", fmt.Sprintf("[%s]%s[-]", text.Accent, tview.Escape(stage)))
+	writeRow("Flow", vm.detailProgressBar(item))
+	if stageMsg := strings.TrimSpace(item.Progress.Message); stageMsg != "" {
+		writeRow("Note", fmt.Sprintf("[%s]%s[-]", text.Muted, tview.Escape(stageMsg)))
 	}
 
 	// Issues block
-	if strings.TrimSpace(item.ErrorMessage) != "" {
-		writeSection("Issues")
-		writeRow("Error", fmt.Sprintf("[%s]%s[-]", text.Danger, tview.Escape(item.ErrorMessage)))
+	addNote := func(label, value string) {
+		if strings.TrimSpace(value) == "" {
+			return
+		}
+		writeRow(label, value)
+	}
+	notesOpen := false
+	openNotes := func() {
+		if !notesOpen {
+			writeSection("Notes")
+			notesOpen = true
+		}
 	}
 	if item.NeedsReview {
-		if strings.TrimSpace(item.ErrorMessage) == "" {
-			writeSection("Issues")
-		}
+		openNotes()
 		reason := strings.TrimSpace(item.ReviewReason)
 		if reason == "" {
 			reason = "Needs operator review"
 		}
-		writeRow("Review", fmt.Sprintf("[%s]%s[-]", text.Warning, tview.Escape(reason)))
+		addNote("Review", fmt.Sprintf("[%s]%s[-]", text.Warning, tview.Escape(reason)))
+	}
+	if strings.TrimSpace(item.ErrorMessage) != "" {
+		openNotes()
+		addNote("Error", fmt.Sprintf("[%s]%s[-]", text.Danger, tview.Escape(item.ErrorMessage)))
 	}
 
 	// Artifacts
-	writeSection("Artifacts")
-	writeRow("Source", formatPath(item.SourcePath))
-	writeRow("Rip", formatPath(item.RippedFile))
-	writeRow("Encoded", formatPath(item.EncodedFile))
-	writeRow("Final", formatPath(item.FinalFile))
+	writeSection("Files")
+	filesExpanded := vm.pathsExpanded(item.ID)
+	writeRow("Paths", vm.describeItemFileSummary(item, currentStage, filesExpanded))
+	if !filesExpanded {
+		writeRow("Hint", fmt.Sprintf("[%s]Press P to show full paths[-]", text.Faint))
+	}
 
 	if enc := item.Encoding; hasEncodingDetails(enc) {
 		writeSection("Encoding")
@@ -312,8 +380,8 @@ func (vm *viewModel) updateDetail(row int) {
 
 	// Logs
 	writeSection("Logs")
-	writeRow("Daemon", formatLogPath(vm.options.DaemonLogPath, "not configured"))
-	writeRow("Item", formatLogPath(item.BackgroundLogPath, "not available for this item"))
+	writeRow("Daemon", formatLogRow(vm.options.DaemonLogPath, "not configured"))
+	writeRow("Item", formatLogRow(item.BackgroundLogPath, "not available for this item"))
 
 	// Metadata
 	if metaRows := summarizeMetadata(item.Metadata); len(metaRows) > 0 {
@@ -321,14 +389,28 @@ func (vm *viewModel) updateDetail(row int) {
 		b.WriteString(vm.formatMetadata(metaRows))
 	}
 
-	if len(episodes) > 0 {
+	if len(episodes) > 0 && mediaType != "movie" {
 		writeSection("Episodes")
-		if summary := vm.describeEpisodeTotals(totals); summary != "" {
+		if !item.EpisodesSynced {
+			writeRow("Sync", fmt.Sprintf("[%s]Episode numbers not confirmed[-]", vm.theme.Text.Warning))
+		}
+		if summary := vm.describeEpisodeTotals(episodes, totals); summary != "" {
 			fmt.Fprintf(&b, "  [%s]%s[-]\n", text.Muted, summary)
 		}
-		for idx, ep := range episodes {
-			stage := vm.episodeStage(ep, currentStage)
-			b.WriteString(vm.formatEpisodeLine(ep, titleLookup, episodeTitleIndex, idx == activeEpisodeIndex, stage))
+		collapsed := vm.episodesCollapsed(item.ID)
+		if collapsed {
+			hidden := len(episodes)
+			label := "episodes hidden"
+			if hidden == 1 {
+				label = "episode hidden"
+			}
+			fmt.Fprintf(&b, "  [%s]%d %s[-] [%s](press t to expand)[-]\n", text.Faint, hidden, label, text.Muted)
+		} else {
+			for idx, ep := range episodes {
+				stage := vm.episodeStage(ep, currentStage)
+				b.WriteString(vm.formatEpisodeLine(ep, titleLookup, episodeTitleIndex, idx == activeEpisodeIndex, stage))
+			}
+			fmt.Fprintf(&b, "  [%s]Press t to collapse[-]\n", text.Faint)
 		}
 	}
 
@@ -375,7 +457,13 @@ func (vm *viewModel) updateDetail(row int) {
 		}
 	}
 
-	vm.detail.SetText(b.String())
+	content := b.String()
+	// Capture previous scroll position to avoid fighting user scrolling.
+	prevRow, prevCol := vm.detail.GetScrollOffset()
+	itemChanged := vm.lastDetailID != item.ID
+	vm.detail.SetText(content)
+	vm.scrollDetailToActive(content, itemChanged, prevRow, prevCol)
+	vm.lastDetailID = item.ID
 }
 
 func clampPercent(p float64) float64 {
@@ -493,6 +581,24 @@ func (vm *viewModel) formatMetadata(rows []metadataRow) string {
 	return b.String()
 }
 
+func detectMediaType(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return ""
+	}
+	for _, key := range []string{"media_type", "type"} {
+		if v, ok := obj[key]; ok {
+			if s, ok := v.(string); ok {
+				return strings.ToLower(strings.TrimSpace(s))
+			}
+		}
+	}
+	return ""
+}
+
 func prettifyMetaKey(key string) string {
 	key = strings.TrimSpace(key)
 	key = strings.ReplaceAll(key, "_", " ")
@@ -538,15 +644,31 @@ func (vm *viewModel) formatEpisodeLine(ep spindle.EpisodeStatus, titles map[int]
 	label := formatEpisodeLabel(ep)
 	stage := vm.episodeStageChip(stageName)
 	title, extra, _ := vm.describeEpisode(ep, titles, keyLookup)
+
 	marker := fmt.Sprintf("[%s]·[-]", vm.theme.Text.Faint)
 	if active {
 		marker = fmt.Sprintf("[%s::b]>[-]", vm.theme.Text.Accent)
+	}
+
+	// Trim extras to a short set
+	if len(extra) > 2 {
+		extra = extra[:2]
 	}
 	extraText := ""
 	if len(extra) > 0 {
 		extraText = fmt.Sprintf(" [%s](%s)[-]", vm.theme.Text.Faint, strings.Join(extra, " · "))
 	}
-	return fmt.Sprintf("%s [%s]%s[-] %s [%s]%s[-]%s\n", marker, vm.theme.Text.Muted, label, stage, vm.theme.Text.Primary, tview.Escape(title), extraText)
+
+	titleText := fmt.Sprintf("[%s]%s[-]", vm.theme.Text.Primary, tview.Escape(title))
+	if active {
+		titleText = fmt.Sprintf("[%s::b]%s[-:-:-]", vm.theme.Text.Primary, tview.Escape(title))
+	}
+
+	files := vm.describeEpisodeFileSummary(&ep, stageName)
+	if files != "" {
+		extraText = strings.TrimSpace(extraText + "  " + files)
+	}
+	return fmt.Sprintf("%s [%s]%s[-] %s %s%s\n", marker, vm.theme.Text.Muted, label, stage, titleText, extraText)
 }
 
 func (vm *viewModel) describeEpisode(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) (string, []string, *spindle.RipSpecTitleInfo) {
@@ -591,15 +713,16 @@ func (vm *viewModel) describeEpisode(ep spindle.EpisodeStatus, titles map[int]*s
 }
 
 func (vm *viewModel) formatEpisodeFocusLine(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int, stageName string) string {
-	badgeColor := vm.colorForStatus(stageToStatus(stageName))
-	badge := vm.badge("NOW", badgeColor)
 	stage := vm.episodeStageChip(stageName)
 	title, extras, _ := vm.describeEpisode(ep, titles, keyLookup)
+	if len(extras) > 2 {
+		extras = extras[:2]
+	}
 	extraText := ""
 	if len(extras) > 0 {
 		extraText = fmt.Sprintf(" [%s](%s)[-]", vm.theme.Text.Faint, strings.Join(extras, " · "))
 	}
-	return fmt.Sprintf("%s %s [%s]%s[-]%s", badge, stage, vm.theme.Text.Primary, tview.Escape(title), extraText)
+	return fmt.Sprintf("%s [%s::b]%s[-:-:-]%s", stage, vm.theme.Text.Primary, tview.Escape(title), extraText)
 }
 
 func (vm *viewModel) describeEpisodeTrackInfo(ep *spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) string {
@@ -637,31 +760,152 @@ func (vm *viewModel) describeEpisodeTrackInfo(ep *spindle.EpisodeStatus, titles 
 	return strings.Join(parts, "  ")
 }
 
+func (vm *viewModel) movieFocusLine(summary spindle.RipSpecSummary, stage string) string {
+	if len(summary.Titles) == 0 {
+		return ""
+	}
+	var main *spindle.RipSpecTitleInfo
+	for i := range summary.Titles {
+		t := summary.Titles[i]
+		if main == nil || t.Duration > main.Duration {
+			main = &t
+		}
+	}
+	if main == nil {
+		return ""
+	}
+	name := strings.TrimSpace(main.Name)
+	if name == "" {
+		name = fmt.Sprintf("Title %02d", main.ID)
+	}
+	bits := []string{}
+	if main.Duration > 0 {
+		bits = append(bits, formatRuntime(main.Duration))
+	}
+	if playlist := strings.TrimSpace(main.Playlist); playlist != "" {
+		bits = append(bits, fmt.Sprintf("mpls %s", playlist))
+	}
+	stageChip := vm.episodeStageChip(stage)
+	extra := ""
+	if len(bits) > 0 {
+		extra = fmt.Sprintf(" [%s](%s)[-]", vm.theme.Text.Faint, strings.Join(bits, " · "))
+	}
+	return fmt.Sprintf("%s [%s::b]%s[-:-:-]%s", stageChip, vm.theme.Text.Primary, tview.Escape(name), extra)
+}
+
 func (vm *viewModel) describeEpisodeFileStates(ep *spindle.EpisodeStatus) string {
 	type fileState struct {
-		label  string
-		path   string
-		status string
+		label string
+		path  string
+		stage string
 	}
 	states := []fileState{
-		{"Rip", ep.RippedPath, "ripped"},
-		{"Encode", ep.EncodedPath, "encoded"},
-		{"Final", ep.FinalPath, "completed"},
+		{"Rip", ep.RippedPath, "ripping"},
+		{"Encode", ep.EncodedPath, "encoding"},
+		{"Final", ep.FinalPath, "final"},
 	}
-	chips := make([]string, 0, len(states))
+	parts := make([]string, 0, len(states))
 	for _, st := range states {
-		text := "pending"
-		color := vm.theme.StatusColor("pending")
-		if strings.TrimSpace(st.path) != "" {
-			text = filepath.Base(strings.TrimSpace(st.path))
-			if text == "." || text == "" {
-				text = "ready"
+		value := "–"
+		switch strings.TrimSpace(st.path) {
+		case "":
+			if normalizeEpisodeStage(ep.Stage) == st.stage {
+				value = "…"
 			}
-			color = vm.theme.StatusColor(st.status)
+		default:
+			value = "✓"
 		}
-		chips = append(chips, fmt.Sprintf("[%s:%s] %s %s [-:-]", vm.theme.Base.Background, color, st.label, tview.Escape(text)))
+		parts = append(parts, fmt.Sprintf("%s %s", st.label, value))
 	}
-	return strings.Join(chips, " ")
+	return fmt.Sprintf("[%s]%s[-]", vm.theme.Text.Faint, strings.Join(parts, "  "))
+}
+
+// describeEpisodeFileSummary is a lighter version for list rows.
+func (vm *viewModel) describeEpisodeFileSummary(ep *spindle.EpisodeStatus, stageName string) string {
+	stage := normalizeEpisodeStage(stageName)
+	if stage == "" {
+		stage = normalizeEpisodeStage(ep.Stage)
+	}
+	flags := []string{}
+	add := func(label, path, matchStage string) {
+		value := "–"
+		if strings.TrimSpace(path) != "" {
+			value = "✓"
+		} else if matchStage == stage {
+			value = "…"
+		}
+		flags = append(flags, fmt.Sprintf("%s %s", label, value))
+	}
+	add("Rip", ep.RippedPath, "ripping")
+	add("Enc", ep.EncodedPath, "encoding")
+	add("Fin", ep.FinalPath, "final")
+	return fmt.Sprintf("[%s]%s[-]", vm.theme.Text.Faint, strings.Join(flags, "  "))
+}
+
+func (vm *viewModel) describeItemFileStates(item spindle.QueueItem, stage string) string {
+	current := normalizeEpisodeStage(stage)
+	entries := []struct {
+		label  string
+		path   string
+		expect string
+	}{
+		{"Rip", item.RippedFile, "ripping"},
+		{"Enc", item.EncodedFile, "encoding"},
+		{"Fin", item.FinalFile, "final"},
+	}
+	parts := make([]string, 0, len(entries))
+	for _, e := range entries {
+		path := strings.TrimSpace(e.path)
+		symbol := "–"
+		if path != "" {
+			symbol = "✓"
+		} else if e.expect != "" && current == e.expect {
+			symbol = "…"
+		}
+		parts = append(parts, fmt.Sprintf("%s %s", e.label, symbol))
+	}
+	return fmt.Sprintf("[%s]%s[-]", vm.theme.Text.Faint, strings.Join(parts, "  "))
+}
+
+func (vm *viewModel) describeItemFileSummary(item spindle.QueueItem, stage string, expanded bool) string {
+	current := normalizeEpisodeStage(stage)
+	entries := []struct {
+		label  string
+		path   string
+		expect string
+	}{
+		{"Src", item.SourcePath, ""},
+		{"Rip", item.RippedFile, "ripping"},
+		{"Enc", item.EncodedFile, "encoding"},
+		{"Fin", item.FinalFile, "final"},
+	}
+	parts := make([]string, 0, len(entries))
+	for _, e := range entries {
+		path := strings.TrimSpace(e.path)
+		symbol := "–"
+		if path != "" {
+			symbol = "✓"
+		} else if e.expect != "" && current == e.expect {
+			symbol = "…"
+		}
+		name := "pending"
+		if symbol == "…" {
+			name = "in flight"
+		}
+		if path != "" {
+			if expanded {
+				name = truncateMiddle(path, 72)
+			} else {
+				base := filepath.Base(path)
+				if base == "" || base == "." || base == "/" {
+					base = truncateMiddle(path, 28)
+				}
+				name = truncate(base, 28)
+			}
+		}
+		parts = append(parts, fmt.Sprintf("[%s]%s %s[-] [%s]%s[-]", vm.theme.Text.Muted, e.label, symbol, vm.theme.Text.Accent, tview.Escape(name)))
+	}
+	return strings.Join(parts, "  ")
 }
 
 func (vm *viewModel) describeEpisodeSubtitleInfo(ep *spindle.EpisodeStatus) string {
@@ -852,21 +1096,53 @@ func (vm *viewModel) lookupRipTitleInfo(ep spindle.EpisodeStatus, titles map[int
 	return nil
 }
 
-func (vm *viewModel) describeEpisodeTotals(totals spindle.EpisodeTotals) string {
+func (vm *viewModel) describeEpisodeTotals(list []spindle.EpisodeStatus, totals spindle.EpisodeTotals) string {
 	if totals.Planned == 0 {
 		return ""
 	}
+	stageCounts := map[string]int{}
+	for _, ep := range list {
+		stage := normalizeEpisodeStage(ep.Stage)
+		stageCounts[stage]++
+	}
+	inFlight := 0
+	for stage, count := range stageCounts {
+		switch stage {
+		case "final", "completed":
+			// not in flight
+		default:
+			if stage != "" {
+				inFlight += count
+			}
+		}
+	}
 	parts := []string{fmt.Sprintf("%d planned", totals.Planned)}
-	if totals.Ripped > 0 {
-		parts = append(parts, fmt.Sprintf("%d ripped", totals.Ripped))
+	if r := chooseMax(totals.Ripped, stageCounts["ripping"]+stageCounts["ripped"]); r > 0 {
+		parts = append(parts, fmt.Sprintf("%d ripping", r))
 	}
-	if totals.Encoded > 0 {
-		parts = append(parts, fmt.Sprintf("%d encoded", totals.Encoded))
+	if e := chooseMax(totals.Encoded, stageCounts["encoding"]+stageCounts["encoded"]); e > 0 {
+		parts = append(parts, fmt.Sprintf("%d encoding", e))
 	}
-	if totals.Final > 0 {
-		parts = append(parts, fmt.Sprintf("%d final", totals.Final))
+	if s := stageCounts["subtitling"] + stageCounts["subtitled"]; s > 0 {
+		parts = append(parts, fmt.Sprintf("%d subtitling", s))
+	}
+	if o := stageCounts["organizing"]; o > 0 {
+		parts = append(parts, fmt.Sprintf("%d organizing", o))
+	}
+	if f := chooseMax(totals.Final, stageCounts["final"]+stageCounts["completed"]); f > 0 {
+		parts = append(parts, fmt.Sprintf("%d final", f))
+	}
+	if inFlight > 0 {
+		parts = append(parts, fmt.Sprintf("%d in flight", inFlight))
 	}
 	return strings.Join(parts, " · ")
+}
+
+func chooseMax(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func (vm *viewModel) episodeStageChip(stage string) string {
@@ -928,17 +1204,102 @@ func formatRuntime(seconds int) string {
 }
 
 func (vm *viewModel) detailProgressBar(item spindle.QueueItem) string {
+	stage := normalizeEpisodeStage(item.Progress.Stage)
+	if stage == "" {
+		stage = normalizeEpisodeStage(item.Status)
+	}
 	percent := clampPercent(item.Progress.Percent)
-	const barWidth = 24
-	filled := int(percent/100*barWidth + 0.5)
-	if filled < 0 {
-		filled = 0
+	line := fmt.Sprintf("%s  [%s]%3.0f%%[-]", vm.detailStageLadder(stage), vm.theme.Text.Muted, percent)
+	if eta := vm.estimateETA(item); eta != "" {
+		line += fmt.Sprintf("  [%s]%s[-]", vm.theme.Text.Secondary, eta)
 	}
-	if filled > barWidth {
-		filled = barWidth
+	return line
+}
+
+func (vm *viewModel) detailStageLadder(stage string) string {
+	current := normalizeEpisodeStage(stage)
+	currentRank := episodeStageRank(current)
+	if currentRank == 0 || currentRank >= 99 {
+		currentRank = episodeStageRank("planned")
 	}
-	bar := "[" + strings.Repeat("=", filled) + strings.Repeat(".", barWidth-filled) + "]"
-	return fmt.Sprintf("[%s]%s[-] %3.0f%%", vm.colorForStatus(item.Status), bar, percent)
+	stages := []struct {
+		name  string
+		label string
+	}{
+		{"planned", "PLAN"},
+		{"ripping", "RIP"},
+		{"encoding", "ENC"},
+		{"final", "FINAL"},
+		{"completed", "DONE"},
+	}
+	parts := make([]string, 0, len(stages))
+	for _, st := range stages {
+		rank := episodeStageRank(st.name)
+		symbol := "·"
+		color := vm.theme.Text.Faint
+		switch {
+		case currentRank > rank:
+			symbol = "✓"
+			color = vm.theme.Text.Success
+		case currentRank == rank:
+			symbol = "…"
+			color = vm.colorForStatus(stageToStatus(st.name))
+		}
+		parts = append(parts, fmt.Sprintf("[%s]%s %s[-]", color, symbol, st.label))
+	}
+	return strings.Join(parts, "  ")
+}
+
+func (vm *viewModel) estimateETA(item spindle.QueueItem) string {
+	stage := normalizeEpisodeStage(item.Progress.Stage)
+	if stage == "" {
+		stage = normalizeEpisodeStage(item.Status)
+	}
+	if enc := item.Encoding; enc != nil && (stage == "encoding" || stage == "encoded" || stage == "final") {
+		if eta := enc.ETADuration(); eta > 0 {
+			return "ETA " + humanizeDuration(eta)
+		}
+	}
+	percent := clampPercent(item.Progress.Percent)
+	if percent <= 1 || percent >= 100 {
+		return ""
+	}
+	start := item.ParsedCreatedAt()
+	if start.IsZero() {
+		return ""
+	}
+	elapsed := time.Since(start)
+	if elapsed <= 0 {
+		return ""
+	}
+	remaining := time.Duration(float64(elapsed) * (100 - percent) / percent)
+	if remaining <= 0 {
+		return ""
+	}
+	return "ETA " + humanizeDuration(remaining)
+}
+
+func (vm *viewModel) scrollDetailToActive(content string, itemChanged bool, prevRow, prevCol int) {
+	if vm.detail == nil {
+		return
+	}
+	// Only auto-scroll when selection changed or user was at the top.
+	if !itemChanged && (prevRow > 0 || prevCol > 0) {
+		return
+	}
+	lines := strings.Split(content, "\n")
+	target := -1
+	for i, line := range lines {
+		if strings.Contains(line, "NOW") {
+			target = i
+			break
+		}
+	}
+	if target >= 0 {
+		vm.detail.ScrollTo(target, 0)
+	} else {
+		vm.detail.ScrollToBeginning()
+	}
 }
 
 func formatEncodingMetrics(enc *spindle.EncodingStatus) string {
@@ -1243,6 +1604,35 @@ func (vm *viewModel) refreshStreamLogs() {
 func (vm *viewModel) displayLog(colorizedLines []string, path string) {
 	vm.logView.SetText(strings.Join(colorizedLines, "\n"))
 	vm.updateLogStatus(true, path)
+}
+
+func (vm *viewModel) logPreview(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	entry := vm.logPreviewCache[path]
+	if entry.text != "" && time.Since(entry.readAt) < 3*time.Second {
+		return entry.text
+	}
+	lines, err := logtail.Read(path, 12)
+	if err != nil || len(lines) == 0 {
+		entry.text = ""
+		entry.readAt = time.Now()
+		vm.logPreviewCache[path] = entry
+		return ""
+	}
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		entry.text = truncate(line, 120)
+		break
+	}
+	entry.readAt = time.Now()
+	vm.logPreviewCache[path] = entry
+	return entry.text
 }
 
 func (vm *viewModel) selectedItem() *spindle.QueueItem {

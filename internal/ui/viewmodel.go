@@ -13,6 +13,11 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
+type logPreviewEntry struct {
+	text   string
+	readAt time.Time
+}
+
 type viewModel struct {
 	// Core application state
 	app     *tview.Application
@@ -54,6 +59,7 @@ type viewModel struct {
 	displayItems []spindle.QueueItem
 	currentView  string // "queue", "detail", "logs"
 	filterMode   queueFilter
+	lastDetailID int64
 
 	// Log viewing state
 	logMode          logSource
@@ -68,6 +74,11 @@ type viewModel struct {
 	problemEntries   []problemEntry
 	problemShortcuts map[rune]int64
 	problemsOpen     bool
+
+	// Detail view state
+	episodeCollapsed map[int64]bool
+	pathExpanded     map[int64]bool
+	logPreviewCache  map[string]logPreviewEntry
 }
 
 func newViewModel(app *tview.Application, opts Options) *viewModel {
@@ -174,6 +185,9 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		problemShortcuts: map[rune]int64{},
 		theme:            theme,
 		logCursor:        make(map[string]uint64),
+		episodeCollapsed: map[int64]bool{},
+		pathExpanded:     map[int64]bool{},
+		logPreviewCache:  map[string]logPreviewEntry{},
 	}
 
 	vm.table.SetSelectedFunc(func(row, column int) {
@@ -298,10 +312,22 @@ func (vm *viewModel) setCommandBar(view string) {
 			{"<e>", "Exit"},
 		}
 	case "detail":
+		episodesLabel := "Episodes: expand"
+		pathLabel := "Paths: full"
+		if item := vm.selectedItem(); item != nil {
+			if !vm.episodesCollapsed(item.ID) {
+				episodesLabel = "Episodes: collapse"
+			}
+			if vm.pathsExpanded(item.ID) {
+				pathLabel = "Paths: compact"
+			}
+		}
 		commands = []cmd{
 			{"<q>", "Queue"},
 			{"<l>", "Logs"},
 			{"<i>", "Item Log"},
+			{"<t>", episodesLabel},
+			{"<P>", pathLabel},
 			{"<Tab>", "Switch Pane"},
 			{"<f>", "Filter"},
 			{"<p>", "Problems"},
