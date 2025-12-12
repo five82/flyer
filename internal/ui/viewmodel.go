@@ -35,6 +35,7 @@ type viewModel struct {
 
 	// Main content views
 	mainContent    *tview.Pages
+	queuePane      *tview.Flex
 	table          *tview.Table
 	detail         *tview.TextView
 	logView        *tview.TextView
@@ -43,6 +44,7 @@ type viewModel struct {
 	problemDrawer  *tview.Flex
 	mainLayout     *tview.Flex
 	theme          Theme
+	queueLayout    string // "wide" or "stacked"
 
 	// Search state
 	searchInput        *tview.InputField
@@ -52,6 +54,12 @@ type viewModel struct {
 	currentSearchMatch int
 	lastSearchPattern  string
 	searchMode         bool
+
+	// Queue search state
+	queueSearchInput   *tview.InputField
+	queueSearchRegex   *regexp.Regexp
+	queueSearchPattern string
+	queueSearchMode    bool
 
 	// Data and navigation state
 	items        []spindle.QueueItem
@@ -64,9 +72,11 @@ type viewModel struct {
 	logMode          logSource
 	lastLogPath      string
 	lastLogKey       string
+	lastLogFileKey   string
 	lastLogSet       time.Time
 	rawLogLines      []string
 	logCursor        map[string]uint64
+	logFileCursor    map[string]int64
 	currentItemLogID int64
 
 	// Problems drawer state
@@ -179,6 +189,7 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		problemShortcuts: map[rune]int64{},
 		theme:            theme,
 		logCursor:        make(map[string]uint64),
+		logFileCursor:    make(map[string]int64),
 		episodeCollapsed: map[int64]bool{},
 		pathExpanded:     map[int64]bool{},
 		logPreviewCache:  map[string]logPreviewEntry{},
@@ -244,15 +255,13 @@ func (vm *viewModel) buildMainLayout() tview.Primitive {
 
 	// Create main content pages for different views
 	// Dual-pane queue view: table + detail side-by-side
-	queuePane := tview.NewFlex().SetDirection(tview.FlexColumn)
-	queuePane.SetBackgroundColor(vm.theme.SurfaceColor())
-	queuePane.
-		AddItem(vm.table, 0, 40, true).
-		AddItem(vm.detail, 0, 60, false)
+	vm.queuePane = tview.NewFlex().SetDirection(tview.FlexColumn)
+	vm.queuePane.SetBackgroundColor(vm.theme.SurfaceColor())
+	vm.applyQueueLayout("wide")
 
 	vm.mainContent = tview.NewPages()
 	vm.mainContent.SetBackgroundColor(vm.theme.SurfaceColor())
-	vm.mainContent.AddPage("queue", queuePane, true, true)
+	vm.mainContent.AddPage("queue", vm.queuePane, true, true)
 	vm.mainContent.AddPage("logs", logContainer, true, false)
 
 	// Main layout: header + content + optional problems drawer
@@ -267,6 +276,51 @@ func (vm *viewModel) buildMainLayout() tview.Primitive {
 	vm.mainLayout.ResizeItem(vm.problemDrawer, 0, 0)
 
 	return vm.mainLayout
+}
+
+func (vm *viewModel) applyQueueLayout(layout string) {
+	if vm.queuePane == nil {
+		return
+	}
+	switch layout {
+	case "stacked":
+		vm.queuePane.Clear()
+		vm.queuePane.SetDirection(tview.FlexRow)
+		vm.queuePane.AddItem(vm.table, 0, 3, true)
+		vm.queuePane.AddItem(vm.detail, 0, 2, false)
+		vm.queueLayout = "stacked"
+	default:
+		vm.queuePane.Clear()
+		vm.queuePane.SetDirection(tview.FlexColumn)
+		vm.queuePane.AddItem(vm.table, 0, 40, true)
+		vm.queuePane.AddItem(vm.detail, 0, 60, false)
+		vm.queueLayout = "wide"
+	}
+}
+
+func (vm *viewModel) maybeUpdateQueueLayout() {
+	if vm == nil || vm.app == nil || vm.queuePane == nil {
+		return
+	}
+
+	width := 0
+	if vm.mainLayout != nil {
+		_, _, w, _ := vm.mainLayout.GetRect()
+		width = w
+	}
+	if width <= 0 {
+		_, _, w, _ := vm.queuePane.GetRect()
+		width = w
+	}
+
+	target := "wide"
+	if width > 0 && width < 120 {
+		target = "stacked"
+	}
+	if target == vm.queueLayout {
+		return
+	}
+	vm.applyQueueLayout(target)
 }
 
 func (vm *viewModel) ensureSelection() {
@@ -323,6 +377,7 @@ func (vm *viewModel) setCommandBar(view string) {
 		if compact {
 			commands = []cmd{
 				{"<Tab>", "Pane"},
+				{"</>", "Search"},
 				{"<q>", "Queue"},
 				{"<l>", "Logs"},
 				{"<p>", "Problems"},
@@ -341,6 +396,7 @@ func (vm *viewModel) setCommandBar(view string) {
 			}
 			commands = []cmd{
 				{"<Tab>", "Switch Pane"},
+				{"</>", "Search"},
 				{"<q>", "Queue"},
 				{"<l>", "Logs"},
 				{"<t>", episodesLabel},
@@ -362,6 +418,7 @@ func (vm *viewModel) setCommandBar(view string) {
 		if compact {
 			commands = []cmd{
 				{"<Tab>", "Pane"},
+				{"</>", "Search"},
 				{"<l>", "Logs"},
 				{"<f>", "Filter: " + filterLabel},
 				{"<p>", "Problems"},
@@ -370,6 +427,7 @@ func (vm *viewModel) setCommandBar(view string) {
 		} else {
 			commands = []cmd{
 				{"<Tab>", "Switch Pane"},
+				{"</>", "Search"},
 				{"<l>", "Logs"},
 				{"<i>", "Item Logs"},
 				{"<f>", "Filter: " + filterLabel},
@@ -382,6 +440,10 @@ func (vm *viewModel) setCommandBar(view string) {
 	segments := make([]string, 0, len(commands))
 	for _, cmd := range commands {
 		segments = append(segments, fmt.Sprintf("[%s]%s[-] [%s]%s[-]", vm.theme.Text.AccentSoft, cmd.key, vm.theme.Text.Faint, cmd.desc))
+	}
+	if view != "logs" && vm.queueSearchPattern != "" {
+		pattern := truncate(vm.queueSearchPattern, 18)
+		segments = append(segments, fmt.Sprintf("[%s]search[-] [%s]/%s[-]", vm.theme.Text.Faint, vm.theme.Text.Accent, tview.Escape(pattern)))
 	}
 	separator := "  •  "
 	if compact {

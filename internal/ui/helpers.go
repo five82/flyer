@@ -18,6 +18,8 @@ func (vm *viewModel) showHelp() {
 			title: "Navigation",
 			entries: []struct{ key, desc string }{
 				{"Tab", "Cycle pane focus (Queue ↔ Detail ↔ Logs)"},
+				{"j / k", "Move selection down / up (queue)"},
+				{"g / G", "Jump to top / bottom (queue)"},
 				{"ESC", "Return focus to queue"},
 				{"q", "Jump to queue table"},
 			},
@@ -33,7 +35,7 @@ func (vm *viewModel) showHelp() {
 		{
 			title: "Search & Filters",
 			entries: []struct{ key, desc string }{
-				{"/", "Start a new search"},
+				{"/", "Search (queue filter or log matches)"},
 				{"n / N", "Next / previous match"},
 				{"f", "Cycle queue filter (All → Failed → Review → Processing)"},
 				{"1-9", "Jump to matching problem shortcut"},

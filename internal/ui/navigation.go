@@ -407,14 +407,14 @@ func (vm *viewModel) refreshLogs(force bool) {
 	}
 
 	if vm.logMode == logSourceItem {
-		vm.refreshItemLogs()
+		vm.refreshItemTailLogs()
 		return
 	}
 
 	vm.refreshStreamLogs()
 }
 
-func (vm *viewModel) refreshItemLogs() {
+func (vm *viewModel) refreshItemTailLogs() {
 	item := vm.selectedItem()
 	if item == nil {
 		vm.logView.SetText("Select an item to view logs")
@@ -422,30 +422,54 @@ func (vm *viewModel) refreshItemLogs() {
 		vm.updateLogStatus(false, "")
 		return
 	}
-	path := strings.TrimSpace(item.BackgroundLogPath)
-	if path == "" {
-		vm.logView.SetText("No background log for this item")
+	if vm.client == nil {
+		vm.logView.SetText("Spindle daemon unavailable")
 		vm.rawLogLines = nil
 		vm.updateLogStatus(false, "")
 		return
 	}
 
-	lines, err := logtail.Read(path, 0)
-	if err != nil {
-		vm.logView.SetText(fmt.Sprintf("Error reading background log: %v", err))
-		vm.updateLogStatus(false, path)
-		return
-	}
-	if len(lines) == 0 {
-		vm.logView.SetText("No background log entries available")
+	key := fmt.Sprintf("item-%d", item.ID)
+	offset := vm.logFileCursor[key]
+	if key != vm.lastLogFileKey {
 		vm.rawLogLines = nil
-		vm.updateLogStatus(false, path)
+		offset = -1
+		vm.lastLogFileKey = key
+	}
+
+	ctx := vm.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	batch, err := vm.client.FetchLogTail(reqCtx, spindle.LogTailQuery{
+		ItemID: item.ID,
+		Offset: offset,
+		Limit:  logFetchLimit,
+	})
+	if err != nil {
+		vm.logView.SetText(fmt.Sprintf("Error fetching item log: %v", err))
+		vm.updateLogStatus(false, fmt.Sprintf("api tail item #%d", item.ID))
 		return
 	}
 
-	vm.rawLogLines = append([]string(nil), lines...)
-	colorized := logtail.ColorizeLines(lines)
-	vm.displayLog(colorized, path)
+	vm.logFileCursor[key] = batch.Offset
+	if len(batch.Lines) == 0 && len(vm.rawLogLines) == 0 {
+		vm.logView.SetText("No background log entries available")
+		vm.updateLogStatus(false, fmt.Sprintf("api tail item #%d", item.ID))
+		return
+	}
+	if len(batch.Lines) > 0 {
+		vm.rawLogLines = append(vm.rawLogLines, batch.Lines...)
+		if overflow := len(vm.rawLogLines) - logBufferLimit; overflow > 0 {
+			vm.rawLogLines = append([]string(nil), vm.rawLogLines[overflow:]...)
+		}
+	}
+
+	colorized := logtail.ColorizeLines(vm.rawLogLines)
+	vm.displayLog(colorized, fmt.Sprintf("api tail item #%d", item.ID))
 	vm.lastLogSet = time.Now()
 }
 
@@ -459,9 +483,10 @@ func (vm *viewModel) refreshStreamLogs() {
 		return
 	}
 
-	req := spindle.LogQuery{
-		Since: vm.logCursor[key],
-		Limit: maxLogLines,
+	since := vm.logCursor[key]
+	req := spindle.LogQuery{Since: since, Limit: logFetchLimit}
+	if since == 0 || key != vm.lastLogKey {
+		req.Tail = true
 	}
 	ctx := vm.ctx
 	if ctx == nil {
@@ -486,6 +511,9 @@ func (vm *viewModel) refreshStreamLogs() {
 	newLines := formatLogEvents(batch.Events)
 	if len(newLines) > 0 {
 		vm.rawLogLines = append(vm.rawLogLines, newLines...)
+		if overflow := len(vm.rawLogLines) - logBufferLimit; overflow > 0 {
+			vm.rawLogLines = append([]string(nil), vm.rawLogLines[overflow:]...)
+		}
 	}
 	if len(vm.rawLogLines) == 0 {
 		vm.logView.SetText("No log entries available")
@@ -493,7 +521,7 @@ func (vm *viewModel) refreshStreamLogs() {
 		return
 	}
 	colorized := logtail.ColorizeLines(vm.rawLogLines)
-	vm.displayLog(colorized, "api stream")
+	vm.displayLog(colorized, "api logs")
 	vm.lastLogSet = time.Now()
 }
 
@@ -524,7 +552,9 @@ func (vm *viewModel) resetLogBuffer() {
 	vm.rawLogLines = nil
 	vm.lastLogPath = ""
 	vm.lastLogKey = ""
+	vm.lastLogFileKey = ""
 	vm.logCursor = make(map[string]uint64)
+	vm.logFileCursor = make(map[string]int64)
 }
 
 func (vm *viewModel) streamLogKey() string {

@@ -6,28 +6,38 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/five82/flyer/internal/spindle"
 )
 
 var statusPriority = map[string]int{
-	"failed":      0,
-	"review":      1,
-	"encoding":    2,
-	"ripping":     3,
-	"ripped":      4,
-	"pending":     5,
-	"identifying": 6,
-	"identified":  7,
-	"organizing":  8,
-	"encoded":     9,
-	"completed":   10,
+	"failed":              0,
+	"review":              1,
+	"subtitling":          2,
+	"encoding":            3,
+	"organizing":          4,
+	"ripping":             5,
+	"episode_identifying": 6,
+	"identifying":         7,
+	"episode_identified":  8,
+	"ripped":              9,
+	"subtitled":           10,
+	"encoded":             11,
+	"identified":          12,
+	"pending":             13,
+	"completed":           14,
 }
 
 func (vm *viewModel) renderTable() {
 	vm.table.Clear()
+
+	_, _, width, _ := vm.table.GetInnerRect()
+	if width <= 0 {
+		width = 120
+	}
+	showProgress := width >= 120
+	showUpdated := width >= 150
 
 	columns := []struct {
 		label     string
@@ -36,9 +46,28 @@ func (vm *viewModel) renderTable() {
 	}{
 		{"!", tview.AlignCenter, 1}, // gutter marker
 		{"ID", tview.AlignRight, 1},
-		{"Title", tview.AlignLeft, 6},
-		{"Flags", tview.AlignLeft, 1},
+		{"Title", tview.AlignLeft, 7},
+		{"Stage", tview.AlignLeft, 7},
 	}
+	if showProgress {
+		columns = append(columns, struct {
+			label     string
+			align     int
+			expansion int
+		}{"%", tview.AlignLeft, 4})
+	}
+	if showUpdated {
+		columns = append(columns, struct {
+			label     string
+			align     int
+			expansion int
+		}{"Updated", tview.AlignLeft, 3})
+	}
+	columns = append(columns, struct {
+		label     string
+		align     int
+		expansion int
+	}{"Flags", tview.AlignLeft, 2})
 
 	headerBackground := vm.theme.TableHeaderBackground()
 	headerText := vm.theme.TableHeaderTextColor()
@@ -61,7 +90,19 @@ func (vm *viewModel) renderTable() {
 	case filterProcessing:
 		rows = filterItems(rows, func(it spindle.QueueItem) bool {
 			status := strings.ToLower(strings.TrimSpace(it.Status))
-			return status == "identifying" || status == "ripping" || status == "encoding" || status == "organizing"
+			return status == "identifying" ||
+				status == "ripping" ||
+				status == "episode_identifying" ||
+				status == "episode_identified" ||
+				status == "encoding" ||
+				status == "subtitling" ||
+				status == "subtitled" ||
+				status == "organizing"
+		})
+	}
+	if vm.queueSearchRegex != nil {
+		rows = filterItems(rows, func(it spindle.QueueItem) bool {
+			return vm.queueSearchRegex.MatchString(vm.queueSearchHaystack(it))
 		})
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
@@ -87,16 +128,40 @@ func (vm *viewModel) renderTable() {
 		return rows[i].ID > rows[j].ID
 	})
 
+	titleLimit := 44
+	if showUpdated {
+		titleLimit = 34
+	} else if showProgress {
+		titleLimit = 38
+	}
+	if width < 100 {
+		titleLimit = 28
+	}
+
+	now := time.Now()
 	for rowIdx, item := range rows {
 		displayRow := rowIdx + 1
-		vm.table.SetCell(displayRow, 0, vm.makeCell(vm.gutterMarker(item), tview.AlignCenter, 1))
-		vm.table.SetCell(displayRow, 1, vm.makeCell(fmt.Sprintf("[%s]%d[-]", vm.theme.Text.Muted, item.ID), tview.AlignRight, 1))
-		vm.table.SetCell(displayRow, 2, vm.makeCell(vm.formatTitle(item), tview.AlignLeft, 6))
-		vm.table.SetCell(displayRow, 3, vm.makeCell(vm.formatFlags(item), tview.AlignLeft, 1))
+		col := 0
+		vm.table.SetCell(displayRow, col, vm.makeCell(vm.gutterMarker(item), tview.AlignCenter, 1))
+		col++
+		vm.table.SetCell(displayRow, col, vm.makeCell(fmt.Sprintf("[%s]%d[-]", vm.theme.Text.Muted, item.ID), tview.AlignRight, 1))
+		col++
+		vm.table.SetCell(displayRow, col, vm.makeCell(vm.formatTitle(item, titleLimit), tview.AlignLeft, 7))
+		col++
+		vm.table.SetCell(displayRow, col, vm.makeCell(vm.formatStage(item), tview.AlignLeft, 7))
+		col++
+		if showProgress {
+			vm.table.SetCell(displayRow, col, vm.makeCell(vm.formatProgressBar(item), tview.AlignLeft, 4))
+			col++
+		}
+		if showUpdated {
+			vm.table.SetCell(displayRow, col, vm.makeCell(vm.formatUpdated(now, item), tview.AlignLeft, 3))
+			col++
+		}
+		vm.table.SetCell(displayRow, col, vm.makeCell(vm.formatFlags(item), tview.AlignLeft, 2))
 	}
 
 	vm.displayItems = rows
-	vm.table.SetSelectedStyle(tcell.StyleDefault.Background(tcell.ColorSteelBlue).Foreground(tcell.ColorWhite))
 }
 
 func (vm *viewModel) makeCell(content string, align, expansion int) *tview.TableCell {
@@ -116,9 +181,9 @@ func filterItems(items []spindle.QueueItem, keep func(spindle.QueueItem) bool) [
 	return out
 }
 
-func (vm *viewModel) formatTitle(item spindle.QueueItem) string {
+func (vm *viewModel) formatTitle(item spindle.QueueItem, limit int) string {
 	title := composeTitle(item)
-	title = truncate(title, 32)
+	title = truncate(title, limit)
 	color := vm.theme.Text.Primary
 	if item.NeedsReview {
 		color = vm.theme.Badges.Review
@@ -341,7 +406,7 @@ func determineLane(status string) string {
 	switch strings.ToLower(strings.TrimSpace(status)) {
 	case "pending", "identifying", "identified", "ripping":
 		return "foreground"
-	case "ripped", "encoding", "encoded", "organizing", "completed":
+	case "ripped", "episode_identifying", "episode_identified", "encoding", "encoded", "subtitling", "subtitled", "organizing", "completed":
 		return "background"
 	case "failed", "review":
 		return "attention"

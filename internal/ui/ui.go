@@ -25,7 +25,8 @@ type Options struct {
 }
 
 const (
-	maxLogLines       = 1000000
+	logFetchLimit     = 2000
+	logBufferLimit    = 5000
 	defaultUIInterval = time.Second
 )
 
@@ -93,6 +94,22 @@ func Run(ctx context.Context, opts Options) error {
 			return event
 		}
 
+		// Handle queue search mode
+		if model.queueSearchMode {
+			switch event.Key() {
+			case tcell.KeyEnter:
+				model.performQueueSearch()
+				return nil
+			case tcell.KeyESC:
+				model.cancelQueueSearch()
+				return nil
+			case tcell.KeyCtrlC:
+				app.Stop()
+				return nil
+			}
+			return event
+		}
+
 		// Handle search mode
 		if model.searchMode {
 			switch event.Key() {
@@ -114,6 +131,10 @@ func Run(ctx context.Context, opts Options) error {
 			app.Stop()
 			return nil
 		case tcell.KeyESC:
+			if model.queueSearchRegex != nil {
+				model.clearQueueSearch()
+				return nil
+			}
 			model.showQueueView()
 			return nil
 		case tcell.KeyTAB:
@@ -124,6 +145,8 @@ func Run(ctx context.Context, opts Options) error {
 			case '/':
 				if model.currentView == "logs" {
 					model.startSearch()
+				} else {
+					model.startQueueSearch()
 				}
 				return nil
 			case 'n':
@@ -162,6 +185,26 @@ func Run(ctx context.Context, opts Options) error {
 			case 'f':
 				model.cycleFilter()
 				return nil
+			case 'j':
+				if model.currentView == "queue" && model.app.GetFocus() == model.table {
+					model.moveQueueSelection(1)
+					return nil
+				}
+			case 'k':
+				if model.currentView == "queue" && model.app.GetFocus() == model.table {
+					model.moveQueueSelection(-1)
+					return nil
+				}
+			case 'g':
+				if model.currentView == "queue" && model.app.GetFocus() == model.table {
+					model.selectQueueTop()
+					return nil
+				}
+			case 'G':
+				if model.currentView == "queue" && model.app.GetFocus() == model.table {
+					model.selectQueueBottom()
+					return nil
+				}
 			case '1', '2', '3', '4', '5', '6', '7', '8', '9':
 				if model.jumpToProblem(event.Rune()) {
 					return nil
@@ -180,6 +223,7 @@ func Run(ctx context.Context, opts Options) error {
 }
 
 func (vm *viewModel) update(snapshot state.Snapshot) {
+	vm.maybeUpdateQueueLayout()
 	vm.renderStatus(snapshot)
 	vm.items = snapshot.Queue
 	vm.updateProblems(snapshot.Queue)
@@ -228,7 +272,14 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 	}
 	stats := snapshot.Status.Workflow.QueueStats
 	pending := stats["pending"]
-	processing := stats["identifying"] + stats["ripping"] + stats["encoding"] + stats["organizing"]
+	processing := stats["identifying"] +
+		stats["ripping"] +
+		stats["episode_identifying"] +
+		stats["episode_identified"] +
+		stats["encoding"] +
+		stats["subtitling"] +
+		stats["subtitled"] +
+		stats["organizing"]
 	failed := stats["failed"]
 	review := stats["review"]
 	completed := stats["completed"]

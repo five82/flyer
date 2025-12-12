@@ -68,8 +68,11 @@ type LogQuery struct {
 	Since     uint64
 	Limit     int
 	Follow    bool
+	Tail      bool
 	ItemID    int64
 	Component string
+	Lane      string
+	Request   string
 }
 
 // FetchLogs retrieves log events using the daemon's streaming API.
@@ -87,16 +90,62 @@ func (c *Client) FetchLogs(ctx context.Context, query LogQuery) (LogBatch, error
 	if query.Follow {
 		values.Set("follow", "1")
 	}
+	if query.Tail {
+		values.Set("tail", "1")
+	}
 	if query.ItemID > 0 {
 		values.Set("item", strconv.FormatInt(query.ItemID, 10))
 	}
 	if component := strings.TrimSpace(query.Component); component != "" {
 		values.Set("component", component)
 	}
+	if lane := strings.TrimSpace(query.Lane); lane != "" {
+		values.Set("lane", lane)
+	}
+	if req := strings.TrimSpace(query.Request); req != "" {
+		values.Set("request", req)
+	}
 	rel := &url.URL{Path: "/api/logs", RawQuery: values.Encode()}
 	var payload LogBatch
 	if err := c.doURL(ctx, http.MethodGet, rel, &payload); err != nil {
 		return LogBatch{}, err
+	}
+	return payload, nil
+}
+
+// LogTailQuery configures /api/logtail requests.
+type LogTailQuery struct {
+	ItemID int64
+	Offset int64
+	Limit  int
+	Follow bool
+	WaitMS int
+}
+
+// FetchLogTail retrieves raw log lines for an item's background log file.
+func (c *Client) FetchLogTail(ctx context.Context, query LogTailQuery) (LogTailBatch, error) {
+	if c == nil {
+		return LogTailBatch{}, fmt.Errorf("client is nil")
+	}
+	if query.ItemID <= 0 {
+		return LogTailBatch{}, fmt.Errorf("item id required")
+	}
+	values := url.Values{}
+	values.Set("item", strconv.FormatInt(query.ItemID, 10))
+	values.Set("offset", strconv.FormatInt(query.Offset, 10))
+	if query.Limit > 0 {
+		values.Set("limit", strconv.Itoa(query.Limit))
+	}
+	if query.Follow {
+		values.Set("follow", "1")
+	}
+	if query.WaitMS > 0 {
+		values.Set("wait_ms", strconv.Itoa(query.WaitMS))
+	}
+	rel := &url.URL{Path: "/api/logtail", RawQuery: values.Encode()}
+	var payload LogTailBatch
+	if err := c.doURL(ctx, http.MethodGet, rel, &payload); err != nil {
+		return LogTailBatch{}, err
 	}
 	return payload, nil
 }

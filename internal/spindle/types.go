@@ -247,6 +247,11 @@ type LogBatch struct {
 	Next   uint64     `json:"next"`
 }
 
+type LogTailBatch struct {
+	Lines  []string `json:"lines"`
+	Offset int64    `json:"offset"`
+}
+
 // RipSpecSummary describes the subset of rip spec details Flyer cares about.
 type RipSpecSummary struct {
 	ContentKey string               `json:"content_key"`
