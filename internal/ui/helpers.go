@@ -35,7 +35,7 @@ func (vm *viewModel) showHelp() {
 			entries: []struct{ key, desc string }{
 				{"/", "Start a new search"},
 				{"n / N", "Next / previous match"},
-				{"f", "Cycle queue filter (All → Active → Failed)"},
+				{"f", "Cycle queue filter (All → Failed → Review → Processing)"},
 				{"1-9", "Jump to matching problem shortcut"},
 			},
 		},
@@ -94,7 +94,7 @@ func (vm *viewModel) showHelp() {
 
 	hint := tview.NewTextView().
 		SetDynamicColors(true).
-		SetText(fmt.Sprintf("[%s]Press Esc, Enter, or q to close", vm.theme.Text.Muted)).
+		SetText(fmt.Sprintf("[%s]Press Esc or ? to close", vm.theme.Text.Muted)).
 		SetTextAlign(tview.AlignCenter)
 	hint.SetBackgroundColor(vm.theme.SurfaceColor())
 	hint.SetTextColor(mutedColor)
@@ -115,9 +115,10 @@ func (vm *viewModel) showHelp() {
 	content.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
 		case event.Key() == tcell.KeyEsc,
-			event.Key() == tcell.KeyEnter,
 			event.Key() == tcell.KeyCtrlC,
-			strings.EqualFold(string(event.Rune()), "q"):
+			event.Rune() == '?',
+			event.Rune() == 'h',
+			event.Rune() == 'H':
 			closeModal()
 			return nil
 		}
@@ -127,10 +128,10 @@ func (vm *viewModel) showHelp() {
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
 		case event.Key() == tcell.KeyEsc,
-			event.Key() == tcell.KeyEnter,
 			event.Key() == tcell.KeyCtrlC,
-			event.Rune() == 'q',
-			event.Rune() == 'Q':
+			event.Rune() == '?',
+			event.Rune() == 'h',
+			event.Rune() == 'H':
 			closeModal()
 			return nil
 		}

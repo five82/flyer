@@ -83,6 +83,16 @@ func Run(ctx context.Context, opts Options) error {
 	}()
 
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// If a modal is open, let it handle keys (otherwise the global
+		// handler swallows Esc/q and the modal can't be dismissed).
+		if model.root != nil && (model.root.HasPage("modal") || model.root.HasPage("problems-empty")) {
+			if event.Key() == tcell.KeyCtrlC {
+				app.Stop()
+				return nil
+			}
+			return event
+		}
+
 		// Handle search mode
 		if model.searchMode {
 			switch event.Key() {
@@ -189,22 +199,31 @@ func (vm *viewModel) update(snapshot state.Snapshot) {
 func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 	text := vm.theme.Text
 	surface := vm.theme.Base.Surface
+
+	_, _, width, _ := vm.statusView.GetInnerRect()
+	if width <= 0 {
+		width = 120
+	}
+	compact := width < 100
+
 	if !snapshot.HasStatus {
 		if snapshot.LastError != nil {
 			last := "soon"
 			if !snapshot.LastUpdated.IsZero() {
 				last = snapshot.LastUpdated.Format("15:04:05")
 			}
-			vm.statusView.SetText(fmt.Sprintf("[%s::b] SPINDLE UNAVAILABLE [-]  [%s::b]Retrying...[-] [%s]%s[-]\n[%s]Check %s or daemon logs",
+			path := truncateMiddle(vm.options.Config.DaemonLogPath(), 50)
+			vm.statusView.SetText(fmt.Sprintf("[%s::b]SPINDLE UNAVAILABLE[-]  [%s::b]Retrying...[-]  [%s]%s[-]  [%s]logs[-] [%s]%s[-]",
 				text.Danger,
 				text.Warning,
 				text.Muted,
 				last,
 				text.Faint,
-				tview.Escape(vm.options.Config.DaemonLogPath())))
+				text.Secondary,
+				tview.Escape(path)))
 			return
 		}
-		vm.statusView.SetText(fmt.Sprintf("[%s::b] Waiting for Spindle status...[-]", text.Warning))
+		vm.statusView.SetText(fmt.Sprintf("[%s::b]Waiting for Spindle status...[-]", text.Warning))
 		return
 	}
 	stats := snapshot.Status.Workflow.QueueStats
@@ -219,7 +238,10 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 		daemonStatus = fmt.Sprintf("[%s:%s:b] ON [-]", text.Success, surface)
 	}
 
-	makePill := func(label string, value int, color string) string {
+	makeCount := func(label string, value int, color string, always bool) string {
+		if !always && value == 0 {
+			return ""
+		}
 		valColor := text.Secondary
 		if value > 0 && color != "" {
 			valColor = color
@@ -228,27 +250,42 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 	}
 
 	parts := []string{
-		fmt.Sprintf("DAEMON %s", daemonStatus),
-		fmt.Sprintf("[%s]PID[-] [%s]%d[-]", text.Faint, text.Primary, snapshot.Status.PID),
-		makePill("PEND", pending, text.Primary),
-		makePill("PROC", processing, vm.colorForStatus("encoding")),
-		makePill("FAIL", failed, text.Danger),
-		makePill("REV", review, text.Warning),
-		makePill("DONE", completed, text.Success),
+		fmt.Sprintf("[%s]DAEMON[-] %s", text.Faint, daemonStatus),
+		fmt.Sprintf("[%s]Q[-] [%s]%d[-]", text.Faint, text.Secondary, len(snapshot.Queue)),
 	}
 
-	statusText := strings.Join(parts, "   ")
+	if compact {
+		parts = append(parts,
+			makeCount("p", pending, text.Primary, false),
+			makeCount("a", processing, vm.colorForStatus("encoding"), false),
+			makeCount("f", failed, text.Danger, true),
+			makeCount("r", review, text.Warning, true),
+			makeCount("d", completed, text.Success, false),
+		)
+	} else {
+		parts = append(parts,
+			makeCount("PEND", pending, text.Primary, false),
+			makeCount("PROC", processing, vm.colorForStatus("encoding"), false),
+			makeCount("FAIL", failed, text.Danger, true),
+			makeCount("REV", review, text.Warning, true),
+			makeCount("DONE", completed, text.Success, false),
+		)
+	}
 
-	timeInfo := fmt.Sprintf("[%s]UPDATED[-] [%s]%s[-]", text.Faint, text.Secondary, snapshot.LastUpdated.Format("15:04:05"))
+	timeLabel := "UPDATED"
+	lagLabel := "LAG"
+	if compact {
+		timeLabel = "upd"
+		lagLabel = "lag"
+	}
+	parts = append(parts, fmt.Sprintf("[%s]%s[-] [%s]%s[-]", text.Faint, timeLabel, text.Secondary, snapshot.LastUpdated.Format("15:04:05")))
 	if !vm.lastRefresh.IsZero() {
 		ago := time.Since(vm.lastRefresh)
 		if ago < 0 {
 			ago = 0
 		}
-		timeInfo += fmt.Sprintf("  [%s]LAG[-] [%s]%v[-]", text.Faint, text.Secondary, ago.Round(100*time.Millisecond))
+		parts = append(parts, fmt.Sprintf("[%s]%s[-] [%s]%s[-]", text.Faint, lagLabel, text.Secondary, humanizeDuration(ago)))
 	}
-
-	statusText += "\n" + timeInfo
 
 	var unhealthy []string
 	for _, sh := range snapshot.Status.Workflow.StageHealth {
@@ -266,10 +303,41 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 		}
 	}
 	if len(unhealthy) > 0 {
-		statusText += "   " + fmt.Sprintf("[%s::b]HEALTH[-] [%s]%s[-]", text.Danger, text.Danger, truncate(strings.Join(unhealthy, " | "), 90))
+		detail := unhealthy[0]
+		if len(unhealthy) > 1 {
+			detail = fmt.Sprintf("%s +%d more", detail, len(unhealthy)-1)
+		}
+		max := 80
+		if compact {
+			max = 40
+		}
+		detail = truncate(detail, max)
+		parts = append(parts, fmt.Sprintf("[%s::b]HEALTH[-] [%s]%s[-]", text.Danger, text.Danger, tview.Escape(detail)))
 	}
 	if snapshot.LastError != nil {
-		statusText += fmt.Sprintf("   [%s::b]ERROR[-] [%s]%v[-]", text.Danger, text.Danger, snapshot.LastError)
+		maxErr := 80
+		if compact {
+			maxErr = 40
+		}
+		errText := truncate(fmt.Sprintf("%v", snapshot.LastError), maxErr)
+		parts = append(parts, fmt.Sprintf("[%s::b]ERROR[-] [%s]%s[-]", text.Danger, text.Danger, tview.Escape(errText)))
 	}
-	vm.statusView.SetText(statusText)
+
+	sep := "  |  "
+	if compact {
+		sep = "  "
+	}
+	out := strings.Join(filterStrings(parts), sep)
+	vm.statusView.SetText(out)
+}
+
+func filterStrings(values []string) []string {
+	out := values[:0]
+	for _, v := range values {
+		if strings.TrimSpace(v) == "" {
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
 }

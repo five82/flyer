@@ -40,7 +40,6 @@ type viewModel struct {
 	logView        *tview.TextView
 	problemTable   *tview.Table
 	problemSummary *tview.TextView
-	problemBar     *tview.TextView
 	problemDrawer  *tview.Flex
 	mainLayout     *tview.Flex
 	theme          Theme
@@ -150,10 +149,6 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	problemSummary.SetTextColor(hexToColor(theme.Text.Primary))
 	problemSummary.SetWrap(false)
 
-	problemBar := tview.NewTextView().SetDynamicColors(true).SetWrap(false)
-	problemBar.SetBackgroundColor(hexToColor(theme.Problems.BarBackground))
-	problemBar.SetTextColor(hexToColor(theme.Problems.BarText))
-
 	problemDrawer := tview.NewFlex().SetDirection(tview.FlexRow)
 	problemDrawer.SetBackgroundColor(theme.SurfaceColor())
 	problemDrawer.
@@ -179,7 +174,6 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		searchStatus:     searchStatus,
 		problemTable:     problemsTable,
 		problemSummary:   problemSummary,
-		problemBar:       problemBar,
 		problemDrawer:    problemDrawer,
 		currentView:      "queue",
 		problemShortcuts: map[rune]int64{},
@@ -231,7 +225,7 @@ func (vm *viewModel) buildMainLayout() tview.Primitive {
 	headerTop := tview.NewFlex().SetDirection(tview.FlexColumn)
 	headerTop.SetBackgroundColor(vm.theme.SurfaceColor())
 	headerTop.
-		AddItem(vm.logoView, 8, 0, false).
+		AddItem(vm.logoView, 6, 0, false).
 		AddItem(nil, 1, 0, false).
 		AddItem(vm.statusView, 0, 1, false)
 
@@ -265,13 +259,11 @@ func (vm *viewModel) buildMainLayout() tview.Primitive {
 	vm.mainLayout = tview.NewFlex().SetDirection(tview.FlexRow)
 	vm.mainLayout.SetBackgroundColor(vm.theme.BackgroundColor())
 	vm.mainLayout.
-		AddItem(vm.header, 3, 0, false). // keep header to ~2-3 rows max
-		AddItem(vm.problemBar, 1, 0, false).
+		AddItem(vm.header, 2, 0, false). // keep header compact; status is one line + command bar
 		AddItem(vm.mainContent, 0, 1, true).
 		AddItem(vm.problemDrawer, 0, 0, false) // height managed dynamically
 
-	// Start with the problem surfaces hidden.
-	vm.mainLayout.ResizeItem(vm.problemBar, 0, 0)
+	// Start with the problems drawer hidden.
 	vm.mainLayout.ResizeItem(vm.problemDrawer, 0, 0)
 
 	return vm.mainLayout
@@ -298,41 +290,64 @@ func (vm *viewModel) ensureSelection() {
 
 func (vm *viewModel) setCommandBar(view string) {
 	type cmd struct{ key, desc string }
+
+	_, _, width, _ := vm.cmdBar.GetInnerRect()
+	if width <= 0 {
+		width = 120
+	}
+	compact := width < 110
+
 	commands := []cmd{}
 	switch view {
 	case "logs":
-		commands = []cmd{
-			{"<l>", "Cycle Logs"},
-			{"<Tab>", "Switch Pane"},
-			{"</>", "Search"},
-			{"<n>/<N>", "Next/Prev"},
-			{"<p>", "Problems"},
-			{"<q>", "Queue"},
-			{"<h>", "Help"},
-			{"<e>", "Exit"},
+		if compact {
+			commands = []cmd{
+				{"<Tab>", "Pane"},
+				{"</>", "Search"},
+				{"<n/N>", "Next"},
+				{"<l>", "Source"},
+				{"<q>", "Queue"},
+				{"<?>", "Help"},
+			}
+		} else {
+			commands = []cmd{
+				{"<Tab>", "Switch Pane"},
+				{"</>", "Search"},
+				{"<n>/<N>", "Next/Prev"},
+				{"<l>", "Rotate Source"},
+				{"<q>", "Queue"},
+				{"<?>", "Help"},
+			}
 		}
 	case "detail":
-		episodesLabel := "Episodes: expand"
-		pathLabel := "Paths: full"
-		if item := vm.selectedItem(); item != nil {
-			if !vm.episodesCollapsed(item.ID) {
-				episodesLabel = "Episodes: collapse"
+		if compact {
+			commands = []cmd{
+				{"<Tab>", "Pane"},
+				{"<q>", "Queue"},
+				{"<l>", "Logs"},
+				{"<p>", "Problems"},
+				{"<?>", "Help"},
 			}
-			if vm.pathsExpanded(item.ID) {
-				pathLabel = "Paths: compact"
+		} else {
+			episodesLabel := "Episodes: expand"
+			pathLabel := "Paths: full"
+			if item := vm.selectedItem(); item != nil {
+				if !vm.episodesCollapsed(item.ID) {
+					episodesLabel = "Episodes: collapse"
+				}
+				if vm.pathsExpanded(item.ID) {
+					pathLabel = "Paths: compact"
+				}
 			}
-		}
-		commands = []cmd{
-			{"<q>", "Queue"},
-			{"<l>", "Logs"},
-			{"<i>", "Item Log"},
-			{"<t>", episodesLabel},
-			{"<P>", pathLabel},
-			{"<Tab>", "Switch Pane"},
-			{"<f>", "Filter"},
-			{"<p>", "Problems"},
-			{"<h>", "Help"},
-			{"<e>", "Exit"},
+			commands = []cmd{
+				{"<Tab>", "Switch Pane"},
+				{"<q>", "Queue"},
+				{"<l>", "Logs"},
+				{"<t>", episodesLabel},
+				{"<P>", pathLabel},
+				{"<p>", "Problems"},
+				{"<?>", "Help"},
+			}
 		}
 	default:
 		filterLabel := "All"
@@ -344,14 +359,23 @@ func (vm *viewModel) setCommandBar(view string) {
 		case filterProcessing:
 			filterLabel = "Processing"
 		}
-		commands = []cmd{
-			{"<l>", "Logs"},
-			{"<i>", "Item Log"},
-			{"<f>", "Filter: " + filterLabel},
-			{"<p>", "Problems"},
-			{"<Tab>", "Switch Pane"},
-			{"<h>", "Help"},
-			{"<e>", "Exit"},
+		if compact {
+			commands = []cmd{
+				{"<Tab>", "Pane"},
+				{"<l>", "Logs"},
+				{"<f>", "Filter: " + filterLabel},
+				{"<p>", "Problems"},
+				{"<?>", "Help"},
+			}
+		} else {
+			commands = []cmd{
+				{"<Tab>", "Switch Pane"},
+				{"<l>", "Logs"},
+				{"<i>", "Item Logs"},
+				{"<f>", "Filter: " + filterLabel},
+				{"<p>", "Problems"},
+				{"<?>", "Help"},
+			}
 		}
 	}
 
@@ -359,5 +383,9 @@ func (vm *viewModel) setCommandBar(view string) {
 	for _, cmd := range commands {
 		segments = append(segments, fmt.Sprintf("[%s]%s[-] [%s]%s[-]", vm.theme.Text.AccentSoft, cmd.key, vm.theme.Text.Faint, cmd.desc))
 	}
-	vm.cmdBar.SetText(strings.Join(segments, "  •  "))
+	separator := "  •  "
+	if compact {
+		separator = "   "
+	}
+	vm.cmdBar.SetText(strings.Join(segments, separator))
 }
