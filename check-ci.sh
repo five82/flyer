@@ -63,19 +63,19 @@ if [ -z "$GOLANGCI_BINARY" ]; then
 fi
 
 if [ -z "$GOLANGCI_BINARY" ]; then
-	print_error "golangci-lint not found. Install via: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"
+	print_error "golangci-lint not found. Install via: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.5.0"
 	exit 1
 fi
 
 GOLANGCI_VERSION=$("$GOLANGCI_BINARY" version --format short 2>/dev/null || "$GOLANGCI_BINARY" version 2>/dev/null | head -n1 | sed 's/.*version //; s/ .*//')
-MIN_GOLANGCI_VERSION="2.0.0"
+MIN_GOLANGCI_VERSION="2.5.0"
 if [ -z "$GOLANGCI_VERSION" ]; then
 	print_error "Unable to determine golangci-lint version; ensure v$MIN_GOLANGCI_VERSION or newer is installed."
 	exit 1
 fi
 
 if version_lt "$GOLANGCI_VERSION" "$MIN_GOLANGCI_VERSION"; then
-	print_error "golangci-lint $MIN_GOLANGCI_VERSION or newer required (found $GOLANGCI_VERSION). Upgrade via: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"
+	print_error "golangci-lint $MIN_GOLANGCI_VERSION or newer required (found $GOLANGCI_VERSION). Upgrade via: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.5.0"
 	exit 1
 fi
 

@@ -5,6 +5,7 @@
 - Tests must not read the real home directory or Spindle config; use `t.TempDir()` plus `t.Setenv("HOME", ...)` and/or pass explicit config paths.
 - Prefer unit tests for pure helpers/formatters; avoid event-loop/terminal integration tests unless explicitly requested.
 - Do not `git commit` or `git push` unless explicitly instructed to.
+- `CLAUDE.md` and `GEMINI.md` are symlinks to this file; update `AGENTS.md` only.
 
 ## Related Repos (Local Dev Layout)
 
@@ -21,9 +22,9 @@ GitHub:
 - drapto - https://github.com/five82/drapto
 
 ## Agent Quick Start
-1. **Toolchain** – Use Go 1.25.x (run `go version`). `asdf install golang 1.25.3 && asdf local golang 1.25.3` keeps everyone on the same patch.
+1. **Toolchain** – Use Go 1.25.x (see `go.mod` + `.github/workflows/ci.yml`). If you use asdf, pick a Go 1.25 patch and pin it locally (example: `asdf install golang 1.25.5 && asdf local golang 1.25.5`).
 2. **Sync deps** – After `git pull origin main`, run `go mod tidy` to align `go.sum`.
-3. **Fast safety net** – Run `./check-ci.sh` to mirror GitHub Actions locally; for faster iterations you can still use `golangci-lint run ./...` and `go test ./internal/...` between UI touches.
+3. **Fast safety net** – Run `./check-ci.sh` to mirror GitHub Actions locally; for faster iterations you can still use `golangci-lint run ./...` and `go test ./internal/...` between UI touches. CI pins golangci-lint `v2.5.0` (install via `go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.5.0`).
 4. **Manual smoke** – `go run ./cmd/flyer` (≈2s) launches the TUI against your current Spindle config. Use `watchexec -- go run ./cmd/flyer` if you want auto-reload while iterating on UI.
 5. **Format** – Finish every session with `gofmt -w $(git ls-files '*.go')` (or run on touched files) plus `goimports -w <files>` if you have it installed.
 
