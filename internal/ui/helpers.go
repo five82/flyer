@@ -213,10 +213,14 @@ func truncateMiddle(value string, limit int) string {
 	if limit <= 3 {
 		return string(runes[:limit])
 	}
-	keep := limit - 1 // room for ellipsis rune
+	ellipsis := []rune("…/")
+	if limit <= len(ellipsis) {
+		return string(runes[:limit])
+	}
+	keep := limit - len(ellipsis)
 	prefix := keep / 2
 	suffix := keep - prefix
-	return string(runes[:prefix]) + "…/" + string(runes[len(runes)-suffix:])
+	return string(runes[:prefix]) + string(ellipsis) + string(runes[len(runes)-suffix:])
 }
 
 func formatBytes(value int64) string {
