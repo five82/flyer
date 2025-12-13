@@ -374,6 +374,9 @@ func (vm *viewModel) formatFlags(item spindle.QueueItem) string {
 	if strings.TrimSpace(item.BackgroundLogPath) != "" {
 		flags = append(flags, vm.badge("LOG", vm.theme.Badges.Log))
 	}
+	if isRipCacheHitMessage(item.Progress.Message) {
+		flags = append(flags, vm.badge("CACHE", vm.theme.Badges.Info))
+	}
 	if badge := vm.episodeProgressBadge(item); badge != "" {
 		flags = append(flags, badge)
 	}

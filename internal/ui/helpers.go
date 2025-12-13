@@ -345,3 +345,8 @@ func formatBytes(value int64) string {
 		return fmt.Sprintf("%d B", value)
 	}
 }
+
+func isRipCacheHitMessage(message string) bool {
+	msg := strings.ToLower(strings.TrimSpace(message))
+	return strings.Contains(msg, "rip cache hit")
+}

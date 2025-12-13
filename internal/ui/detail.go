@@ -87,6 +87,9 @@ func (vm *viewModel) updateDetail(row int) {
 	if strings.TrimSpace(item.ErrorMessage) != "" {
 		chips = append(chips, vm.badge("ERROR", vm.theme.Badges.Error))
 	}
+	if isRipCacheHitMessage(item.Progress.Message) {
+		chips = append(chips, vm.badge("CACHE", vm.theme.Badges.Info))
+	}
 	if preset := item.DraptoPresetLabel(); preset != "" {
 		chips = append(chips, vm.badge(strings.ToUpper(preset), vm.theme.StatusColor("pending")))
 	}

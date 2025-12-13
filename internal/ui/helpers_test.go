@@ -57,6 +57,15 @@ func TestFormatBytes(t *testing.T) {
 	}
 }
 
+func TestIsRipCacheHitMessage(t *testing.T) {
+	if !isRipCacheHitMessage("Rip cache hit; skipping MakeMKV rip") {
+		t.Fatalf("expected message to match rip cache hit")
+	}
+	if isRipCacheHitMessage("whisperx transcript cache hit") {
+		t.Fatalf("did not expect whisperx cache hit to match rip cache hit")
+	}
+}
+
 func timeSeconds(sec int64) time.Duration {
 	return time.Duration(sec) * time.Second
 }
