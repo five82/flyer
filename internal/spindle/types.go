@@ -85,6 +85,10 @@ type QueueProgress struct {
 }
 
 type EncodingStatus struct {
+	JobLabel     string              `json:"jobLabel,omitempty"`
+	EpisodeKey   string              `json:"episodeKey,omitempty"`
+	EpisodeIndex int                 `json:"episodeIndex,omitempty"`
+	EpisodeCount int                 `json:"episodeCount,omitempty"`
 	Stage        string              `json:"stage,omitempty"`
 	Message      string              `json:"message,omitempty"`
 	Percent      float64             `json:"percent,omitempty"`
@@ -192,22 +196,24 @@ func (e *EncodingStatus) FramePercent() float64 {
 }
 
 type EpisodeStatus struct {
-	Key              string  `json:"key"`
-	Season           int     `json:"season"`
-	Episode          int     `json:"episode"`
-	Title            string  `json:"title"`
-	Stage            string  `json:"stage"`
-	RuntimeSeconds   int     `json:"runtimeSeconds"`
-	SourceTitleID    int     `json:"sourceTitleId"`
-	SourceTitle      string  `json:"sourceTitle"`
-	OutputBasename   string  `json:"outputBasename"`
-	RippedPath       string  `json:"rippedPath"`
-	EncodedPath      string  `json:"encodedPath"`
-	FinalPath        string  `json:"finalPath"`
-	SubtitleSource   string  `json:"subtitleSource"`
-	SubtitleLanguage string  `json:"subtitleLanguage"`
-	MatchScore       float64 `json:"matchScore"`
-	MatchedEpisode   int     `json:"matchedEpisode"`
+	Key              string         `json:"key"`
+	Season           int            `json:"season"`
+	Episode          int            `json:"episode"`
+	Title            string         `json:"title"`
+	Stage            string         `json:"stage"`
+	Active           bool           `json:"active,omitempty"`
+	Progress         *QueueProgress `json:"progress,omitempty"`
+	RuntimeSeconds   int            `json:"runtimeSeconds"`
+	SourceTitleID    int            `json:"sourceTitleId"`
+	SourceTitle      string         `json:"sourceTitle"`
+	OutputBasename   string         `json:"outputBasename"`
+	RippedPath       string         `json:"rippedPath"`
+	EncodedPath      string         `json:"encodedPath"`
+	FinalPath        string         `json:"finalPath"`
+	SubtitleSource   string         `json:"subtitleSource"`
+	SubtitleLanguage string         `json:"subtitleLanguage"`
+	MatchScore       float64        `json:"matchScore"`
+	MatchedEpisode   int            `json:"matchedEpisode"`
 }
 
 type EpisodeTotals struct {

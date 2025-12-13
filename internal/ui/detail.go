@@ -417,6 +417,12 @@ func (vm *viewModel) activeEpisodeIndex(item spindle.QueueItem, episodes []spind
 		return -1
 	}
 
+	for i, ep := range episodes {
+		if ep.Active {
+			return i
+		}
+	}
+
 	// 1. Precise Match: File path
 	// If we are ripping, item.RippedFile should match episode.RippedPath (or basename)
 	// If we are encoding/subtitling, item.EncodedFile should match episode.EncodedPath
