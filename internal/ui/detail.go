@@ -267,17 +267,26 @@ func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.Queue
 		{"final", "Final"},
 	}
 
-	// Identify current active stage loosely for movies
 	activeStage := normalizeEpisodeStage(item.Progress.Stage)
 	if activeStage == "" {
 		activeStage = normalizeEpisodeStage(item.Status)
 	}
+	if activeStage == "" {
+		activeStage = "planned"
+	}
+	activePipelineStage := pipelineStageForStatus(activeStage)
 
+	plannedCount := totals.Planned
+	if plannedCount <= 0 {
+		plannedCount = 1
+	}
+
+	// For TV episode items, derive subtitle completion by inspecting episode stages.
 	subtitledCount := 0
 	if totals.Planned > 0 {
 		episodes, _ := item.EpisodeSnapshot()
 		for _, ep := range episodes {
-			if ep.Stage == "subtitled" || ep.Stage == "final" {
+			if normalizeEpisodeStage(ep.Stage) == "subtitled" || normalizeEpisodeStage(ep.Stage) == "final" {
 				subtitledCount++
 			}
 		}
@@ -288,50 +297,11 @@ func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.Queue
 			fmt.Fprintf(b, " [%s]→[-] ", text.Faint)
 		}
 
-		// Determine state
-		isComplete := false
-		isCurrent := false
-
-		// For TV shows, use totals
+		count := plannedCount
 		if totals.Planned > 0 {
-			// Logic:
-			// Planned: Always done if we have episodes
-			// Ripped: if Ripped == Planned
-			// Encoded: if Encoded == Planned
-			// Final: if Final == Planned
 			switch stage.id {
 			case "planned":
-				isComplete = true // implied
-			case "ripped":
-				isComplete = totals.Ripped >= totals.Planned
-			case "encoded":
-				isComplete = totals.Encoded >= totals.Planned
-			case "subtitled":
-				isComplete = subtitledCount >= totals.Planned
-			case "final":
-				isComplete = totals.Final >= totals.Planned
-			}
-			// Current if not complete but previous is complete?
-			// Simplification: just show counts for TV
-		} else {
-			// For Movies/Single items
-			// Logic depending on item.Status
-			// e.g. if item.Status == "encoding", then Planned, Ripped are complete. Encoded is current.
-			// Mapping is approximate since status strings vary.
-			s := scoreStage(activeStage)
-			myS := scoreStage(stage.id)
-			if s > myS {
-				isComplete = true
-			} else if s == myS {
-				isCurrent = true
-			}
-		}
-
-		// Enhanced visual indicators for better monitoring
-		if totals.Planned > 0 {
-			// TV Show: Show counts with enhanced formatting
-			count := totals.Planned
-			switch stage.id {
+				count = totals.Planned
 			case "ripped":
 				count = totals.Ripped
 			case "encoded":
@@ -341,63 +311,62 @@ func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.Queue
 			case "final":
 				count = totals.Final
 			}
-
-			// Enhanced color coding and formatting
-			if count == totals.Planned {
-				// Complete stage - green checkmark
-				fmt.Fprintf(b, "[%s]✓[-] [%s::b]%s[-] [%s]%d/%d[-]",
-					vm.theme.StatusColor("completed"),
-					text.Secondary, stage.label,
-					text.Muted, count, totals.Planned)
-			} else if count > 0 {
-				// Partial progress - yellow indicator
-				fmt.Fprintf(b, "[%s]◐[-] [%s]%s[-] [%s]%d/%d[-]",
-					vm.theme.Text.Warning,
-					text.Secondary, stage.label,
-					text.Muted, count, totals.Planned)
-			} else {
-				// Not started - muted
-				fmt.Fprintf(b, "[%s]○[-] [%s]%s[-] [%s]%d/%d[-]",
-					text.Muted,
-					text.Secondary, stage.label,
-					text.Muted, count, totals.Planned)
-			}
 		} else {
-			// Single Item: Show Pipeline with enhanced icons
-			color := text.Muted
-			icon := "○"
-			if isComplete {
-				color = vm.theme.StatusColor("completed")
-				icon = "●"
-			} else if isCurrent {
-				color = vm.theme.Text.AccentSoft
-				icon = "◉"
-			}
-			fmt.Fprintf(b, "[%s]%s %s[-]", color, icon, stage.label)
+			count = singleItemPipelineCount(stage.id, item, activeStage, plannedCount)
+		}
+
+		isComplete := count >= plannedCount
+		isCurrent := !isComplete && stage.id == activePipelineStage
+
+		// Unified rendering: checkmarks + current indicator for both TV and movies.
+		icon := "○"
+		color := text.Muted
+		labelColor := text.Secondary
+		labelStyle := ""
+		switch {
+		case isComplete:
+			icon = "✓"
+			color = vm.theme.StatusColor("completed")
+			labelStyle = "::b"
+		case isCurrent:
+			icon = "◉"
+			color = vm.theme.Text.AccentSoft
+			labelColor = vm.theme.Text.Accent
+			labelStyle = "::b"
+		case count > 0:
+			icon = "◐"
+			color = vm.theme.Text.Warning
+		}
+
+		if plannedCount > 1 {
+			fmt.Fprintf(b, "[%s]%s[-] [%s%s]%s[-] [%s]%d/%d[-]",
+				color, icon,
+				labelColor, labelStyle, stage.label,
+				text.Muted, count, plannedCount)
+		} else {
+			fmt.Fprintf(b, "[%s]%s[-] [%s%s]%s[-]",
+				color, icon,
+				labelColor, labelStyle, stage.label)
 		}
 	}
-}
-
-func scoreStage(stage string) int {
-	switch stage {
-	case "final", "completed", "success":
-		return 5
-	case "subtitled", "subtitling":
-		return 4
-	case "encoded", "encoding", "organizing":
-		return 3
-	case "ripped", "ripping":
-		return 2
-	case "planned", "identifying", "identified", "pending":
-		return 1
-	}
-	return 0
 }
 
 // -- Helpers moved and adapted from navigation.go --
 
 func normalizeEpisodeStage(status string) string {
 	s := strings.ToLower(strings.TrimSpace(status))
+	if s == "" {
+		return ""
+	}
+	if s == "episode_identifying" || strings.Contains(s, "episode identification") {
+		// This stage happens after ripping and before encoding; treat it as "encoding"
+		// for the simplified pipeline display.
+		return "encoding"
+	}
+	if s == "episode_identified" || strings.Contains(s, "episode identified") {
+		// Episode identification has completed; encoding is the next step.
+		return "encoding"
+	}
 	if s == "subtitled" {
 		return "subtitled"
 	}
@@ -416,10 +385,68 @@ func normalizeEpisodeStage(status string) string {
 	if strings.HasPrefix(s, "rip") {
 		return "ripping"
 	}
-	if s == "final" || s == "completed" || s == "organizing" {
+	if s == "final" || s == "completed" || s == "complete" || s == "success" || s == "done" || s == "organizing" {
 		return "final"
 	}
 	return "planned"
+}
+
+func pipelineStageForStatus(stage string) string {
+	switch stage {
+	case "ripping", "ripped":
+		return "ripped"
+	case "encoding", "encoded":
+		return "encoded"
+	case "subtitling", "subtitled":
+		return "subtitled"
+	case "final", "completed":
+		return "final"
+	case "planned", "identifying", "identified", "pending":
+		return "planned"
+	}
+	return "planned"
+}
+
+func singleItemPipelineCount(stageID string, item spindle.QueueItem, activeStage string, plannedCount int) int {
+	// For a single item, "planned" is always known once it's in the queue.
+	if stageID == "planned" {
+		return plannedCount
+	}
+
+	// Prefer concrete file evidence, then fall back to inferred stage.
+	switch stageID {
+	case "ripped":
+		if strings.TrimSpace(item.RippedFile) != "" {
+			return plannedCount
+		}
+		// Once we've moved past ripping, treat ripped as done.
+		switch activeStage {
+		case "ripped", "encoding", "encoded", "subtitling", "subtitled", "final":
+			return plannedCount
+		}
+	case "encoded":
+		if strings.TrimSpace(item.EncodedFile) != "" {
+			return plannedCount
+		}
+		switch activeStage {
+		case "encoded", "subtitling", "subtitled", "final":
+			return plannedCount
+		}
+	case "subtitled":
+		switch activeStage {
+		case "subtitled", "final":
+			return plannedCount
+		}
+	case "final":
+		if strings.TrimSpace(item.FinalFile) != "" {
+			return plannedCount
+		}
+		if activeStage == "final" {
+			return plannedCount
+		}
+	}
+
+	return 0
 }
 
 func (vm *viewModel) activeEpisodeIndex(item spindle.QueueItem, episodes []spindle.EpisodeStatus) int {
