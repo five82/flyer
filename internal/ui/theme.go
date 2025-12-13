@@ -70,10 +70,11 @@ type ProblemPalette struct {
 }
 
 type BadgePalette struct {
-	Review string
-	Error  string
-	Log    string
-	Info   string
+	Review   string
+	Error    string
+	Log      string
+	Info     string
+	Fallback string
 }
 
 type SearchPalette struct {
@@ -146,10 +147,11 @@ func defaultTheme() Theme {
 			HighlightPassiveFg: "#f97316",
 		},
 		Badges: BadgePalette{
-			Review: "#fbbf24",
-			Error:  "#f87171",
-			Log:    "#38bdf8",
-			Info:   "#5eead4",
+			Review:   "#fbbf24",
+			Error:    "#f87171",
+			Log:      "#38bdf8",
+			Info:     "#5eead4",
+			Fallback: "#a78bfa",
 		},
 		StatusColors: map[string]string{
 			"pending":             "#64748b", // Muted gray for waiting state
@@ -276,6 +278,8 @@ func (t Theme) BadgeColor(kind string) string {
 		return t.Badges.Log
 	case "info":
 		return t.Badges.Info
+	case "fallback":
+		return t.Badges.Fallback
 	default:
 		return t.Text.Secondary
 	}

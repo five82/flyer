@@ -377,10 +377,24 @@ func (vm *viewModel) formatFlags(item spindle.QueueItem) string {
 	if isRipCacheHitMessage(item.Progress.Message) {
 		flags = append(flags, vm.badge("CACHE", vm.theme.Badges.Info))
 	}
+	if badge := vm.subtitleFallbackBadge(item); badge != "" {
+		flags = append(flags, badge)
+	}
 	if badge := vm.episodeProgressBadge(item); badge != "" {
 		flags = append(flags, badge)
 	}
 	return strings.Join(flags, " ")
+}
+
+func (vm *viewModel) subtitleFallbackBadge(item spindle.QueueItem) string {
+	if item.SubtitleGeneration == nil || !item.SubtitleGeneration.FallbackUsed {
+		return ""
+	}
+	label := "AI"
+	if item.SubtitleGeneration.WhisperX > 1 {
+		label = fmt.Sprintf("AI%d", item.SubtitleGeneration.WhisperX)
+	}
+	return vm.badge(label, vm.theme.Badges.Fallback)
 }
 
 func (vm *viewModel) colorForStatus(status string) string {

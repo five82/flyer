@@ -52,29 +52,30 @@ type QueueListResponse struct {
 
 // QueueItem describes a queue entry in transport-friendly form.
 type QueueItem struct {
-	ID                int64           `json:"id"`
-	DiscTitle         string          `json:"discTitle"`
-	SourcePath        string          `json:"sourcePath"`
-	Status            string          `json:"status"`
-	ProcessingLane    string          `json:"processingLane"`
-	DraptoPreset      string          `json:"draptoPresetProfile,omitempty"`
-	Progress          QueueProgress   `json:"progress"`
-	Encoding          *EncodingStatus `json:"encoding,omitempty"`
-	ErrorMessage      string          `json:"errorMessage"`
-	CreatedAt         string          `json:"createdAt"`
-	UpdatedAt         string          `json:"updatedAt"`
-	DiscFingerprint   string          `json:"discFingerprint"`
-	RippedFile        string          `json:"rippedFile"`
-	EncodedFile       string          `json:"encodedFile"`
-	FinalFile         string          `json:"finalFile"`
-	BackgroundLogPath string          `json:"backgroundLogPath"`
-	NeedsReview       bool            `json:"needsReview"`
-	ReviewReason      string          `json:"reviewReason"`
-	Metadata          json.RawMessage `json:"metadata"`
-	RipSpec           json.RawMessage `json:"ripSpec"`
-	Episodes          []EpisodeStatus `json:"episodes"`
-	EpisodeTotals     *EpisodeTotals  `json:"episodeTotals"`
-	EpisodesSynced    bool            `json:"episodesSynchronized"`
+	ID                 int64                     `json:"id"`
+	DiscTitle          string                    `json:"discTitle"`
+	SourcePath         string                    `json:"sourcePath"`
+	Status             string                    `json:"status"`
+	ProcessingLane     string                    `json:"processingLane"`
+	DraptoPreset       string                    `json:"draptoPresetProfile,omitempty"`
+	Progress           QueueProgress             `json:"progress"`
+	Encoding           *EncodingStatus           `json:"encoding,omitempty"`
+	ErrorMessage       string                    `json:"errorMessage"`
+	CreatedAt          string                    `json:"createdAt"`
+	UpdatedAt          string                    `json:"updatedAt"`
+	DiscFingerprint    string                    `json:"discFingerprint"`
+	RippedFile         string                    `json:"rippedFile"`
+	EncodedFile        string                    `json:"encodedFile"`
+	FinalFile          string                    `json:"finalFile"`
+	BackgroundLogPath  string                    `json:"backgroundLogPath"`
+	NeedsReview        bool                      `json:"needsReview"`
+	ReviewReason       string                    `json:"reviewReason"`
+	Metadata           json.RawMessage           `json:"metadata"`
+	RipSpec            json.RawMessage           `json:"ripSpec"`
+	Episodes           []EpisodeStatus           `json:"episodes"`
+	EpisodeTotals      *EpisodeTotals            `json:"episodeTotals"`
+	EpisodesSynced     bool                      `json:"episodesSynchronized"`
+	SubtitleGeneration *SubtitleGenerationStatus `json:"subtitleGeneration"`
 }
 
 // QueueProgress tracks stage progress for an item.
@@ -196,24 +197,27 @@ func (e *EncodingStatus) FramePercent() float64 {
 }
 
 type EpisodeStatus struct {
-	Key              string         `json:"key"`
-	Season           int            `json:"season"`
-	Episode          int            `json:"episode"`
-	Title            string         `json:"title"`
-	Stage            string         `json:"stage"`
-	Active           bool           `json:"active,omitempty"`
-	Progress         *QueueProgress `json:"progress,omitempty"`
-	RuntimeSeconds   int            `json:"runtimeSeconds"`
-	SourceTitleID    int            `json:"sourceTitleId"`
-	SourceTitle      string         `json:"sourceTitle"`
-	OutputBasename   string         `json:"outputBasename"`
-	RippedPath       string         `json:"rippedPath"`
-	EncodedPath      string         `json:"encodedPath"`
-	FinalPath        string         `json:"finalPath"`
-	SubtitleSource   string         `json:"subtitleSource"`
-	SubtitleLanguage string         `json:"subtitleLanguage"`
-	MatchScore       float64        `json:"matchScore"`
-	MatchedEpisode   int            `json:"matchedEpisode"`
+	Key                       string         `json:"key"`
+	Season                    int            `json:"season"`
+	Episode                   int            `json:"episode"`
+	Title                     string         `json:"title"`
+	Stage                     string         `json:"stage"`
+	Active                    bool           `json:"active,omitempty"`
+	Progress                  *QueueProgress `json:"progress,omitempty"`
+	RuntimeSeconds            int            `json:"runtimeSeconds"`
+	SourceTitleID             int            `json:"sourceTitleId"`
+	SourceTitle               string         `json:"sourceTitle"`
+	OutputBasename            string         `json:"outputBasename"`
+	RippedPath                string         `json:"rippedPath"`
+	EncodedPath               string         `json:"encodedPath"`
+	FinalPath                 string         `json:"finalPath"`
+	SubtitleSource            string         `json:"subtitleSource"`
+	SubtitleLanguage          string         `json:"subtitleLanguage"`
+	GeneratedSubtitleSource   string         `json:"generatedSubtitleSource"`
+	GeneratedSubtitleLanguage string         `json:"generatedSubtitleLanguage"`
+	GeneratedSubtitleDecision string         `json:"generatedSubtitleDecision"`
+	MatchScore                float64        `json:"matchScore"`
+	MatchedEpisode            int            `json:"matchedEpisode"`
 }
 
 type EpisodeTotals struct {
@@ -221,6 +225,13 @@ type EpisodeTotals struct {
 	Ripped  int `json:"ripped"`
 	Encoded int `json:"encoded"`
 	Final   int `json:"final"`
+}
+
+type SubtitleGenerationStatus struct {
+	OpenSubtitles         int  `json:"opensubtitles"`
+	WhisperX              int  `json:"whisperx"`
+	ExpectedOpenSubtitles bool `json:"expectedOpenSubtitles"`
+	FallbackUsed          bool `json:"fallbackUsed"`
 }
 
 // LogEvent represents a single log entry from /api/logs.

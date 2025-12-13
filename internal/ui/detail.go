@@ -90,6 +90,13 @@ func (vm *viewModel) updateDetail(row int) {
 	if isRipCacheHitMessage(item.Progress.Message) {
 		chips = append(chips, vm.badge("CACHE", vm.theme.Badges.Info))
 	}
+	if item.SubtitleGeneration != nil && item.SubtitleGeneration.FallbackUsed {
+		label := "AI"
+		if item.SubtitleGeneration.WhisperX > 1 {
+			label = fmt.Sprintf("AI%d", item.SubtitleGeneration.WhisperX)
+		}
+		chips = append(chips, vm.badge(label, vm.theme.Badges.Fallback))
+	}
 	if preset := item.DraptoPresetLabel(); preset != "" {
 		chips = append(chips, vm.badge(strings.ToUpper(preset), vm.theme.StatusColor("pending")))
 	}
@@ -666,8 +673,24 @@ func (vm *viewModel) describeEpisode(ep spindle.EpisodeStatus, titles map[int]*s
 	if runtime := formatRuntime(ep.RuntimeSeconds); runtime != "" {
 		extra = append(extra, runtime)
 	}
-	if lang := strings.TrimSpace(ep.SubtitleLanguage); lang != "" {
+	lang := strings.TrimSpace(ep.GeneratedSubtitleLanguage)
+	if lang == "" {
+		lang = strings.TrimSpace(ep.SubtitleLanguage)
+	}
+	if lang != "" {
 		extra = append(extra, strings.ToUpper(lang))
+	}
+	switch strings.ToLower(strings.TrimSpace(ep.GeneratedSubtitleSource)) {
+	case "whisperx":
+		extra = append(extra, "AI")
+		switch strings.ToLower(strings.TrimSpace(ep.GeneratedSubtitleDecision)) {
+		case "no_match":
+			extra = append(extra, "NO-MATCH")
+		case "error":
+			extra = append(extra, "OS-ERR")
+		}
+	case "opensubtitles":
+		extra = append(extra, "OS")
 	}
 
 	info := vm.lookupRipTitleInfo(ep, titles, keyLookup)
