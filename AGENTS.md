@@ -70,4 +70,8 @@ Write imperative, present-tense subjects under 50 characters with optional wrapp
 - README/AGENTS/docs updated if behavior, flags, or environment assumptions changed.
 
 ## Scope Notes
-Flyer is intentionally read-only: no queue mutations, retries, or clears. Assume a single Spindle daemon on a trusted network, defaulting to `~/.config/spindle/config.toml` for discovery. There is no authentication or multi-profile support planned in the near term—optimize for simplicity and one-operator workflows.
+Flyer is a small personal hobby project maintained by a single developer. Keep it simple and avoid over-engineering—this is not an enterprise application.
+
+Flyer is intentionally read-only: no queue mutations, retries, or clears. Assume a single Spindle daemon on a trusted network, defaulting to `~/.config/spindle/config.toml` for discovery. There is no authentication or multi-profile support planned—optimize for simplicity and one-operator workflows.
+
+When considering new features, ask: "Does this solve a real problem for the single maintainer's daily use?" If not, skip it.
