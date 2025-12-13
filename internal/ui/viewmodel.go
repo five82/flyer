@@ -13,11 +13,6 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
-type logPreviewEntry struct {
-	text   string
-	readAt time.Time
-}
-
 type viewModel struct {
 	// Core application state
 	app     *tview.Application
@@ -87,7 +82,6 @@ type viewModel struct {
 	// Detail view state
 	episodeCollapsed map[int64]bool
 	pathExpanded     map[int64]bool
-	logPreviewCache  map[string]logPreviewEntry
 }
 
 func newViewModel(app *tview.Application, opts Options) *viewModel {
@@ -192,7 +186,6 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		logFileCursor:    make(map[string]int64),
 		episodeCollapsed: map[int64]bool{},
 		pathExpanded:     map[int64]bool{},
-		logPreviewCache:  map[string]logPreviewEntry{},
 	}
 
 	vm.table.SetSelectedFunc(func(row, column int) {
@@ -351,7 +344,7 @@ func (vm *viewModel) setCommandBar(view string) {
 	}
 	compact := width < 110
 
-	commands := []cmd{}
+	var commands []cmd
 	switch view {
 	case "logs":
 		if compact {

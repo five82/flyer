@@ -533,13 +533,6 @@ func formatEpisodeLabel(ep spindle.EpisodeStatus) string {
 	return fmt.Sprintf("S%02dE%02d", ep.Season, ep.Episode)
 }
 
-func (vm *viewModel) logPreview(path string) string {
-	// Stub for now or needs to be properly linked if we want that feature back.
-	// For this refactor, I'm omitting the expensive log preview from the details view
-	// unless specifically requested, to keep it clean.
-	return ""
-}
-
 func (vm *viewModel) scrollDetailToActive(content string, itemChanged bool, prevRow, prevCol int) {
 	// Basic scroll preservation or reset
 	if itemChanged {
@@ -680,12 +673,12 @@ func (vm *viewModel) renderActiveProgress(b *strings.Builder, item spindle.Queue
 
 	percent := clampPercent(item.Progress.Percent)
 	label := ""
-	color := vm.theme.StatusColor("processing")
-
-	if stage == "ripping" {
+	color := ""
+	switch stage {
+	case "ripping":
 		label = "RIPPING"
 		color = vm.theme.StatusColor("ripping")
-	} else if stage == "encoding" {
+	case "encoding":
 		label = "ENCODING"
 		color = vm.theme.StatusColor("encoding")
 		// Use specific encoding percent if valid
@@ -695,7 +688,7 @@ func (vm *viewModel) renderActiveProgress(b *strings.Builder, item spindle.Queue
 				percent = p
 			}
 		}
-	} else {
+	default:
 		return // No active progress bar for other stages
 	}
 
@@ -703,11 +696,12 @@ func (vm *viewModel) renderActiveProgress(b *strings.Builder, item spindle.Queue
 	fmt.Fprintf(b, "\n[%s::b]%s[::-]  %s %3.0f%%", color, label, bar, percent)
 
 	// Add stats line
-	if stage == "encoding" {
+	switch stage {
+	case "encoding":
 		if stats := formatEncodingMetrics(item.Encoding); stats != "" {
 			fmt.Fprintf(b, "   [%s]%s[-]", vm.theme.Text.Muted, stats)
 		}
-	} else if stage == "ripping" {
+	case "ripping":
 		// Maybe add ETA if available?
 		if eta := vm.estimateETA(item); eta != "" {
 			fmt.Fprintf(b, "   [%s]%s[-]", vm.theme.Text.Faint, eta)

@@ -248,14 +248,6 @@ func (vm *viewModel) formatProgressBar(item spindle.QueueItem) string {
 	return fmt.Sprintf("[%s]%s[-] %3.0f%%", vm.colorForStatus(item.Status), bar, percent)
 }
 
-func (vm *viewModel) formatStatus(item spindle.QueueItem) string {
-	status := titleCase(item.Status)
-	if status == "" {
-		status = "Unknown"
-	}
-	return vm.statusChip(item.Status)
-}
-
 func (vm *viewModel) formatUpdated(now time.Time, item spindle.QueueItem) string {
 	ts := mostRecentTimestamp(item)
 	if ts.IsZero() {

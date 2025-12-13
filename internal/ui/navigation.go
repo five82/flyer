@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,8 +14,6 @@ import (
 	"github.com/five82/flyer/internal/logtail"
 	"github.com/five82/flyer/internal/spindle"
 )
-
-const detailLabelWidth = 9
 
 func (vm *viewModel) showDetailView() {
 	// In dual-pane mode there is always a detail pane; treat this as focusing it.
@@ -251,13 +248,6 @@ func summarizeMetadata(raw json.RawMessage) []metadataRow {
 	return rows
 }
 
-func formatLocalTimestamp(t time.Time) string {
-	if t.IsZero() {
-		return ""
-	}
-	return t.Local().Format("Mon Jan 2 2006 15:04")
-}
-
 func (vm *viewModel) formatMetadata(rows []metadataRow) string {
 	if len(rows) == 0 {
 		return ""
@@ -350,47 +340,6 @@ func reorderMetadata(rows []metadataRow) []metadataRow {
 		}
 	}
 	return append(titleRows, others...)
-}
-
-func (vm *viewModel) describeItemFileSummary(item spindle.QueueItem, stage string, expanded bool) string {
-	current := normalizeEpisodeStage(stage)
-	entries := []struct {
-		label  string
-		path   string
-		expect string
-	}{
-		{"Src", item.SourcePath, ""},
-		{"Rip", item.RippedFile, "ripping"},
-		{"Enc", item.EncodedFile, "encoding"},
-		{"Fin", item.FinalFile, "final"},
-	}
-	parts := make([]string, 0, len(entries))
-	for _, e := range entries {
-		path := strings.TrimSpace(e.path)
-		symbol := "–"
-		if path != "" {
-			symbol = "✓"
-		} else if e.expect != "" && current == e.expect {
-			symbol = "…"
-		}
-		name := "pending"
-		if symbol == "…" {
-			name = "in flight"
-		}
-		if path != "" {
-			if expanded {
-				name = truncateMiddle(path, 72)
-			} else {
-				base := filepath.Base(path)
-				if base == "" || base == "." || base == "/" {
-					base = truncateMiddle(path, 28)
-				}
-				name = truncate(base, 28)
-			}
-		}
-		parts = append(parts, fmt.Sprintf("[%s]%s %s[-] [%s]%s[-]", vm.theme.Text.Muted, e.label, symbol, vm.theme.Text.Accent, tview.Escape(name)))
-	}
-	return strings.Join(parts, "  ")
 }
 
 func (vm *viewModel) refreshLogs(force bool) {
@@ -574,19 +523,6 @@ func (vm *viewModel) streamLogKey() string {
 	default:
 		return ""
 	}
-}
-
-func (vm *viewModel) currentItemID() int64 {
-	if vm.logMode != logSourceItem {
-		return 0
-	}
-	item := vm.selectedItem()
-	if item == nil {
-		vm.currentItemLogID = 0
-		return 0
-	}
-	vm.currentItemLogID = item.ID
-	return item.ID
 }
 
 // updateLogStatus refreshes the footer line without clobbering active search info.

@@ -59,7 +59,7 @@ func Read(path string, maxLines int) ([]string, error) {
 		}
 		return nil, fmt.Errorf("open log: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var lines []string
 	scanner := bufio.NewScanner(file)

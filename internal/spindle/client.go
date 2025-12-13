@@ -168,7 +168,7 @@ func (c *Client) doURL(ctx context.Context, method string, rel *url.URL, dest an
 	if err != nil {
 		return fmt.Errorf("execute request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("api %s returned status %d", rel.String(), resp.StatusCode)

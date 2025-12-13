@@ -42,7 +42,7 @@ func Load(path string) (Config, error) {
 		}
 		return Config{}, fmt.Errorf("open config: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	bytes, err := io.ReadAll(file)
 	if err != nil {
