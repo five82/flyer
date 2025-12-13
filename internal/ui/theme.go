@@ -103,17 +103,17 @@ func defaultTheme() Theme {
 			Danger:  "#f87171",
 		},
 		Text: TextPalette{
-			Heading:    "#f8fafc",
-			Primary:    "#e2e8f0",
-			Secondary:  "#cbd5f5",
-			Muted:      "#94a3b8",
-			Faint:      "#64748b",
-			Accent:     "#7dd3fc",
-			AccentSoft: "#38bdf8",
-			Success:    "#4ade80",
-			Warning:    "#fbbf24",
-			Danger:     "#f87171",
-			Info:       "#5eead4",
+			Heading:    "#f8fafc", // Keep white for headings
+			Primary:    "#f1f5f9", // Brighter primary for better readability
+			Secondary:  "#cbd5f5", // Good secondary, keep as is
+			Muted:      "#94a3b8", // Good muted, keep as is
+			Faint:      "#64748b", // Good faint, keep as is
+			Accent:     "#38bdf8", // Brighter accent for better visibility
+			AccentSoft: "#0ea5e9", // Brighter soft accent
+			Success:    "#22c55e", // Brighter success green
+			Warning:    "#f59e0b", // Brighter warning amber
+			Danger:     "#ef4444", // Brighter danger red
+			Info:       "#06b6d4", // Brighter info cyan
 		},
 		Table: TablePalette{
 			HeaderBg:         "#1e293b",
@@ -152,21 +152,21 @@ func defaultTheme() Theme {
 			Info:   "#5eead4",
 		},
 		StatusColors: map[string]string{
-			"pending":             "#94a3b8",
-			"identifying":         "#7dd3fc",
-			"identified":          "#7dd3fc",
-			"ripping":             "#818cf8",
-			"ripped":              "#a78bfa",
-			"episode_identifying": "#a78bfa",
-			"episode_identified":  "#a78bfa",
-			"encoding":            "#f472b6",
-			"encoded":             "#34d399",
-			"subtitling":          "#5eead4",
-			"subtitled":           "#34d399",
-			"organizing":          "#2dd4bf",
-			"completed":           "#4ade80",
-			"failed":              "#f87171",
-			"review":              "#fbbf24",
+			"pending":             "#64748b", // More muted for better contrast
+			"identifying":         "#60a5fa", // Brighter blue for better visibility
+			"identified":          "#60a5fa", // Consistent with identifying
+			"ripping":             "#818cf8", // Good purple, keep as is
+			"ripped":              "#a78bfa", // Good purple, keep as is
+			"episode_identifying": "#a78bfa", // Consistent with ripped
+			"episode_identified":  "#a78bfa", // Consistent with ripped
+			"encoding":            "#ec4899", // Brighter pink for better monitoring
+			"encoded":             "#22c55e", // Brighter green for completed work
+			"subtitling":          "#5eead4", // Good teal, keep as is
+			"subtitled":           "#22c55e", // Consistent with encoded
+			"organizing":          "#2dd4bf", // Good cyan, keep as is
+			"completed":           "#16a34a", // Deeper green for better contrast
+			"failed":              "#ef4444", // Brighter red for immediate attention
+			"review":              "#f59e0b", // Brighter amber for visibility
 		},
 		LaneColors: map[string]string{
 			"foreground": "#7dd3fc",

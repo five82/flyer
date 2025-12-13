@@ -304,19 +304,9 @@ func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.Queue
 			}
 		}
 
-		color := text.Muted
-		icon := "○"
-
-		if isComplete {
-			color = vm.theme.StatusColor("completed")
-			icon = "●"
-		} else if isCurrent {
-			color = vm.theme.Text.AccentSoft
-			icon = "◉"
-		}
-
+		// Enhanced visual indicators for better monitoring
 		if totals.Planned > 0 {
-			// TV Show: Show counts
+			// TV Show: Show counts with enhanced formatting
 			count := totals.Planned
 			switch stage.id {
 			case "ripped":
@@ -326,18 +316,38 @@ func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.Queue
 			case "final":
 				count = totals.Final
 			}
-			// For planned, it's just totals.Planned
 
-			labelColor := text.Secondary
+			// Enhanced color coding and formatting
 			if count == totals.Planned {
-				labelColor = vm.theme.StatusColor("completed")
+				// Complete stage - green checkmark
+				fmt.Fprintf(b, "[%s]✓[-] [%s::b]%s[-] [%s]%d/%d[-]",
+					vm.theme.StatusColor("completed"),
+					text.Secondary, stage.label,
+					text.Muted, count, totals.Planned)
 			} else if count > 0 {
-				labelColor = vm.theme.Text.AccentSoft
+				// Partial progress - yellow indicator
+				fmt.Fprintf(b, "[%s]◐[-] [%s]%s[-] [%s]%d/%d[-]",
+					vm.theme.Text.Warning,
+					text.Secondary, stage.label,
+					text.Muted, count, totals.Planned)
+			} else {
+				// Not started - muted
+				fmt.Fprintf(b, "[%s]○[-] [%s]%s[-] [%s]%d/%d[-]",
+					text.Muted,
+					text.Secondary, stage.label,
+					text.Muted, count, totals.Planned)
 			}
-
-			fmt.Fprintf(b, "[%s]%s[-] [%s]%d[-]", labelColor, stage.label, text.Muted, count)
 		} else {
-			// Single Item: Show Pipeline
+			// Single Item: Show Pipeline with enhanced icons
+			color := text.Muted
+			icon := "○"
+			if isComplete {
+				color = vm.theme.StatusColor("completed")
+				icon = "●"
+			} else if isCurrent {
+				color = vm.theme.Text.AccentSoft
+				icon = "◉"
+			}
 			fmt.Fprintf(b, "[%s]%s %s[-]", color, icon, stage.label)
 		}
 	}
@@ -728,12 +738,16 @@ func (vm *viewModel) renderActiveProgress(b *strings.Builder, item spindle.Queue
 	percent := clampPercent(item.Progress.Percent)
 	label := ""
 	color := ""
+	icon := ""
+
 	switch stage {
 	case "ripping":
 		label = "RIPPING"
+		icon = "⏵"
 		color = vm.theme.StatusColor("ripping")
 	case "encoding":
 		label = "ENCODING"
+		icon = "⚙"
 		color = vm.theme.StatusColor("encoding")
 		// Use specific encoding percent if valid
 		if enc := item.Encoding; enc != nil && enc.TotalFrames > 0 && enc.CurrentFrame > 0 {
@@ -747,18 +761,17 @@ func (vm *viewModel) renderActiveProgress(b *strings.Builder, item spindle.Queue
 	}
 
 	bar := vm.drawProgressBar(percent, 30, color)
-	fmt.Fprintf(b, "\n[%s::b]%s[::-]  %s %3.0f%%", color, label, bar, percent)
+	fmt.Fprintf(b, "\n[%s::b]%s %s[::-]  %s %3.0f%%", color, icon, label, bar, percent)
 
-	// Add stats line
+	// Enhanced stats line with better formatting
 	switch stage {
 	case "encoding":
 		if stats := formatEncodingMetrics(item.Encoding); stats != "" {
-			fmt.Fprintf(b, "   [%s]%s[-]", vm.theme.Text.Muted, stats)
+			fmt.Fprintf(b, "\n[%s]└─[-] [%s]%s[-]", vm.theme.Text.Faint, vm.theme.Text.Muted, stats)
 		}
 	case "ripping":
-		// Maybe add ETA if available?
 		if eta := vm.estimateETA(item); eta != "" {
-			fmt.Fprintf(b, "   [%s]%s[-]", vm.theme.Text.Faint, eta)
+			fmt.Fprintf(b, "\n[%s]└─[-] [%s]ETA: %s[-]", vm.theme.Text.Faint, vm.theme.Text.Muted, eta)
 		}
 	}
 	fmt.Fprint(b, "\n")

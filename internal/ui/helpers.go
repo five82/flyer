@@ -17,34 +17,35 @@ func (vm *viewModel) showHelp() {
 		{
 			title: "Navigation",
 			entries: []struct{ key, desc string }{
-				{"Tab", "Cycle pane focus (Queue ↔ Detail ↔ Logs)"},
-				{"j / k", "Move selection down / up (queue)"},
-				{"g / G", "Jump to top / bottom (queue)"},
+				{"Tab", "Cycle focus (Queue → Detail → Logs)"},
+				{"j / k", "Move selection up/down (queue)"},
+				{"g / G", "Jump to top/bottom (queue)"},
 				{"d", "Focus details pane"},
-				{"ESC", "Return focus to queue"},
-				{"q", "Jump to queue table"},
+				{"ESC", "Return to queue"},
+				{"q", "Jump to queue"},
 			},
 		},
 		{
-			title: "Logs & Details",
+			title: "Monitoring",
 			entries: []struct{ key, desc string }{
-				{"l", "Rotate log source (Daemon ↔ Item)"},
-				{"i", "Open highlighted item's logs"},
-				{"Space", "Toggle log auto-tail (pause/follow)"},
-				{"End or G", "Jump to bottom + follow"},
-				{"F", "Filter daemon logs (component/lane/request)"},
-				{"t", "Toggle episodes collapsed (details)"},
-				{"P", "Toggle path detail (details)"},
+				{"l", "Switch log source (Daemon ↔ Item)"},
+				{"i", "View item logs"},
+				{"Space", "Toggle log follow (pause/resume)"},
+				{"End / G", "Jump to bottom + follow"},
+				{"F", "Filter logs by component"},
 				{"p", "Toggle problems drawer"},
+				{"1-9", "Jump to problem items"},
 			},
 		},
 		{
-			title: "Search & Filters",
+			title: "Details & Search",
 			entries: []struct{ key, desc string }{
-				{"/", "Search (queue filter or log matches)"},
-				{"n / N", "Next / previous match"},
-				{"f", "Cycle queue filter (All → Failed → Review → Processing)"},
-				{"1-9", "Jump to matching problem shortcut"},
+				{"t", "Toggle episodes (details)"},
+				{"P", "Toggle path expansion"},
+				{"/", "Search queue or logs"},
+				{"n / N", "Next/previous search match"},
+				{"f", "Cycle queue filter"},
+				{"Enter", "Toggle fullscreen view"},
 			},
 		},
 		{
@@ -52,7 +53,7 @@ func (vm *viewModel) showHelp() {
 			entries: []struct{ key, desc string }{
 				{"h or ?", "Show this help"},
 				{"e", "Exit Flyer"},
-				{"Ctrl+C", "Quit application"},
+				{"Ctrl+C", "Quit immediately"},
 			},
 		},
 	}
@@ -102,7 +103,8 @@ func (vm *viewModel) showHelp() {
 
 	hint := tview.NewTextView().
 		SetDynamicColors(true).
-		SetText(fmt.Sprintf("[%s]Press Esc or ? to close", vm.theme.Text.Muted)).
+		SetText(fmt.Sprintf("[%s]Press [%s]Esc[-] or [%s]?[-] to close • [%s]h[-] for help anytime",
+			vm.theme.Text.Muted, vm.theme.Text.Accent, vm.theme.Text.Accent, vm.theme.Text.Accent)).
 		SetTextAlign(tview.AlignCenter)
 	hint.SetBackgroundColor(vm.theme.SurfaceColor())
 	hint.SetTextColor(mutedColor)
@@ -146,12 +148,12 @@ func (vm *viewModel) showHelp() {
 		return event
 	})
 
-	height := row + 6
-	if height < 12 {
-		height = 12
+	height := row + 8
+	if height < 16 {
+		height = 16
 	}
-	if height > 24 {
-		height = 24
+	if height > 28 {
+		height = 28
 	}
 
 	vm.root.RemovePage("modal")

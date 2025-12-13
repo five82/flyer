@@ -314,8 +314,23 @@ func (vm *viewModel) formatProgressBar(item spindle.QueueItem) string {
 	if filled > barWidth {
 		filled = barWidth
 	}
-	bar := "[" + strings.Repeat("=", filled) + strings.Repeat(".", barWidth-filled) + "]"
-	return fmt.Sprintf("[%s]%s[-] %3.0f%%", vm.colorForStatus(item.Status), bar, percent)
+
+	// Use Unicode blocks for smoother progress display
+	blocks := []rune{'█', '▓', '▒', '░'}
+	var bar strings.Builder
+
+	// Add full blocks
+	if filled > 0 {
+		bar.WriteString(fmt.Sprintf("[%s]%s[-]", vm.colorForStatus(item.Status), strings.Repeat(string(blocks[0]), filled)))
+	}
+
+	// Add empty space
+	remaining := barWidth - filled
+	if remaining > 0 {
+		bar.WriteString(fmt.Sprintf("[%s]%s[-]", vm.theme.Text.Faint, strings.Repeat(string(blocks[3]), remaining)))
+	}
+
+	return fmt.Sprintf("%s %3.0f%%", bar.String(), percent)
 }
 
 func (vm *viewModel) formatUpdated(now time.Time, item spindle.QueueItem) string {

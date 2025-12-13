@@ -316,16 +316,44 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 }
 
 func (vm *viewModel) buildMainLayout() tview.Primitive {
-	// Header: dense two-line bar (stats + commands) with compact logo
+	// Dynamic header layout based on terminal size
 	headerTop := tview.NewFlex().SetDirection(tview.FlexColumn)
 	headerTop.SetBackgroundColor(vm.theme.SurfaceColor())
-	headerTop.
-		AddItem(vm.logoView, 6, 0, false).
-		AddItem(nil, 1, 0, false).
-		AddItem(vm.statusView, 0, 1, false)
+
+	// Get terminal dimensions for responsive layout
+	screenWidth := 120
+	if vm.mainLayout != nil {
+		_, _, w, _ := vm.mainLayout.GetRect()
+		if w > 0 {
+			screenWidth = w
+		}
+	}
+
+	// Adjust header based on screen size
+	if screenWidth >= 140 {
+		// Large terminal - more spacious layout
+		headerTop.
+			AddItem(vm.logoView, 8, 0, false).
+			AddItem(nil, 2, 0, false).
+			AddItem(vm.statusView, 0, 1, false)
+	} else if screenWidth >= 100 {
+		// Medium terminal - standard layout
+		headerTop.
+			AddItem(vm.logoView, 6, 0, false).
+			AddItem(nil, 1, 0, false).
+			AddItem(vm.statusView, 0, 1, false)
+	} else {
+		// Small terminal - compact layout
+		headerTop.
+			AddItem(vm.logoView, 4, 0, false).
+			AddItem(nil, 1, 0, false).
+			AddItem(vm.statusView, 0, 1, false)
+	}
 
 	vm.header = tview.NewFlex().SetDirection(tview.FlexRow)
 	vm.header.SetBackgroundColor(vm.theme.SurfaceColor())
+
+	// Keep header compact for better monitoring
 	vm.header.
 		AddItem(headerTop, 0, 1, false).
 		AddItem(vm.cmdBar, 1, 0, false)
@@ -374,6 +402,12 @@ func (vm *viewModel) applyQueueLayout(layout string) {
 		vm.queuePane.AddItem(vm.table, 0, 3, true)
 		vm.queuePane.AddItem(vm.detail, 0, 2, false)
 		vm.queueLayout = "stacked"
+	case "extra-wide":
+		vm.queuePane.Clear()
+		vm.queuePane.SetDirection(tview.FlexColumn)
+		vm.queuePane.AddItem(vm.table, 0, 30, true) // Give more space to detail
+		vm.queuePane.AddItem(vm.detail, 0, 70, false)
+		vm.queueLayout = "extra-wide"
 	default:
 		vm.queuePane.Clear()
 		vm.queuePane.SetDirection(tview.FlexColumn)
@@ -383,25 +417,43 @@ func (vm *viewModel) applyQueueLayout(layout string) {
 	}
 }
 
+func (vm *viewModel) applyExtraWideLayout() {
+	vm.applyQueueLayout("extra-wide")
+}
+
 func (vm *viewModel) maybeUpdateQueueLayout() {
 	if vm == nil || vm.app == nil || vm.queuePane == nil {
 		return
 	}
 
 	width := 0
+	height := 0
 	if vm.mainLayout != nil {
-		_, _, w, _ := vm.mainLayout.GetRect()
+		_, _, w, h := vm.mainLayout.GetRect()
 		width = w
+		height = h
 	}
 	if width <= 0 {
-		_, _, w, _ := vm.queuePane.GetRect()
+		_, _, w, h := vm.queuePane.GetRect()
 		width = w
+		height = h
 	}
 
+	// Enhanced layout logic for medium/large terminals
 	target := "wide"
-	if width > 0 && width < 120 {
-		target = "stacked"
+	if width > 0 {
+		if width < 100 {
+			target = "stacked"
+		} else if width >= 160 {
+			// Extra wide layout - give more space to detail
+			vm.applyExtraWideLayout()
+			return
+		} else if height >= 40 {
+			// Tall layout - can use stacked with better proportions
+			target = "stacked"
+		}
 	}
+
 	if target == vm.queueLayout {
 		return
 	}
@@ -440,9 +492,10 @@ func (vm *viewModel) setCommandBar(view string) {
 		commands = []cmd{
 			{"Space", followLabel},
 			{"/", "Search"},
+			{"n/N", "Next/Prev"},
 			{"l", "Source"},
 			{"q", "Queue"},
-			{"?", "Help"},
+			{"?", "More"},
 		}
 	case "detail":
 		fullscreenLabel := "Full"
@@ -452,9 +505,11 @@ func (vm *viewModel) setCommandBar(view string) {
 		commands = []cmd{
 			{"Enter", fullscreenLabel},
 			{"t", "Episodes"},
+			{"P", "Paths"},
 			{"l", "Logs"},
+			{"j/k", "Navigate"},
 			{"q", "Queue"},
-			{"?", "Help"},
+			{"?", "More"},
 		}
 	default:
 		filterLabel := "All"
@@ -469,9 +524,12 @@ func (vm *viewModel) setCommandBar(view string) {
 		commands = []cmd{
 			{"/", "Search"},
 			{"f", filterLabel},
+			{"j/k", "Navigate"},
+			{"d", "Details"},
 			{"l", "Logs"},
 			{"p", "Problems"},
-			{"?", "Help"},
+			{"Tab", "Focus"},
+			{"?", "More"},
 		}
 	}
 

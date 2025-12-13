@@ -272,8 +272,21 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 				last = snapshot.LastUpdated.Format("15:04:05")
 			}
 			path := truncateMiddle(vm.options.Config.DaemonLogPath(), 50)
-			vm.statusView.SetText(fmt.Sprintf("[%s::b]SPINDLE UNAVAILABLE[-]  [%s::b]Retrying...[-]  [%s]%s[-]  [%s]logs[-] [%s]%s[-]",
+
+			// Provide more specific error messages
+			errorMsg := "Connection failed"
+			errStr := snapshot.LastError.Error()
+			if strings.Contains(errStr, "connection refused") {
+				errorMsg = "Daemon not running"
+			} else if strings.Contains(errStr, "timeout") {
+				errorMsg = "Connection timeout"
+			} else if strings.Contains(errStr, "no such host") {
+				errorMsg = "Host not found"
+			}
+
+			vm.statusView.SetText(fmt.Sprintf("[%s::b]SPINDLE %s[-]  [%s::b]Retrying...[-]  [%s]%s[-]  [%s]logs[-] [%s]%s[-]",
 				text.Danger,
+				errorMsg,
 				text.Warning,
 				text.Muted,
 				last,
@@ -282,7 +295,7 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 				tview.Escape(path)))
 			return
 		}
-		vm.statusView.SetText(fmt.Sprintf("[%s::b]Waiting for Spindle status...[-]", text.Warning))
+		vm.statusView.SetText(fmt.Sprintf("[%s::b]Connecting to Spindle...[-]", text.Warning))
 		return
 	}
 	stats := snapshot.Status.Workflow.QueueStats
@@ -297,31 +310,41 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 	failed := stats["failed"]
 	review := stats["review"]
 
-	daemonStatus := fmt.Sprintf("[%s:%s:b] OFF [-]", text.Danger, surface)
+	// Enhanced daemon status with better visual indicators
+	daemonStatus := fmt.Sprintf("[%s:%s:b]● OFF [-]", text.Danger, surface)
 	if snapshot.Status.Running {
-		daemonStatus = fmt.Sprintf("[%s:%s:b] ON [-]", text.Success, surface)
+		daemonStatus = fmt.Sprintf("[%s:%s:b]● ON [-]", text.Success, surface)
 	}
 
 	parts := []string{
 		daemonStatus,
-		fmt.Sprintf("[%s]%d[-]", text.Secondary, len(snapshot.Queue)),
+		fmt.Sprintf("[%s]Queue:[-] [%s]%d[-]", text.Muted, text.Secondary, len(snapshot.Queue)),
 	}
 
 	// Show active counts (processing) only if non-zero
 	if processing > 0 {
-		parts = append(parts, fmt.Sprintf("[%s]%d[-]", vm.colorForStatus("encoding"), processing))
+		parts = append(parts, fmt.Sprintf("[%s]Active:[-] [%s]%d[-]", text.Muted, vm.colorForStatus("encoding"), processing))
 	}
 
-	// Always show failed and review (critical)
+	// Always show failed and review (critical) with clear labels
 	if failed > 0 {
-		parts = append(parts, fmt.Sprintf("[%s]%d[-]", text.Danger, failed))
+		parts = append(parts, fmt.Sprintf("[%s]Failed:[-] [%s]%d[-]", text.Muted, text.Danger, failed))
 	}
 	if review > 0 {
-		parts = append(parts, fmt.Sprintf("[%s]%d[-]", text.Warning, review))
+		parts = append(parts, fmt.Sprintf("[%s]Review:[-] [%s]%d[-]", text.Muted, text.Warning, review))
 	}
 
-	// Timestamp without label
-	parts = append(parts, fmt.Sprintf("[%s]%s[-]", text.Muted, snapshot.LastUpdated.Format("15:04:05")))
+	// More informative timestamp with relative time
+	timeSince := time.Since(snapshot.LastUpdated)
+	timeStr := snapshot.LastUpdated.Format("15:04:05")
+	if timeSince < time.Minute {
+		timeStr += " (now)"
+	} else if timeSince < time.Hour {
+		timeStr += fmt.Sprintf(" (%dm ago)", int(timeSince.Minutes()))
+	} else if timeSince < 24*time.Hour {
+		timeStr += fmt.Sprintf(" (%dh ago)", int(timeSince.Hours()))
+	}
+	parts = append(parts, fmt.Sprintf("[%s]%s[-]", text.Muted, timeStr))
 
 	var unhealthy []string
 	for _, sh := range snapshot.Status.Workflow.StageHealth {
