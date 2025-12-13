@@ -1,5 +1,11 @@
 # Repository Guidelines
 
+## Notes For LLM Coding Agents
+- Run `./check-ci.sh` before and after changes; keep it aligned with `.github/workflows/ci.yml`.
+- Tests must not read the real home directory or Spindle config; use `t.TempDir()` plus `t.Setenv("HOME", ...)` and/or pass explicit config paths.
+- Prefer unit tests for pure helpers/formatters; avoid event-loop/terminal integration tests unless explicitly requested.
+- Do not `git commit` or `git push` unless explicitly instructed to.
+
 ## Agent Quick Start
 1. **Toolchain** – Use Go 1.25.x (run `go version`). `asdf install golang 1.25.3 && asdf local golang 1.25.3` keeps everyone on the same patch.
 2. **Sync deps** – After `git pull origin main`, run `go mod tidy` to align `go.sum`.
@@ -11,6 +17,7 @@
 Flyer is a small Go 1.25 project. Keep the entrypoint in `cmd/flyer/main.go`, with orchestration in `internal/app`. Config and Spindle discovery helpers live in `internal/config`, HTTP polling clients in `internal/spindle`, and UI components in `internal/ui`. Log helpers sit in `internal/logtail`. Tests reside next to their packages (for example, `internal/ui/table_test.go`).
 
 ## Development Workflow & Commands
+- Baseline local CI: `./check-ci.sh` (mirrors GitHub Actions).
 - `golangci-lint run ./...` is the fast safety net; `go test ./internal/...` exercises the business logic without hitting slower integration edges; `go test ./...` is the release gate. Expect these to complete in under 3 seconds on a laptop.
 - `./check-ci.sh` runs the same basic checks as CI with a minimal environment to catch missing toolchain issues early.
 - `go run ./cmd/flyer` or `go build ./cmd/flyer` should succeed even without a live Spindle daemon; missing config falls back to defaults defined in `internal/config/doc.go`.
@@ -37,6 +44,7 @@ log_dir = "~/.local/share/spindle/logs"
 - Sample log files are not required for unit tests; instead, stub the logtail layer or feed it temporary directories via `t.TempDir()`.
 
 ## Commit & Pull Request Guidelines
+Do not `git commit` or `git push` unless explicitly instructed to. Prefer leaving changes staged/uncommitted and summarize what changed for review.
 Write imperative, present-tense subjects under 50 characters with optional wrapped bodies. Reference issues or TODOs inline. Include screenshots or terminal recordings for notable UI updates when preparing PRs. Keep branches rebased on `main`.
 
 ## Definition of Done Checklist
