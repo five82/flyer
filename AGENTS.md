@@ -6,6 +6,20 @@
 - Prefer unit tests for pure helpers/formatters; avoid event-loop/terminal integration tests unless explicitly requested.
 - Do not `git commit` or `git push` unless explicitly instructed to.
 
+## Related Repos (Local Dev Layout)
+
+Flyer is one of three sibling repos that are developed together on this machine:
+
+- **flyer** (this repo): `~/projects/flyer/` — read-only TUI for Spindle
+- **spindle**: `~/projects/spindle/` — daemon + CLI; Flyer polls Spindle’s `api_bind` endpoint and tails logs for display
+- **drapto**: `~/projects/drapto/` — encoder invoked by Spindle; Flyer does not call Drapto directly
+
+GitHub:
+
+- flyer - https://github.com/five82/flyer
+- spindle - https://github.com/five82/spindle
+- drapto - https://github.com/five82/drapto
+
 ## Agent Quick Start
 1. **Toolchain** – Use Go 1.25.x (run `go version`). `asdf install golang 1.25.3 && asdf local golang 1.25.3` keeps everyone on the same patch.
 2. **Sync deps** – After `git pull origin main`, run `go mod tidy` to align `go.sum`.
