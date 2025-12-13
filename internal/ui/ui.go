@@ -286,7 +286,6 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 		return
 	}
 	stats := snapshot.Status.Workflow.QueueStats
-	pending := stats["pending"]
 	processing := stats["identifying"] +
 		stats["ripping"] +
 		stats["episode_identifying"] +
@@ -297,61 +296,32 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 		stats["organizing"]
 	failed := stats["failed"]
 	review := stats["review"]
-	completed := stats["completed"]
 
 	daemonStatus := fmt.Sprintf("[%s:%s:b] OFF [-]", text.Danger, surface)
 	if snapshot.Status.Running {
 		daemonStatus = fmt.Sprintf("[%s:%s:b] ON [-]", text.Success, surface)
 	}
 
-	makeCount := func(label string, value int, color string, always bool) string {
-		if !always && value == 0 {
-			return ""
-		}
-		valColor := text.Secondary
-		if value > 0 && color != "" {
-			valColor = color
-		}
-		return fmt.Sprintf("[%s]%s[-] [%s]%d[-]", text.Faint, label, valColor, value)
-	}
-
 	parts := []string{
-		fmt.Sprintf("[%s]DAEMON[-] %s", text.Faint, daemonStatus),
-		fmt.Sprintf("[%s]Q[-] [%s]%d[-]", text.Faint, text.Secondary, len(snapshot.Queue)),
+		daemonStatus,
+		fmt.Sprintf("[%s]%d[-]", text.Secondary, len(snapshot.Queue)),
 	}
 
-	if compact {
-		parts = append(parts,
-			makeCount("p", pending, text.Primary, false),
-			makeCount("a", processing, vm.colorForStatus("encoding"), false),
-			makeCount("f", failed, text.Danger, true),
-			makeCount("r", review, text.Warning, true),
-			makeCount("d", completed, text.Success, false),
-		)
-	} else {
-		parts = append(parts,
-			makeCount("PEND", pending, text.Primary, false),
-			makeCount("PROC", processing, vm.colorForStatus("encoding"), false),
-			makeCount("FAIL", failed, text.Danger, true),
-			makeCount("REV", review, text.Warning, true),
-			makeCount("DONE", completed, text.Success, false),
-		)
+	// Show active counts (processing) only if non-zero
+	if processing > 0 {
+		parts = append(parts, fmt.Sprintf("[%s]%d[-]", vm.colorForStatus("encoding"), processing))
 	}
 
-	timeLabel := "UPDATED"
-	lagLabel := "LAG"
-	if compact {
-		timeLabel = "upd"
-		lagLabel = "lag"
+	// Always show failed and review (critical)
+	if failed > 0 {
+		parts = append(parts, fmt.Sprintf("[%s]%d[-]", text.Danger, failed))
 	}
-	parts = append(parts, fmt.Sprintf("[%s]%s[-] [%s]%s[-]", text.Faint, timeLabel, text.Secondary, snapshot.LastUpdated.Format("15:04:05")))
-	if !vm.lastRefresh.IsZero() {
-		ago := time.Since(vm.lastRefresh)
-		if ago < 0 {
-			ago = 0
-		}
-		parts = append(parts, fmt.Sprintf("[%s]%s[-] [%s]%s[-]", text.Faint, lagLabel, text.Secondary, humanizeDuration(ago)))
+	if review > 0 {
+		parts = append(parts, fmt.Sprintf("[%s]%d[-]", text.Warning, review))
 	}
+
+	// Timestamp without label
+	parts = append(parts, fmt.Sprintf("[%s]%s[-]", text.Muted, snapshot.LastUpdated.Format("15:04:05")))
 
 	var unhealthy []string
 	for _, sh := range snapshot.Status.Workflow.StageHealth {
@@ -389,11 +359,7 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 		parts = append(parts, fmt.Sprintf("[%s::b]ERROR[-] [%s]%s[-]", text.Danger, text.Danger, tview.Escape(errText)))
 	}
 
-	sep := "  |  "
-	if compact {
-		sep = "  "
-	}
-	out := strings.Join(filterStrings(parts), sep)
+	out := strings.Join(filterStrings(parts), "  ")
 	vm.statusView.SetText(out)
 }
 

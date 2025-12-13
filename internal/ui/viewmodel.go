@@ -430,12 +430,6 @@ func (vm *viewModel) ensureSelection() {
 func (vm *viewModel) setCommandBar(view string) {
 	type cmd struct{ key, desc string }
 
-	_, _, width, _ := vm.cmdBar.GetInnerRect()
-	if width <= 0 {
-		width = 120
-	}
-	compact := width < 110
-
 	var commands []cmd
 	switch view {
 	case "logs":
@@ -443,81 +437,24 @@ func (vm *viewModel) setCommandBar(view string) {
 		if !vm.logFollow {
 			followLabel = "Follow"
 		}
-		filterLabel := "Filter"
-		if vm.logFiltersActive() {
-			filterLabel = "Filter:on"
-		}
-		if compact {
-			commands = []cmd{
-				{"<Tab>", "Pane"},
-				{"<Space>", followLabel},
-				{"</>", "Search"},
-				{"<n/N>", "Next"},
-				{"<l>", "Source"},
-				{"<F>", filterLabel},
-				{"<q>", "Queue"},
-				{"<?>", "Help"},
-			}
-		} else {
-			commands = []cmd{
-				{"<Tab>", "Switch Pane"},
-				{"<Space>", followLabel},
-				{"</>", "Search"},
-				{"<n>/<N>", "Next/Prev"},
-				{"<l>", "Rotate Source"},
-				{"<F>", "Filters"},
-				{"<q>", "Queue"},
-				{"<?>", "Help"},
-			}
+		commands = []cmd{
+			{"Space", followLabel},
+			{"/", "Search"},
+			{"l", "Source"},
+			{"q", "Queue"},
+			{"?", "Help"},
 		}
 	case "detail":
-		if compact {
-			fullscreenLabel := "Full"
-			if vm.fullscreenMode {
-				fullscreenLabel = "Split"
-			}
-			commands = []cmd{
-				{"<Tab>", "Pane"},
-				{"<Enter>", fullscreenLabel},
-				{"</>", "Search"},
-				{"<q>", "Queue"},
-				{"<l>", "Logs"},
-				{"<p>", "Problems"},
-				{"<?>", "Help"},
-			}
-		} else {
-			episodesLabel := "Episodes: expand"
-			pathLabel := "Paths: full"
-			fullscreenLabel := "Fullscreen"
-			if vm.fullscreenMode {
-				fullscreenLabel = "Split View"
-			}
-			showPaths := false
-			if item := vm.selectedItem(); item != nil {
-				if !vm.episodesCollapsed(item.ID) {
-					episodesLabel = "Episodes: collapse"
-				}
-				if vm.pathsExpanded(item.ID) {
-					pathLabel = "Paths: compact"
-				}
-				showPaths = strings.TrimSpace(item.SourcePath) != "" ||
-					strings.TrimSpace(item.BackgroundLogPath) != ""
-			}
-			commands = []cmd{
-				{"<Tab>", "Switch Pane"},
-				{"<Enter>", fullscreenLabel},
-				{"</>", "Search"},
-				{"<q>", "Queue"},
-				{"<l>", "Logs"},
-				{"<t>", episodesLabel},
-			}
-			if showPaths {
-				commands = append(commands, cmd{"<P>", pathLabel})
-			}
-			commands = append(commands,
-				cmd{"<p>", "Problems"},
-				cmd{"<?>", "Help"},
-			)
+		fullscreenLabel := "Full"
+		if vm.fullscreenMode {
+			fullscreenLabel = "Split"
+		}
+		commands = []cmd{
+			{"Enter", fullscreenLabel},
+			{"t", "Episodes"},
+			{"l", "Logs"},
+			{"q", "Queue"},
+			{"?", "Help"},
 		}
 	default:
 		filterLabel := "All"
@@ -529,53 +466,31 @@ func (vm *viewModel) setCommandBar(view string) {
 		case filterProcessing:
 			filterLabel = "Processing"
 		}
-		if compact {
-			commands = []cmd{
-				{"<Tab>", "Pane"},
-				{"</>", "Search"},
-				{"<l>", "Logs"},
-				{"<f>", "Filter: " + filterLabel},
-				{"<p>", "Problems"},
-				{"<?>", "Help"},
-			}
-		} else {
-			commands = []cmd{
-				{"<Tab>", "Switch Pane"},
-				{"</>", "Search"},
-				{"<l>", "Logs"},
-				{"<i>", "Item Logs"},
-				{"<f>", "Filter: " + filterLabel},
-				{"<p>", "Problems"},
-				{"<?>", "Help"},
-			}
+		commands = []cmd{
+			{"/", "Search"},
+			{"f", filterLabel},
+			{"l", "Logs"},
+			{"p", "Problems"},
+			{"?", "Help"},
 		}
 	}
 
 	segments := make([]string, 0, len(commands))
 	for _, cmd := range commands {
-		segments = append(segments, fmt.Sprintf("[%s]%s[-] [%s]%s[-]", vm.theme.Text.AccentSoft, cmd.key, vm.theme.Text.Faint, cmd.desc))
+		segments = append(segments, fmt.Sprintf("[%s]%s[-]:[%s]%s[-]", vm.theme.Text.AccentSoft, cmd.key, vm.theme.Text.Secondary, cmd.desc))
 	}
 	if view != "logs" && vm.queueSearchPattern != "" {
 		pattern := truncate(vm.queueSearchPattern, 18)
-		segments = append(segments, fmt.Sprintf("[%s]search[-] [%s]/%s[-]", vm.theme.Text.Faint, vm.theme.Text.Accent, tview.Escape(pattern)))
+		segments = append(segments, fmt.Sprintf("[%s]/%s[-]", vm.theme.Text.Accent, tview.Escape(pattern)))
 	}
 	if view == "logs" && vm.lastSearchPattern != "" {
 		pattern := truncate(vm.lastSearchPattern, 18)
 		matchInfo := ""
 		if len(vm.searchMatches) > 0 {
-			matchInfo = fmt.Sprintf(" [%s](%d matches)[-]", vm.theme.Text.Muted, len(vm.searchMatches))
+			matchInfo = fmt.Sprintf(" [%s](%d)[-]", vm.theme.Text.Muted, len(vm.searchMatches))
 		}
-		segments = append(segments, fmt.Sprintf("[%s]search[-] [%s]/%s[-]%s", vm.theme.Text.Faint, vm.theme.Text.Accent, tview.Escape(pattern), matchInfo))
-	}
-	separator := "  •  "
-	if compact {
-		separator = "   "
+		segments = append(segments, fmt.Sprintf("[%s]/%s[-]%s", vm.theme.Text.Accent, tview.Escape(pattern), matchInfo))
 	}
 
-	pane := strings.ToUpper(strings.TrimSpace(view))
-	if pane == "" {
-		pane = "QUEUE"
-	}
-	prefix := fmt.Sprintf("[%s::b]%s[-] ", vm.theme.Text.Accent, pane)
-	vm.cmdBar.SetText(prefix + strings.Join(segments, separator))
+	vm.cmdBar.SetText(strings.Join(segments, "  "))
 }
