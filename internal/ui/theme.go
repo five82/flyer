@@ -158,7 +158,7 @@ func defaultTheme() Theme {
 			"identifying":         "#3b82f6", // Bright blue for active identification
 			"identified":          "#1d4ed8", // Deeper blue for completed identification
 			"ripping":             "#8b5cf6", // Vibrant purple for active ripping
-			"ripped":              "#7c3aed", // Deep purple for completed ripping
+			"ripped":              "#0ea5e9", // Blue-cyan for ripped completion (distinct from ripping WORK)
 			"episode_identifying": "#a855f7", // Light purple for episode identification
 			"episode_identified":  "#9333ea", // Medium purple for episode identified
 			"encoding":            "#ec4899", // Bright pink for active encoding

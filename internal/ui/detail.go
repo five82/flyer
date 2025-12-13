@@ -570,7 +570,7 @@ func (vm *viewModel) episodeStageChip(stage string) string {
 		color = vm.theme.StatusColor("encoded")
 		label = "ENCD"
 	case "ripped":
-		color = vm.theme.StatusColor("ripping")
+		color = vm.theme.StatusColor("ripped")
 		label = "RIPD"
 	case "planned":
 		color = vm.theme.Text.Muted
