@@ -166,6 +166,32 @@ func (vm *viewModel) togglePathDetail() {
 	vm.setCommandBar(vm.currentCommandView())
 }
 
+func (vm *viewModel) toggleFullscreen() {
+	vm.fullscreenMode = !vm.fullscreenMode
+	focus := vm.app.GetFocus()
+
+	if vm.fullscreenMode {
+		// Enter fullscreen mode
+		switch focus {
+		case vm.detail:
+			vm.mainContent.SwitchToPage("detail-fullscreen")
+			vm.app.SetFocus(vm.detail)
+		default:
+			// Log view is already fullscreen in its own page
+		}
+	} else {
+		// Exit fullscreen mode
+		vm.mainContent.SwitchToPage("queue")
+		row, _ := vm.table.GetSelection()
+		vm.updateDetail(row)
+		if focus == vm.detail {
+			vm.app.SetFocus(vm.detail)
+		}
+	}
+
+	vm.setCommandBar(vm.currentCommandView())
+}
+
 func (vm *viewModel) returnToCurrentView() {
 	switch vm.currentView {
 	case "queue":
@@ -487,7 +513,13 @@ func (vm *viewModel) refreshStreamLogs() {
 }
 
 func (vm *viewModel) displayLog(colorizedLines []string, path string) {
-	vm.logView.SetText(strings.Join(colorizedLines, "\n"))
+	// Add line numbers to each line
+	numberedLines := make([]string, len(colorizedLines))
+	for i, line := range colorizedLines {
+		lineNum := i + 1
+		numberedLines[i] = fmt.Sprintf("[%s]%4d │[-] %s", vm.theme.Text.Faint, lineNum, line)
+	}
+	vm.logView.SetText(strings.Join(numberedLines, "\n"))
 	if vm.logFollow {
 		vm.logView.ScrollToEnd()
 	}

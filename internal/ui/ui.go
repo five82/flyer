@@ -140,6 +140,13 @@ func Run(ctx context.Context, opts Options) error {
 		case tcell.KeyTAB:
 			model.toggleFocus()
 			return nil
+		case tcell.KeyEnter:
+			// Toggle fullscreen for detail or log views
+			focus := model.app.GetFocus()
+			if focus == model.detail || focus == model.logView {
+				model.toggleFullscreen()
+				return nil
+			}
 		case tcell.KeyRune:
 			switch event.Rune() {
 			case '/':

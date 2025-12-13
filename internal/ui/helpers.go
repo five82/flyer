@@ -277,14 +277,53 @@ func truncateMiddle(value string, limit int) string {
 	if limit <= 3 {
 		return string(runes[:limit])
 	}
+
 	ellipsis := []rune("…/")
 	if limit <= len(ellipsis) {
 		return string(runes[:limit])
 	}
+
+	// Smart path truncation: preserve file extension if it looks like a path
+	isPath := strings.Contains(value, "/") || strings.Contains(value, "\\")
+	if isPath {
+		// Find the extension
+		lastDot := strings.LastIndex(value, ".")
+		lastSlash := maxInt(strings.LastIndex(value, "/"), strings.LastIndex(value, "\\"))
+
+		// Only preserve extension if the dot comes after the last slash
+		if lastDot > lastSlash && lastDot > 0 {
+			ext := value[lastDot:]
+			extRunes := []rune(ext)
+
+			// Only preserve if extension is reasonable length (< 10 chars)
+			if len(extRunes) < 10 && len(extRunes) < limit/2 {
+				baseName := value[:lastDot]
+				baseRunes := []rune(baseName)
+
+				// Calculate space for base (accounting for ellipsis and extension)
+				baseLimit := limit - len(extRunes) - len(ellipsis)
+				if baseLimit > 0 && len(baseRunes) > baseLimit {
+					// Truncate base from middle, preserving extension
+					prefix := baseLimit / 2
+					suffix := baseLimit - prefix
+					return string(baseRunes[:prefix]) + string(ellipsis) + string(baseRunes[len(baseRunes)-suffix:]) + ext
+				}
+			}
+		}
+	}
+
+	// Default middle truncation
 	keep := limit - len(ellipsis)
 	prefix := keep / 2
 	suffix := keep - prefix
 	return string(runes[:prefix]) + string(ellipsis) + string(runes[len(runes)-suffix:])
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func formatBytes(value int64) string {

@@ -35,15 +35,15 @@
 //
 // The read implementation uses a circular buffer of size maxLines:
 //
-//	1. Allocate ring buffer of size maxLines
-//	2. For each line in file:
-//	   - Store line at current index
-//	   - Increment index (wrapping at maxLines)
-//	   - Track total lines seen
-//	3. If total < maxLines:
-//	   - Return first 'count' entries from buffer
-//	4. If total >= maxLines:
-//	   - Return buffer starting from current index (oldest line)
+//  1. Allocate ring buffer of size maxLines
+//  2. For each line in file:
+//     - Store line at current index
+//     - Increment index (wrapping at maxLines)
+//     - Track total lines seen
+//  3. If total < maxLines:
+//     - Return first 'count' entries from buffer
+//  4. If total >= maxLines:
+//     - Return buffer starting from current index (oldest line)
 //
 // This ensures the last maxLines are always available without multiple passes.
 //
@@ -62,10 +62,10 @@
 //
 //   - Timestamps: Medium gray (#808080) - de-emphasized metadata
 //   - Log levels: WCAG-compliant colors with bold emphasis
-//     • INFO: Bright green (#5FD75F) - ~6.5:1 contrast
-//     • WARN: Gold (#FFD700) - ~9.8:1 contrast
-//     • ERROR: Coral red (#FF6B6B) - ~5.1:1 contrast
-//     • DEBUG: Sky blue (#87CEEB) - ~7.4:1 contrast
+//   - INFO: Bright green (#5FD75F) - ~6.5:1 contrast
+//   - WARN: Gold (#FFD700) - ~9.8:1 contrast
+//   - ERROR: Coral red (#FF6B6B) - ~5.1:1 contrast
+//   - DEBUG: Sky blue (#87CEEB) - ~7.4:1 contrast
 //   - Components: Light blue (#87AFFF) - ~7.2:1 contrast
 //   - Item references: Light purple (#D7AFFF) - ~7.8:1 contrast
 //   - Separators: Dim gray (#666666) - subtle, decorative only

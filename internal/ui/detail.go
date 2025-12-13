@@ -186,7 +186,15 @@ func (vm *viewModel) updateDetail(row int) {
 		collapsed := vm.episodesCollapsed(item.ID)
 		if collapsed {
 			summary := vm.describeEpisodeTotals(episodes, totals)
-			fmt.Fprintf(&b, "[%s]%s[-]  [%s](press t to expand)[-]\n", text.Primary, summary, text.Faint)
+			// Add a mini progress bar showing overall completion
+			if totals.Planned > 0 {
+				percent := (float64(totals.Final) / float64(totals.Planned)) * 100
+				bar := vm.drawProgressBar(percent, 20, vm.theme.StatusColor("completed"))
+				fmt.Fprintf(&b, "[%s]%s[-]  %s %.0f%%\n", text.Primary, summary, bar, percent)
+				fmt.Fprintf(&b, "[%s](press t to expand)[-]\n", text.Faint)
+			} else {
+				fmt.Fprintf(&b, "[%s]%s[-]  [%s](press t to expand)[-]\n", text.Primary, summary, text.Faint)
+			}
 		} else {
 			activeIdx := vm.activeEpisodeIndex(item, episodes)
 			for idx, ep := range episodes {
@@ -758,15 +766,44 @@ func (vm *viewModel) renderActiveProgress(b *strings.Builder, item spindle.Queue
 
 func (vm *viewModel) drawProgressBar(percent float64, width int, color string) string {
 	percent = clampPercent(percent)
-	full := int(math.Round(percent / 100 * float64(width)))
-	if full < 0 {
-		full = 0
+	// Use Unicode blocks for smoother progress display
+	// █ (full), ▓ (3/4), ▒ (1/2), ░ (1/4), and empty space
+	blocks := []rune{'█', '▓', '▒', '░'}
+
+	// Calculate how many full characters we need
+	fullWidth := (percent / 100.0) * float64(width)
+	fullChars := int(fullWidth)
+
+	// Calculate the fractional part for the partial block
+	fraction := fullWidth - float64(fullChars)
+
+	var bar strings.Builder
+
+	// Add full blocks
+	if fullChars > 0 {
+		fmt.Fprintf(&bar, "[%s]%s[-]", color, strings.Repeat(string(blocks[0]), fullChars))
 	}
-	if full > width {
-		full = width
+
+	// Add partial block based on fraction
+	if fullChars < width && fraction > 0 {
+		partialIdx := 3 - int(fraction*4) // Map 0-1 to 3-0 for decreasing density
+		if partialIdx < 0 {
+			partialIdx = 0
+		}
+		if partialIdx > 3 {
+			partialIdx = 3
+		}
+		fmt.Fprintf(&bar, "[%s]%c[-]", vm.theme.Text.Muted, blocks[partialIdx])
+		fullChars++
 	}
-	empty := width - full
-	return fmt.Sprintf("[%s]%s[%s]%s[-]", color, strings.Repeat("━", full), "gray", strings.Repeat("━", empty))
+
+	// Add empty space
+	remaining := width - fullChars
+	if remaining > 0 {
+		fmt.Fprintf(&bar, "[%s]%s[-]", vm.theme.Text.Faint, strings.Repeat("░", remaining))
+	}
+
+	return bar.String()
 }
 
 func formatEncodingMetrics(enc *spindle.EncodingStatus) string {

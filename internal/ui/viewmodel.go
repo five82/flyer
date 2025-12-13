@@ -88,6 +88,7 @@ type viewModel struct {
 	// Detail view state
 	episodeCollapsed map[int64]bool
 	pathExpanded     map[int64]bool
+	fullscreenMode   bool
 }
 
 func newViewModel(app *tview.Application, opts Options) *viewModel {
@@ -204,6 +205,30 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 				vm.setCommandBar("logs")
 			}
 			return event
+		case event.Rune() == 'k':
+			// Vim-style up
+			if vm.logFollow {
+				vm.logFollow = false
+				vm.updateLogStatus(false, vm.lastLogPath)
+				vm.setCommandBar("logs")
+			}
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		case event.Rune() == 'j':
+			// Vim-style down
+			if vm.logFollow {
+				vm.logFollow = false
+				vm.updateLogStatus(false, vm.lastLogPath)
+				vm.setCommandBar("logs")
+			}
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case event.Rune() == 'g':
+			// Vim-style top (gg)
+			if vm.logFollow {
+				vm.logFollow = false
+				vm.updateLogStatus(false, vm.lastLogPath)
+				vm.setCommandBar("logs")
+			}
+			return tcell.NewEventKey(tcell.KeyHome, 0, tcell.ModNone)
 		case event.Key() == tcell.KeyEnd || event.Rune() == 'G':
 			vm.logFollow = true
 			vm.logView.ScrollToEnd()
@@ -224,6 +249,24 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		return event
 	})
 
+	vm.detail.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case 'j':
+			// Vim-style down
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case 'k':
+			// Vim-style up
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		case 'g':
+			// Vim-style top (gg)
+			return tcell.NewEventKey(tcell.KeyHome, 0, tcell.ModNone)
+		case 'G':
+			// Vim-style bottom
+			return tcell.NewEventKey(tcell.KeyEnd, 0, tcell.ModNone)
+		}
+		return event
+	})
+
 	vm.table.SetSelectedFunc(func(row, column int) {
 		vm.updateDetail(row)
 	})
@@ -233,22 +276,31 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 
 	vm.table.SetFocusFunc(func() {
 		vm.table.SetBorderColor(vm.theme.TableBorderFocusColor())
+		vm.table.SetBackgroundColor(vm.theme.FocusBackgroundColor())
 		vm.detail.SetBorderColor(vm.theme.TableBorderColor())
+		vm.detail.SetBackgroundColor(vm.theme.SurfaceAltColor())
 		vm.logView.SetBorderColor(vm.theme.TableBorderColor())
+		vm.logView.SetBackgroundColor(vm.theme.SurfaceAltColor())
 		vm.setCommandBar("queue")
 	})
 
 	vm.detail.SetFocusFunc(func() {
 		vm.table.SetBorderColor(vm.theme.TableBorderColor())
+		vm.table.SetBackgroundColor(vm.theme.SurfaceColor())
 		vm.detail.SetBorderColor(vm.theme.TableBorderFocusColor())
+		vm.detail.SetBackgroundColor(vm.theme.FocusBackgroundColor())
 		vm.logView.SetBorderColor(vm.theme.TableBorderColor())
+		vm.logView.SetBackgroundColor(vm.theme.SurfaceAltColor())
 		vm.setCommandBar("detail")
 	})
 
 	vm.logView.SetFocusFunc(func() {
 		vm.table.SetBorderColor(vm.theme.TableBorderColor())
+		vm.table.SetBackgroundColor(vm.theme.SurfaceColor())
 		vm.detail.SetBorderColor(vm.theme.TableBorderColor())
+		vm.detail.SetBackgroundColor(vm.theme.SurfaceAltColor())
 		vm.logView.SetBorderColor(vm.theme.TableBorderFocusColor())
+		vm.logView.SetBackgroundColor(vm.theme.FocusBackgroundColor())
 		vm.setCommandBar("logs")
 	})
 
@@ -294,6 +346,7 @@ func (vm *viewModel) buildMainLayout() tview.Primitive {
 	vm.mainContent = tview.NewPages()
 	vm.mainContent.SetBackgroundColor(vm.theme.SurfaceColor())
 	vm.mainContent.AddPage("queue", vm.queuePane, true, true)
+	vm.mainContent.AddPage("detail-fullscreen", vm.detail, true, false)
 	vm.mainContent.AddPage("logs", logContainer, true, false)
 
 	// Main layout: header + content + optional problems drawer
@@ -419,8 +472,13 @@ func (vm *viewModel) setCommandBar(view string) {
 		}
 	case "detail":
 		if compact {
+			fullscreenLabel := "Full"
+			if vm.fullscreenMode {
+				fullscreenLabel = "Split"
+			}
 			commands = []cmd{
 				{"<Tab>", "Pane"},
+				{"<Enter>", fullscreenLabel},
 				{"</>", "Search"},
 				{"<q>", "Queue"},
 				{"<l>", "Logs"},
@@ -430,6 +488,10 @@ func (vm *viewModel) setCommandBar(view string) {
 		} else {
 			episodesLabel := "Episodes: expand"
 			pathLabel := "Paths: full"
+			fullscreenLabel := "Fullscreen"
+			if vm.fullscreenMode {
+				fullscreenLabel = "Split View"
+			}
 			showPaths := false
 			if item := vm.selectedItem(); item != nil {
 				if !vm.episodesCollapsed(item.ID) {
@@ -443,6 +505,7 @@ func (vm *viewModel) setCommandBar(view string) {
 			}
 			commands = []cmd{
 				{"<Tab>", "Switch Pane"},
+				{"<Enter>", fullscreenLabel},
 				{"</>", "Search"},
 				{"<q>", "Queue"},
 				{"<l>", "Logs"},
@@ -495,6 +558,14 @@ func (vm *viewModel) setCommandBar(view string) {
 	if view != "logs" && vm.queueSearchPattern != "" {
 		pattern := truncate(vm.queueSearchPattern, 18)
 		segments = append(segments, fmt.Sprintf("[%s]search[-] [%s]/%s[-]", vm.theme.Text.Faint, vm.theme.Text.Accent, tview.Escape(pattern)))
+	}
+	if view == "logs" && vm.lastSearchPattern != "" {
+		pattern := truncate(vm.lastSearchPattern, 18)
+		matchInfo := ""
+		if len(vm.searchMatches) > 0 {
+			matchInfo = fmt.Sprintf(" [%s](%d matches)[-]", vm.theme.Text.Muted, len(vm.searchMatches))
+		}
+		segments = append(segments, fmt.Sprintf("[%s]search[-] [%s]/%s[-]%s", vm.theme.Text.Faint, vm.theme.Text.Accent, tview.Escape(pattern), matchInfo))
 	}
 	separator := "  •  "
 	if compact {

@@ -23,6 +23,7 @@ type BasePalette struct {
 	Background string
 	Surface    string
 	SurfaceAlt string
+	FocusBg    string
 }
 
 type BorderPalette struct {
@@ -93,6 +94,7 @@ func defaultTheme() Theme {
 			Background: "#05070f",
 			Surface:    "#0f172a",
 			SurfaceAlt: "#172033",
+			FocusBg:    "#1a2942", // Slightly brighter than SurfaceAlt for focus indication
 		},
 		Border: BorderPalette{
 			Default: "#1f2937",
@@ -184,6 +186,10 @@ func (t Theme) SurfaceColor() tcell.Color {
 
 func (t Theme) SurfaceAltColor() tcell.Color {
 	return hexToColor(t.Base.SurfaceAlt)
+}
+
+func (t Theme) FocusBackgroundColor() tcell.Color {
+	return hexToColor(t.Base.FocusBg)
 }
 
 func (t Theme) BorderColor() tcell.Color {
