@@ -410,14 +410,23 @@ func (vm *viewModel) badge(text, color string) string {
 }
 
 func (vm *viewModel) episodeProgressBadge(item spindle.QueueItem) string {
-	_, totals := item.EpisodeSnapshot()
+	episodes, totals := item.EpisodeSnapshot()
 	if totals.Planned < 2 {
 		return ""
+	}
+	subtitled := 0
+	for _, ep := range episodes {
+		if ep.Stage == "subtitled" || ep.Stage == "final" {
+			subtitled++
+		}
 	}
 	completed := totals.Final
 	color := vm.theme.StatusColor("pending")
 	if totals.Final == totals.Planned && totals.Planned > 0 {
 		color = vm.theme.StatusColor("completed")
+	} else if subtitled > 0 {
+		completed = subtitled
+		color = vm.theme.StatusColor("subtitled")
 	} else if totals.Encoded > 0 {
 		completed = totals.Encoded
 		color = vm.theme.StatusColor("encoding")

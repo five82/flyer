@@ -132,3 +132,24 @@ func TestEpisodeSnapshot_DerivesFromRipSpec(t *testing.T) {
 		t.Fatalf("totals = %#v, want planned=2 ripped=1 encoded=1 final=1", totals)
 	}
 }
+
+func TestEpisodeSnapshot_DerivesSubtitledFromRipSpec(t *testing.T) {
+	raw := json.RawMessage(`{
+  "episodes": [
+    {"key": "S01E01", "title_id": 1, "season": 1, "episode": 1, "episode_title": "", "runtime_seconds": 0, "output_basename": "ep1"}
+  ],
+  "assets": {
+    "encoded": [{"episode_key": "S01E01", "path": "/encoded1.mkv"}],
+    "subtitled": [{"episode_key": "S01E01", "path": "/encoded1.mkv"}]
+  }
+}`)
+
+	item := QueueItem{RipSpec: raw}
+	episodes, _ := item.EpisodeSnapshot()
+	if len(episodes) != 1 {
+		t.Fatalf("episodes len = %d, want 1", len(episodes))
+	}
+	if episodes[0].Stage != "subtitled" {
+		t.Fatalf("episode stage = %q, want subtitled", episodes[0].Stage)
+	}
+}

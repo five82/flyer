@@ -245,7 +245,7 @@ func (vm *viewModel) updateDetail(row int) {
 func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem, totals spindle.EpisodeTotals) {
 	text := vm.theme.Text
 
-	// Stages: Planned -> Ripped -> Encoded -> Final
+	// Stages: Planned -> Ripped -> Encoded -> Subtitled -> Final
 	stages := []struct {
 		id    string
 		label string
@@ -253,6 +253,7 @@ func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.Queue
 		{"planned", "Planned"},
 		{"ripped", "Ripped"},
 		{"encoded", "Encoded"},
+		{"subtitled", "Subtitled"},
 		{"final", "Final"},
 	}
 
@@ -260,6 +261,16 @@ func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.Queue
 	activeStage := normalizeEpisodeStage(item.Progress.Stage)
 	if activeStage == "" {
 		activeStage = normalizeEpisodeStage(item.Status)
+	}
+
+	subtitledCount := 0
+	if totals.Planned > 0 {
+		episodes, _ := item.EpisodeSnapshot()
+		for _, ep := range episodes {
+			if ep.Stage == "subtitled" || ep.Stage == "final" {
+				subtitledCount++
+			}
+		}
 	}
 
 	for i, stage := range stages {
@@ -285,6 +296,8 @@ func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.Queue
 				isComplete = totals.Ripped >= totals.Planned
 			case "encoded":
 				isComplete = totals.Encoded >= totals.Planned
+			case "subtitled":
+				isComplete = subtitledCount >= totals.Planned
 			case "final":
 				isComplete = totals.Final >= totals.Planned
 			}
@@ -313,6 +326,8 @@ func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.Queue
 				count = totals.Ripped
 			case "encoded":
 				count = totals.Encoded
+			case "subtitled":
+				count = subtitledCount
 			case "final":
 				count = totals.Final
 			}
@@ -356,6 +371,8 @@ func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.Queue
 func scoreStage(stage string) int {
 	switch stage {
 	case "final", "completed", "success":
+		return 5
+	case "subtitled", "subtitling":
 		return 4
 	case "encoded", "encoding", "organizing":
 		return 3
@@ -371,6 +388,12 @@ func scoreStage(stage string) int {
 
 func normalizeEpisodeStage(status string) string {
 	s := strings.ToLower(strings.TrimSpace(status))
+	if s == "subtitled" {
+		return "subtitled"
+	}
+	if strings.HasPrefix(s, "subtitl") {
+		return "subtitling"
+	}
 	if s == "encoded" {
 		return "encoded"
 	}
@@ -396,7 +419,7 @@ func (vm *viewModel) activeEpisodeIndex(item spindle.QueueItem, episodes []spind
 
 	// 1. Precise Match: File path
 	// If we are ripping, item.RippedFile should match episode.RippedPath (or basename)
-	// If we are encoding, item.EncodedFile should match episode.EncodedPath
+	// If we are encoding/subtitling, item.EncodedFile should match episode.EncodedPath
 	stage := normalizeEpisodeStage(item.Progress.Stage)
 	if stage == "" {
 		stage = normalizeEpisodeStage(item.Status)
@@ -437,7 +460,7 @@ func (vm *viewModel) activeEpisodeIndex(item spindle.QueueItem, episodes []spind
 			}
 		}
 	}
-	if stage == "encoding" {
+	if stage == "encoding" || stage == "subtitling" {
 		target := item.EncodedFile
 		// Also try input match from encoding details
 		if target == "" && item.Encoding != nil && item.Encoding.Video != nil {
@@ -477,6 +500,8 @@ func (vm *viewModel) activeEpisodeIndex(item spindle.QueueItem, episodes []spind
 		searchStage = "planned"
 	case "encoding":
 		searchStage = "ripped"
+	case "subtitling":
+		searchStage = "encoded"
 	}
 	if searchStage != "" {
 		for i, ep := range episodes {
@@ -522,6 +547,9 @@ func (vm *viewModel) episodeStageChip(stage string) string {
 	case "final", "completed":
 		color = vm.theme.StatusColor("completed")
 		label = "DONE"
+	case "subtitled":
+		color = vm.theme.StatusColor("subtitled")
+		label = "SUB"
 	case "encoded":
 		color = vm.theme.StatusColor("encoded")
 		label = "ENCD"
@@ -536,6 +564,9 @@ func (vm *viewModel) episodeStageChip(stage string) string {
 		label = "WORK"
 	case "ripping":
 		color = vm.theme.StatusColor("ripping")
+		label = "WORK"
+	case "subtitling":
+		color = vm.theme.StatusColor("subtitling")
 		label = "WORK"
 	}
 

@@ -417,6 +417,9 @@ func deriveEpisodesFromRipSpec(raw json.RawMessage) ([]EpisodeStatus, EpisodeTot
 				status.EncodedPath = asset.Encoded
 				status.Stage = "encoded"
 			}
+			if asset.Subtitled != "" {
+				status.Stage = "subtitled"
+			}
 			if asset.Final != "" {
 				status.FinalPath = asset.Final
 				status.Stage = "final"
@@ -460,9 +463,10 @@ type ripSpecEpisode struct {
 }
 
 type ripSpecAssets struct {
-	Ripped  []ripSpecAsset `json:"ripped"`
-	Encoded []ripSpecAsset `json:"encoded"`
-	Final   []ripSpecAsset `json:"final"`
+	Ripped    []ripSpecAsset `json:"ripped"`
+	Encoded   []ripSpecAsset `json:"encoded"`
+	Subtitled []ripSpecAsset `json:"subtitled"`
+	Final     []ripSpecAsset `json:"final"`
 }
 
 type ripSpecAsset struct {
@@ -471,9 +475,10 @@ type ripSpecAsset struct {
 }
 
 type assetPaths struct {
-	Ripped  string
-	Encoded string
-	Final   string
+	Ripped    string
+	Encoded   string
+	Subtitled string
+	Final     string
 }
 
 func (e ripSpecEnvelope) titleByID() map[int]ripSpecTitle {
@@ -502,6 +507,7 @@ func (e ripSpecEnvelope) assetsByKey() map[string]assetPaths {
 	}
 	add(e.Assets.Ripped, func(a assetPaths, path string) assetPaths { a.Ripped = path; return a })
 	add(e.Assets.Encoded, func(a assetPaths, path string) assetPaths { a.Encoded = path; return a })
+	add(e.Assets.Subtitled, func(a assetPaths, path string) assetPaths { a.Subtitled = path; return a })
 	add(e.Assets.Final, func(a assetPaths, path string) assetPaths { a.Final = path; return a })
 	return lookup
 }
