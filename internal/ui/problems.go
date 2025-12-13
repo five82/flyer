@@ -367,6 +367,7 @@ func (vm *viewModel) showNoProblemsNotice() {
 	})
 
 	vm.root.RemovePage("problems-empty")
-	vm.root.AddPage("problems-empty", center(50, 7, content), true, true)
+	modalW, modalH := vm.modalDimensions(50, 7)
+	vm.root.AddPage("problems-empty", center(modalW, modalH, content), true, true)
 	vm.app.SetFocus(content)
 }

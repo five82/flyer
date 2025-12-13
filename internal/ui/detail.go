@@ -45,14 +45,38 @@ func (vm *viewModel) updateDetail(row int) {
 
 	var b strings.Builder
 	text := vm.theme.Text
+	now := time.Now()
 
 	// -- HEADER --
 	title := composeTitle(item)
 	fmt.Fprintf(&b, "[%s]%s[-]\n", text.Heading, tview.Escape(title))
 
+	formatStamp := func(ts time.Time) string {
+		if ts.IsZero() {
+			return ""
+		}
+		if ts.Year() == now.Year() && ts.YearDay() == now.YearDay() {
+			return ts.Format("15:04:05")
+		}
+		return ts.Format("Jan 02 15:04")
+	}
+
+	metaParts := []string{fmt.Sprintf("[%s]#%d[-]", text.Muted, item.ID)}
+	if created := item.ParsedCreatedAt(); !created.IsZero() {
+		metaParts = append(metaParts, fmt.Sprintf("[%s]created[-] [%s]%s[-]", text.Faint, text.Secondary, formatStamp(created)))
+	}
+	if updated := item.ParsedUpdatedAt(); !updated.IsZero() {
+		ago := now.Sub(updated)
+		if ago < 0 {
+			ago = 0
+		}
+		metaParts = append(metaParts, fmt.Sprintf("[%s]updated[-] [%s]%s[-] [%s](%s)[-]", text.Faint, text.Secondary, formatStamp(updated), text.Muted, humanizeDuration(ago)))
+	}
+	fmt.Fprintf(&b, "%s\n", strings.Join(metaParts, fmt.Sprintf(" [%s]•[-] ", text.Faint)))
+
 	// Status & Chips
 	status := vm.statusChip(item.Status)
-	lane := vm.laneChip(determineLane(item.Status))
+	lane := vm.laneChip(determineLane(item))
 	chips := []string{status}
 	if lane != "" {
 		chips = append(chips, lane)
@@ -279,7 +303,7 @@ func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.Queue
 			color = vm.theme.StatusColor("completed")
 			icon = "●"
 		} else if isCurrent {
-			color = vm.theme.StatusColor("processing") // or accent
+			color = vm.theme.Text.AccentSoft
 			icon = "◉"
 		}
 
@@ -300,7 +324,7 @@ func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.Queue
 			if count == totals.Planned {
 				labelColor = vm.theme.StatusColor("completed")
 			} else if count > 0 {
-				labelColor = vm.theme.StatusColor("processing")
+				labelColor = vm.theme.Text.AccentSoft
 			}
 
 			fmt.Fprintf(b, "[%s]%s[-] [%s]%d[-]", labelColor, stage.label, text.Muted, count)

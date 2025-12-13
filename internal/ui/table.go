@@ -464,8 +464,14 @@ func fallbackTitle(path string) string {
 	return name
 }
 
-func determineLane(status string) string {
-	switch strings.ToLower(strings.TrimSpace(status)) {
+func determineLane(item spindle.QueueItem) string {
+	lane := strings.ToLower(strings.TrimSpace(item.ProcessingLane))
+	switch lane {
+	case "foreground", "background":
+		return lane
+	}
+
+	switch strings.ToLower(strings.TrimSpace(item.Status)) {
 	case "pending", "identifying", "identified", "ripping":
 		return "foreground"
 	case "ripped", "episode_identifying", "episode_identified", "encoding", "encoded", "subtitling", "subtitled", "organizing", "completed":

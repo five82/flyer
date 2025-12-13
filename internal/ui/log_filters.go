@@ -113,6 +113,7 @@ func (vm *viewModel) showLogFilters() {
 	})
 
 	vm.root.RemovePage("modal")
-	vm.root.AddPage("modal", center(76, 14, content), true, true)
+	modalW, modalH := vm.modalDimensions(76, 14)
+	vm.root.AddPage("modal", center(modalW, modalH, content), true, true)
 	vm.app.SetFocus(componentField)
 }

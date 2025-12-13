@@ -155,7 +155,8 @@ func (vm *viewModel) showHelp() {
 	}
 
 	vm.root.RemovePage("modal")
-	vm.root.AddPage("modal", center(80, height, content), true, true)
+	modalW, modalH := vm.modalDimensions(80, height)
+	vm.root.AddPage("modal", center(modalW, modalH, content), true, true)
 	vm.app.SetFocus(table)
 }
 
@@ -167,6 +168,63 @@ func center(width, height int, primitive tview.Primitive) tview.Primitive {
 			AddItem(primitive, width, 0, true).
 			AddItem(nil, 0, 1, false), height, 0, true).
 		AddItem(nil, 0, 1, false)
+}
+
+func (vm *viewModel) modalDimensions(maxWidth, maxHeight int) (int, int) {
+	screenW, screenH := 120, 40
+	if vm != nil {
+		if vm.mainLayout != nil {
+			_, _, w, h := vm.mainLayout.GetRect()
+			if w > 0 {
+				screenW = w
+			}
+			if h > 0 {
+				screenH = h
+			}
+		}
+		if (screenW <= 0 || screenH <= 0) && vm.root != nil {
+			_, _, w, h := vm.root.GetRect()
+			if w > 0 {
+				screenW = w
+			}
+			if h > 0 {
+				screenH = h
+			}
+		}
+	}
+
+	availW := screenW - 4
+	availH := screenH - 4
+	if availW < 20 {
+		availW = screenW
+	}
+	if availH < 10 {
+		availH = screenH
+	}
+
+	width := maxWidth
+	if width <= 0 {
+		width = availW
+	}
+	if availW > 0 && width > availW {
+		width = availW
+	}
+	if width < 20 {
+		width = 20
+	}
+
+	height := maxHeight
+	if height <= 0 {
+		height = availH
+	}
+	if availH > 0 && height > availH {
+		height = availH
+	}
+	if height < 7 {
+		height = 7
+	}
+
+	return width, height
 }
 
 func humanizeDuration(d time.Duration) string {

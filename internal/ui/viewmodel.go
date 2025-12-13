@@ -500,5 +500,11 @@ func (vm *viewModel) setCommandBar(view string) {
 	if compact {
 		separator = "   "
 	}
-	vm.cmdBar.SetText(strings.Join(segments, separator))
+
+	pane := strings.ToUpper(strings.TrimSpace(view))
+	if pane == "" {
+		pane = "QUEUE"
+	}
+	prefix := fmt.Sprintf("[%s::b]%s[-] ", vm.theme.Text.Accent, pane)
+	vm.cmdBar.SetText(prefix + strings.Join(segments, separator))
 }

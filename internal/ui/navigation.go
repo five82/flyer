@@ -506,9 +506,17 @@ func (vm *viewModel) selectedItem() *spindle.QueueItem {
 func (vm *viewModel) updateLogTitle() {
 	switch vm.logMode {
 	case logSourceItem:
+		if item := vm.selectedItem(); item != nil && item.ID > 0 {
+			vm.logView.SetTitle(fmt.Sprintf(" [::b]Item #%d Log[::-] ", item.ID))
+			return
+		}
 		vm.logView.SetTitle(" [::b]Item Log[::-] ")
 	default:
-		vm.logView.SetTitle(" [::b]Daemon Log[::-] ")
+		title := " [::b]Daemon Log[::-] "
+		if vm.logFiltersActive() {
+			title = fmt.Sprintf(" [::b]Daemon Log[::-] [%s]filtered[-] ", vm.theme.Text.Warning)
+		}
+		vm.logView.SetTitle(title)
 	}
 }
 
