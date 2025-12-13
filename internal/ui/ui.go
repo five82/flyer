@@ -158,6 +158,9 @@ func Run(ctx context.Context, opts Options) error {
 			case 'q':
 				model.showQueueView()
 				return nil
+			case 'd':
+				model.showDetailView()
+				return nil
 			case 'e':
 				app.Stop()
 				return nil
@@ -185,6 +188,11 @@ func Run(ctx context.Context, opts Options) error {
 			case 'f':
 				model.cycleFilter()
 				return nil
+			case 'F':
+				if model.currentView == "logs" {
+					model.showLogFilters()
+					return nil
+				}
 			case 'j':
 				if model.currentView == "queue" && model.app.GetFocus() == model.table {
 					model.moveQueueSelection(1)
@@ -227,7 +235,7 @@ func (vm *viewModel) update(snapshot state.Snapshot) {
 	vm.renderStatus(snapshot)
 	vm.items = snapshot.Queue
 	vm.updateProblems(snapshot.Queue)
-	vm.renderTable()
+	vm.renderTablePreservingSelection()
 	vm.ensureSelection()
 	if len(vm.displayItems) > 0 {
 		row, _ := vm.table.GetSelection()

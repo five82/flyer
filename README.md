@@ -47,7 +47,7 @@ Optional flags:
 
 **Navigation:**
 - `q` – switch to Queue view
-- `d` – switch to Detail view for the selected item
+- `d` – focus Detail pane for the selected item
 - `i` – switch to Item Log view for the selected item
 - `l` – cycle log sources (Daemon ↔ Item) and switch to log view
 - `Tab` – cycle through views: Queue → Detail → Daemon Log → Item Log
@@ -57,6 +57,11 @@ Optional flags:
 - `/` – start a new search (supports regex)
 - `n` – jump to next search match
 - `N` – jump to previous search match
+
+**Logs (in Log view):**
+- `Space` – toggle auto-tail (pause/follow)
+- `F` – filter daemon logs (component/lane/request)
+- `End` or `G` – jump to bottom + follow
 
 **General:**
 - `h` – show help overlay with all keybindings

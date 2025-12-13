@@ -24,9 +24,21 @@ func (vm *viewModel) startQueueSearch() {
 	vm.queueSearchInput.SetFieldBackgroundColor(vm.theme.SurfaceAltColor())
 	vm.queueSearchInput.SetFieldTextColor(hexToColor(vm.theme.Text.Primary))
 
+	vm.queueSearchHint = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	vm.queueSearchHint.SetBackgroundColor(vm.theme.SurfaceColor())
+	vm.queueSearchHint.SetTextColor(hexToColor(vm.theme.Text.Muted))
+	vm.queueSearchHint.SetText(fmt.Sprintf("[%s]Filter queue (regex, case-insensitive). Enter to apply. Esc to cancel.[-]", vm.theme.Text.Muted))
+
+	vm.queueSearchInput.SetChangedFunc(func(_ string) {
+		if vm.queueSearchHint != nil {
+			vm.queueSearchHint.SetText(fmt.Sprintf("[%s]Filter queue (regex, case-insensitive). Enter to apply. Esc to cancel.[-]", vm.theme.Text.Muted))
+		}
+	})
+
 	searchContainer := tview.NewFlex().SetDirection(tview.FlexRow)
 	searchContainer.SetBackgroundColor(vm.theme.SurfaceColor())
 	searchContainer.AddItem(nil, 0, 1, false)
+	searchContainer.AddItem(vm.queueSearchHint, 1, 0, false)
 	searchContainer.AddItem(vm.queueSearchInput, 1, 0, true)
 
 	vm.queueSearchInput.SetDoneFunc(func(key tcell.Key) {
@@ -55,7 +67,9 @@ func (vm *viewModel) performQueueSearch() {
 
 	regex, err := regexp.Compile("(?i)" + searchText)
 	if err != nil {
-		vm.cancelQueueSearch()
+		if vm.queueSearchHint != nil {
+			vm.queueSearchHint.SetText(fmt.Sprintf("[%s]Invalid regex: %s[-]", vm.theme.Search.Error, tview.Escape(err.Error())))
+		}
 		return
 	}
 
@@ -63,8 +77,9 @@ func (vm *viewModel) performQueueSearch() {
 	vm.queueSearchPattern = searchText
 	vm.root.RemovePage("queue-search")
 	vm.queueSearchMode = false
+	vm.queueSearchHint = nil
 
-	vm.renderTable()
+	vm.renderTablePreservingSelection()
 	vm.ensureSelection()
 	vm.setCommandBar(vm.currentCommandView())
 	vm.returnToCurrentView()
@@ -73,6 +88,7 @@ func (vm *viewModel) performQueueSearch() {
 func (vm *viewModel) cancelQueueSearch() {
 	vm.root.RemovePage("queue-search")
 	vm.queueSearchMode = false
+	vm.queueSearchHint = nil
 	vm.returnToCurrentView()
 	vm.setCommandBar(vm.currentCommandView())
 }
@@ -80,7 +96,7 @@ func (vm *viewModel) cancelQueueSearch() {
 func (vm *viewModel) clearQueueSearch() {
 	vm.queueSearchRegex = nil
 	vm.queueSearchPattern = ""
-	vm.renderTable()
+	vm.renderTablePreservingSelection()
 	vm.ensureSelection()
 	vm.setCommandBar(vm.currentCommandView())
 	vm.returnToCurrentView()

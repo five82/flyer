@@ -50,6 +50,7 @@ func (vm *viewModel) showItemLogsView() {
 	vm.resetLogBuffer()
 	vm.refreshLogs(true)
 	vm.app.SetFocus(vm.logView)
+	vm.setCommandBar("logs")
 }
 
 func (vm *viewModel) showDaemonLogsView() {
@@ -61,6 +62,7 @@ func (vm *viewModel) showDaemonLogsView() {
 	vm.resetLogBuffer()
 	vm.refreshLogs(true)
 	vm.app.SetFocus(vm.logView)
+	vm.setCommandBar("logs")
 }
 
 func (vm *viewModel) focusQueuePane() {
@@ -125,7 +127,7 @@ func (vm *viewModel) cycleFilter() {
 	default:
 		vm.filterMode = filterAll
 	}
-	vm.renderTable()
+	vm.renderTablePreservingSelection()
 	vm.ensureSelection()
 	vm.setCommandBar(vm.currentView)
 }
@@ -351,6 +353,10 @@ func (vm *viewModel) refreshLogs(force bool) {
 		vm.updateLogStatus(false, vm.lastLogPath)
 		return
 	}
+	if !force && !vm.logFollow {
+		vm.updateLogStatus(false, vm.lastLogPath)
+		return
+	}
 	if !force && time.Since(vm.lastLogSet) < 400*time.Millisecond {
 		return
 	}
@@ -433,7 +439,13 @@ func (vm *viewModel) refreshStreamLogs() {
 	}
 
 	since := vm.logCursor[key]
-	req := spindle.LogQuery{Since: since, Limit: logFetchLimit}
+	req := spindle.LogQuery{
+		Since:     since,
+		Limit:     logFetchLimit,
+		Component: vm.logFilterComponent,
+		Lane:      vm.logFilterLane,
+		Request:   vm.logFilterRequest,
+	}
 	if since == 0 || key != vm.lastLogKey {
 		req.Tail = true
 	}
@@ -476,7 +488,10 @@ func (vm *viewModel) refreshStreamLogs() {
 
 func (vm *viewModel) displayLog(colorizedLines []string, path string) {
 	vm.logView.SetText(strings.Join(colorizedLines, "\n"))
-	vm.updateLogStatus(true, path)
+	if vm.logFollow {
+		vm.logView.ScrollToEnd()
+	}
+	vm.updateLogStatus(vm.logFollow, path)
 }
 
 func (vm *viewModel) selectedItem() *spindle.QueueItem {
@@ -547,6 +562,25 @@ func (vm *viewModel) updateLogStatus(active bool, path string) {
 		lineCount,
 		vm.theme.Text.Faint,
 		ternary(active, "on", "off"))
+
+	if vm.logMode == logSourceDaemon && vm.logFiltersActive() {
+		filters := []string{}
+		if component := strings.TrimSpace(vm.logFilterComponent); component != "" {
+			filters = append(filters, "comp="+component)
+		}
+		if lane := strings.TrimSpace(vm.logFilterLane); lane != "" {
+			filters = append(filters, "lane="+lane)
+		}
+		if req := strings.TrimSpace(vm.logFilterRequest); req != "" {
+			filters = append(filters, "req="+truncateMiddle(req, 24))
+		}
+		if len(filters) > 0 {
+			status += fmt.Sprintf(" • [%s]filter[-] [%s]%s[-]",
+				vm.theme.Text.Faint,
+				vm.theme.Text.Secondary,
+				tview.Escape(truncate(strings.Join(filters, " "), 48)))
+		}
+	}
 	if path != "" {
 		status += fmt.Sprintf(" • [%s]%s[-]", vm.theme.Text.AccentSoft, truncate(path, 40))
 	}

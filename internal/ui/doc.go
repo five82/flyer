@@ -70,12 +70,15 @@
 // # Key Bindings
 //
 //   - q: Queue view
-//   - d: Detail view for selected item
+//   - d: Focus detail pane for selected item
 //   - l: Toggle log source (daemon/item)
 //   - i: Show logs for selected item
 //   - Tab: Cycle through views
 //   - /: Start search (in log view)
 //   - n/N: Next/previous search match
+//   - Space: Toggle log auto-tail (pause/follow)
+//   - F: Filter daemon logs (component/lane/request)
+//   - End or G: Jump to bottom + follow (log view)
 //   - ESC: Return to queue view
 //   - e or Ctrl+C: Exit
 //

@@ -128,6 +128,8 @@ func (vm *viewModel) renderTable() {
 		return rows[i].ID > rows[j].ID
 	})
 
+	vm.updateQueueTitle(len(rows), len(vm.items))
+
 	titleLimit := 44
 	if showUpdated {
 		titleLimit = 34
@@ -162,6 +164,74 @@ func (vm *viewModel) renderTable() {
 	}
 
 	vm.displayItems = rows
+}
+
+func (vm *viewModel) updateQueueTitle(visible, total int) {
+	count := fmt.Sprintf("(%d)", visible)
+	if total > 0 && visible != total {
+		count = fmt.Sprintf("(%d/%d)", visible, total)
+	}
+
+	parts := []string{
+		fmt.Sprintf("[::b]Queue[::-] [%s]%s[-]", vm.theme.Text.Muted, count),
+	}
+
+	filterLabel := ""
+	filterColor := vm.theme.Text.Muted
+	switch vm.filterMode {
+	case filterFailed:
+		filterLabel = "Failed"
+		filterColor = vm.theme.Text.Danger
+	case filterReview:
+		filterLabel = "Review"
+		filterColor = vm.theme.Text.Warning
+	case filterProcessing:
+		filterLabel = "Processing"
+		filterColor = vm.colorForStatus("encoding")
+	}
+	if filterLabel != "" {
+		parts = append(parts, fmt.Sprintf("[%s::b]%s[-]", filterColor, strings.ToUpper(filterLabel)))
+	}
+
+	if pattern := strings.TrimSpace(vm.queueSearchPattern); pattern != "" {
+		pattern = truncate(pattern, 18)
+		parts = append(parts, fmt.Sprintf("[%s]/%s[-]", vm.theme.Text.AccentSoft, tview.Escape(pattern)))
+	}
+
+	sep := fmt.Sprintf(" [%s]•[-] ", vm.theme.Text.Faint)
+	vm.table.SetTitle(" " + strings.Join(parts, sep) + " ")
+}
+
+func (vm *viewModel) renderTablePreservingSelection() {
+	selectedID := int64(0)
+	if item := vm.selectedItem(); item != nil {
+		selectedID = item.ID
+	}
+
+	vm.renderTable()
+
+	rows := vm.table.GetRowCount() - 1 // exclude header
+	if rows <= 0 {
+		return
+	}
+
+	if selectedID != 0 {
+		if row := vm.findRowByID(selectedID); row > 0 {
+			vm.table.Select(row, 0)
+			return
+		}
+		vm.table.Select(1, 0)
+		return
+	}
+
+	row, _ := vm.table.GetSelection()
+	if row <= 0 {
+		vm.table.Select(1, 0)
+		return
+	}
+	if row > rows {
+		vm.table.Select(rows, 0)
+	}
 }
 
 func (vm *viewModel) makeCell(content string, align, expansion int) *tview.TableCell {

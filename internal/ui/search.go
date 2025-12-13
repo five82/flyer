@@ -24,10 +24,22 @@ func (vm *viewModel) startSearch() {
 	vm.searchInput.SetFieldBackgroundColor(vm.theme.SurfaceAltColor())
 	vm.searchInput.SetFieldTextColor(hexToColor(vm.theme.Text.Primary))
 
+	vm.searchHint = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	vm.searchHint.SetBackgroundColor(vm.theme.SurfaceColor())
+	vm.searchHint.SetTextColor(hexToColor(vm.theme.Text.Muted))
+	vm.searchHint.SetText(fmt.Sprintf("[%s]Enter to search (regex, case-insensitive). Esc to cancel.[-]", vm.theme.Text.Muted))
+
+	vm.searchInput.SetChangedFunc(func(_ string) {
+		if vm.searchHint != nil {
+			vm.searchHint.SetText(fmt.Sprintf("[%s]Enter to search (regex, case-insensitive). Esc to cancel.[-]", vm.theme.Text.Muted))
+		}
+	})
+
 	// Create a simple container for the search input
 	searchContainer := tview.NewFlex().SetDirection(tview.FlexRow)
 	searchContainer.SetBackgroundColor(vm.theme.SurfaceColor())
 	searchContainer.AddItem(nil, 0, 1, false) // Push to bottom
+	searchContainer.AddItem(vm.searchHint, 1, 0, false)
 	searchContainer.AddItem(vm.searchInput, 1, 0, true)
 
 	vm.searchInput.SetDoneFunc(func(key tcell.Key) {
@@ -56,7 +68,9 @@ func (vm *viewModel) performSearch() {
 	// Compile regex for case-insensitive search
 	regex, err := regexp.Compile("(?i)" + searchText)
 	if err != nil {
-		vm.cancelSearch()
+		if vm.searchHint != nil {
+			vm.searchHint.SetText(fmt.Sprintf("[%s]Invalid regex: %s[-]", vm.theme.Search.Error, tview.Escape(err.Error())))
+		}
 		return
 	}
 
@@ -64,6 +78,7 @@ func (vm *viewModel) performSearch() {
 	vm.lastSearchPattern = searchText
 	vm.root.RemovePage("search")
 	vm.searchMode = false
+	vm.searchHint = nil
 
 	// Find matches in current log content
 	vm.findSearchMatches()
@@ -80,8 +95,9 @@ func (vm *viewModel) cancelSearch() {
 	vm.root.RemovePage("search")
 	vm.searchMode = false
 	vm.clearSearch()
+	vm.searchHint = nil
 	vm.returnToCurrentView()
-	vm.updateLogStatus(true, vm.lastLogPath)
+	vm.updateLogStatus(vm.logFollow, vm.lastLogPath)
 }
 
 func (vm *viewModel) clearSearch() {
@@ -90,7 +106,7 @@ func (vm *viewModel) clearSearch() {
 	vm.currentSearchMatch = 0
 	vm.lastSearchPattern = ""
 	vm.searchStatus.SetText("")
-	vm.updateLogStatus(true, vm.lastLogPath)
+	vm.updateLogStatus(vm.logFollow, vm.lastLogPath)
 }
 
 func (vm *viewModel) updateSearchStatus() {

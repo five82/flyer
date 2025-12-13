@@ -43,6 +43,7 @@ type viewModel struct {
 
 	// Search state
 	searchInput        *tview.InputField
+	searchHint         *tview.TextView
 	searchStatus       *tview.TextView
 	searchRegex        *regexp.Regexp
 	searchMatches      []int
@@ -52,6 +53,7 @@ type viewModel struct {
 
 	// Queue search state
 	queueSearchInput   *tview.InputField
+	queueSearchHint    *tview.TextView
 	queueSearchRegex   *regexp.Regexp
 	queueSearchPattern string
 	queueSearchMode    bool
@@ -64,15 +66,19 @@ type viewModel struct {
 	lastDetailID int64
 
 	// Log viewing state
-	logMode          logSource
-	lastLogPath      string
-	lastLogKey       string
-	lastLogFileKey   string
-	lastLogSet       time.Time
-	rawLogLines      []string
-	logCursor        map[string]uint64
-	logFileCursor    map[string]int64
-	currentItemLogID int64
+	logMode            logSource
+	logFollow          bool
+	lastLogPath        string
+	lastLogKey         string
+	lastLogFileKey     string
+	lastLogSet         time.Time
+	rawLogLines        []string
+	logCursor          map[string]uint64
+	logFileCursor      map[string]int64
+	currentItemLogID   int64
+	logFilterComponent string
+	logFilterLane      string
+	logFilterRequest   string
 
 	// Problems drawer state
 	problemEntries   []problemEntry
@@ -182,11 +188,41 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		currentView:      "queue",
 		problemShortcuts: map[rune]int64{},
 		theme:            theme,
+		logFollow:        true,
 		logCursor:        make(map[string]uint64),
 		logFileCursor:    make(map[string]int64),
 		episodeCollapsed: map[int64]bool{},
 		pathExpanded:     map[int64]bool{},
 	}
+
+	vm.logView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case event.Key() == tcell.KeyUp || event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyHome:
+			if vm.logFollow {
+				vm.logFollow = false
+				vm.updateLogStatus(false, vm.lastLogPath)
+				vm.setCommandBar("logs")
+			}
+			return event
+		case event.Key() == tcell.KeyEnd || event.Rune() == 'G':
+			vm.logFollow = true
+			vm.logView.ScrollToEnd()
+			vm.refreshLogs(true)
+			vm.updateLogStatus(vm.logFollow, vm.lastLogPath)
+			vm.setCommandBar("logs")
+			return nil
+		case event.Rune() == ' ':
+			vm.logFollow = !vm.logFollow
+			if vm.logFollow {
+				vm.logView.ScrollToEnd()
+				vm.refreshLogs(true)
+			}
+			vm.updateLogStatus(vm.logFollow, vm.lastLogPath)
+			vm.setCommandBar("logs")
+			return nil
+		}
+		return event
+	})
 
 	vm.table.SetSelectedFunc(func(row, column int) {
 		vm.updateDetail(row)
@@ -199,18 +235,21 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		vm.table.SetBorderColor(vm.theme.TableBorderFocusColor())
 		vm.detail.SetBorderColor(vm.theme.TableBorderColor())
 		vm.logView.SetBorderColor(vm.theme.TableBorderColor())
+		vm.setCommandBar("queue")
 	})
 
 	vm.detail.SetFocusFunc(func() {
 		vm.table.SetBorderColor(vm.theme.TableBorderColor())
 		vm.detail.SetBorderColor(vm.theme.TableBorderFocusColor())
 		vm.logView.SetBorderColor(vm.theme.TableBorderColor())
+		vm.setCommandBar("detail")
 	})
 
 	vm.logView.SetFocusFunc(func() {
 		vm.table.SetBorderColor(vm.theme.TableBorderColor())
 		vm.detail.SetBorderColor(vm.theme.TableBorderColor())
 		vm.logView.SetBorderColor(vm.theme.TableBorderFocusColor())
+		vm.setCommandBar("logs")
 	})
 
 	vm.root = tview.NewPages()
@@ -347,21 +386,33 @@ func (vm *viewModel) setCommandBar(view string) {
 	var commands []cmd
 	switch view {
 	case "logs":
+		followLabel := "Pause"
+		if !vm.logFollow {
+			followLabel = "Follow"
+		}
+		filterLabel := "Filter"
+		if vm.logFiltersActive() {
+			filterLabel = "Filter:on"
+		}
 		if compact {
 			commands = []cmd{
 				{"<Tab>", "Pane"},
+				{"<Space>", followLabel},
 				{"</>", "Search"},
 				{"<n/N>", "Next"},
 				{"<l>", "Source"},
+				{"<F>", filterLabel},
 				{"<q>", "Queue"},
 				{"<?>", "Help"},
 			}
 		} else {
 			commands = []cmd{
 				{"<Tab>", "Switch Pane"},
+				{"<Space>", followLabel},
 				{"</>", "Search"},
 				{"<n>/<N>", "Next/Prev"},
 				{"<l>", "Rotate Source"},
+				{"<F>", "Filters"},
 				{"<q>", "Queue"},
 				{"<?>", "Help"},
 			}
@@ -379,6 +430,7 @@ func (vm *viewModel) setCommandBar(view string) {
 		} else {
 			episodesLabel := "Episodes: expand"
 			pathLabel := "Paths: full"
+			showPaths := false
 			if item := vm.selectedItem(); item != nil {
 				if !vm.episodesCollapsed(item.ID) {
 					episodesLabel = "Episodes: collapse"
@@ -386,6 +438,8 @@ func (vm *viewModel) setCommandBar(view string) {
 				if vm.pathsExpanded(item.ID) {
 					pathLabel = "Paths: compact"
 				}
+				showPaths = strings.TrimSpace(item.SourcePath) != "" ||
+					strings.TrimSpace(item.BackgroundLogPath) != ""
 			}
 			commands = []cmd{
 				{"<Tab>", "Switch Pane"},
@@ -393,10 +447,14 @@ func (vm *viewModel) setCommandBar(view string) {
 				{"<q>", "Queue"},
 				{"<l>", "Logs"},
 				{"<t>", episodesLabel},
-				{"<P>", pathLabel},
-				{"<p>", "Problems"},
-				{"<?>", "Help"},
 			}
+			if showPaths {
+				commands = append(commands, cmd{"<P>", pathLabel})
+			}
+			commands = append(commands,
+				cmd{"<p>", "Problems"},
+				cmd{"<?>", "Help"},
+			)
 		}
 	default:
 		filterLabel := "All"

@@ -130,6 +130,28 @@ func (vm *viewModel) updateDetail(row int) {
 		}
 	}
 
+	// -- PATHS --
+	expandedPaths := vm.pathsExpanded(item.ID)
+	writePath := func(label, value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		if !expandedPaths {
+			value = truncateMiddle(value, 64)
+		}
+		fmt.Fprintf(&b, "[%s]%s[-]  [%s]%s[-]\n", text.Muted, padRight(label, 8), text.Secondary, tview.Escape(value))
+	}
+
+	hasAnyPaths := strings.TrimSpace(item.SourcePath) != "" ||
+		strings.TrimSpace(item.BackgroundLogPath) != ""
+
+	if hasAnyPaths {
+		writeSection("Paths")
+		writePath("Source:", item.SourcePath)
+		writePath("Log:", item.BackgroundLogPath)
+	}
+
 	// -- EPISODES LIST --
 	if len(episodes) > 0 && mediaType != "movie" {
 		writeSection("Episodes")
