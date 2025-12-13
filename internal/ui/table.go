@@ -271,11 +271,24 @@ func (vm *viewModel) gutterMarker(item spindle.QueueItem) string {
 	return ""
 }
 
-func (vm *viewModel) formatStage(item spindle.QueueItem) string {
-	stage := strings.TrimSpace(item.Progress.Stage)
-	if stage == "" {
-		stage = item.Status
+func effectiveQueueStage(item spindle.QueueItem) string {
+	status := strings.ToLower(strings.TrimSpace(item.Status))
+	switch status {
+	case "completed":
+		return "completed"
+	case "failed", "review":
+		// Terminal / attention states should override any stale progress.stage.
+		return status
 	}
+
+	if stage := strings.ToLower(strings.TrimSpace(item.Progress.Stage)); stage != "" {
+		return stage
+	}
+	return status
+}
+
+func (vm *viewModel) formatStage(item spindle.QueueItem) string {
+	stage := effectiveQueueStage(item)
 	stage = titleCase(stage)
 	stage = truncate(stage, 22)
 
