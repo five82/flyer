@@ -152,21 +152,21 @@ func defaultTheme() Theme {
 			Info:   "#5eead4",
 		},
 		StatusColors: map[string]string{
-			"pending":             "#64748b", // More muted for better contrast
-			"identifying":         "#60a5fa", // Brighter blue for better visibility
-			"identified":          "#60a5fa", // Consistent with identifying
-			"ripping":             "#818cf8", // Good purple, keep as is
-			"ripped":              "#a78bfa", // Good purple, keep as is
-			"episode_identifying": "#a78bfa", // Consistent with ripped
-			"episode_identified":  "#a78bfa", // Consistent with ripped
-			"encoding":            "#ec4899", // Brighter pink for better monitoring
-			"encoded":             "#22c55e", // Brighter green for completed work
-			"subtitling":          "#5eead4", // Good teal, keep as is
-			"subtitled":           "#22c55e", // Consistent with encoded
-			"organizing":          "#2dd4bf", // Good cyan, keep as is
-			"completed":           "#16a34a", // Deeper green for better contrast
-			"failed":              "#ef4444", // Brighter red for immediate attention
-			"review":              "#f59e0b", // Brighter amber for visibility
+			"pending":             "#64748b", // Muted gray for waiting state
+			"identifying":         "#3b82f6", // Bright blue for active identification
+			"identified":          "#1d4ed8", // Deeper blue for completed identification
+			"ripping":             "#8b5cf6", // Vibrant purple for active ripping
+			"ripped":              "#7c3aed", // Deep purple for completed ripping
+			"episode_identifying": "#a855f7", // Light purple for episode identification
+			"episode_identified":  "#9333ea", // Medium purple for episode identified
+			"encoding":            "#ec4899", // Bright pink for active encoding
+			"encoded":             "#10b981", // Emerald green for encoded completion
+			"subtitling":          "#06b6d4", // Cyan for active subtitling
+			"subtitled":           "#14b8a6", // Teal for subtitle completion
+			"organizing":          "#f59e0b", // Amber for organizing phase
+			"completed":           "#16a34a", // Deep green for final completion
+			"failed":              "#dc2626", // Strong red for failures
+			"review":              "#ea580c", // Dark orange for review state
 		},
 		LaneColors: map[string]string{
 			"foreground": "#7dd3fc",
