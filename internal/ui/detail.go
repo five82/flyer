@@ -853,16 +853,26 @@ func (vm *viewModel) renderActiveProgress(b *strings.Builder, item spindle.Queue
 	bar := vm.drawProgressBar(percent, 30, color)
 	fmt.Fprintf(b, "\n[%s::b]%s %s[::-]  %s %3.0f%%", color, icon, label, bar, percent)
 
-	// Enhanced stats line with better formatting
+	subLines := make([]string, 0, 2)
+	if msg := strings.TrimSpace(item.Progress.Message); msg != "" {
+		subLines = append(subLines, msg)
+	}
 	switch stage {
 	case "encoding":
 		if stats := formatEncodingMetrics(item.Encoding); stats != "" {
-			fmt.Fprintf(b, "\n[%s]└─[-] [%s]%s[-]", vm.theme.Text.Faint, vm.theme.Text.Muted, stats)
+			subLines = append(subLines, stats)
 		}
 	case "ripping":
 		if eta := vm.estimateETA(item); eta != "" {
-			fmt.Fprintf(b, "\n[%s]└─[-] [%s]ETA: %s[-]", vm.theme.Text.Faint, vm.theme.Text.Muted, eta)
+			subLines = append(subLines, fmt.Sprintf("ETA: %s", eta))
 		}
+	}
+	for i, line := range subLines {
+		branch := "└─"
+		if i < len(subLines)-1 {
+			branch = "├─"
+		}
+		fmt.Fprintf(b, "\n[%s]%s[-] [%s]%s[-]", vm.theme.Text.Faint, branch, vm.theme.Text.Muted, tview.Escape(line))
 	}
 	fmt.Fprint(b, "\n")
 }
