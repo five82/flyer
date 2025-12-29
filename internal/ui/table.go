@@ -234,6 +234,15 @@ func (vm *viewModel) renderTablePreservingSelection() {
 	}
 }
 
+func (vm *viewModel) findRowByID(id int64) int {
+	for i, item := range vm.displayItems {
+		if item.ID == id {
+			return i + 1
+		}
+	}
+	return 0
+}
+
 func (vm *viewModel) makeCell(content string, align, expansion int) *tview.TableCell {
 	return tview.NewTableCell(content).
 		SetAlign(align).

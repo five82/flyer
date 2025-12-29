@@ -21,16 +21,17 @@
 // The viewModel struct serves as the central state container for all UI components:
 //
 //   - Header section: Status information, command menu, and logo
-//   - Main content: Switchable pages for queue table, item details, and logs
+//   - Main content: Switchable pages for queue table, item details, logs, and problems
 //   - Search interface: Vim-style search with pattern highlighting
 //
 // # View Types
 //
-// Three main views are available:
+// Four main views are available:
 //
 //   - Queue View: Table of all queue items with ID, title, status, lane, and progress
 //   - Detail View: Full details for the selected queue item
 //   - Logs View: Real-time log display (daemon logs or per-item background logs)
+//   - Problems View: Warning/error log stream for the selected item
 //
 // # Key Features
 //
@@ -73,6 +74,7 @@
 //   - d: Focus detail pane for selected item
 //   - l: Toggle log source (daemon/item)
 //   - i: Show logs for selected item
+//   - p: Show problems for selected item
 //   - Tab: Cycle through views
 //   - /: Start search (in log view)
 //   - n/N: Next/previous search match

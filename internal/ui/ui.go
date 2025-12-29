@@ -86,7 +86,7 @@ func Run(ctx context.Context, opts Options) error {
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		// If a modal is open, let it handle keys (otherwise the global
 		// handler swallows Esc/q and the modal can't be dismissed).
-		if model.root != nil && (model.root.HasPage("modal") || model.root.HasPage("problems-empty")) {
+		if model.root != nil && model.root.HasPage("modal") {
 			if event.Key() == tcell.KeyCtrlC {
 				app.Stop()
 				return nil
@@ -140,6 +140,9 @@ func Run(ctx context.Context, opts Options) error {
 		case tcell.KeyTAB:
 			model.toggleFocus()
 			return nil
+		case tcell.KeyBacktab:
+			model.toggleFocusReverse()
+			return nil
 		case tcell.KeyEnter:
 			// Toggle fullscreen for detail or log views
 			focus := model.app.GetFocus()
@@ -175,7 +178,7 @@ func Run(ctx context.Context, opts Options) error {
 				model.toggleLogSource()
 				return nil
 			case 'p':
-				model.toggleProblemsDrawer()
+				model.showProblemsView()
 				return nil
 			case 'i':
 				model.showItemLogsView()
@@ -220,10 +223,6 @@ func Run(ctx context.Context, opts Options) error {
 					model.selectQueueBottom()
 					return nil
 				}
-			case '1', '2', '3', '4', '5', '6', '7', '8', '9':
-				if model.jumpToProblem(event.Rune()) {
-					return nil
-				}
 			}
 		}
 		return event
@@ -241,7 +240,6 @@ func (vm *viewModel) update(snapshot state.Snapshot) {
 	vm.maybeUpdateQueueLayout()
 	vm.renderStatus(snapshot)
 	vm.items = snapshot.Queue
-	vm.updateProblems(snapshot.Queue)
 	vm.renderTablePreservingSelection()
 	vm.ensureSelection()
 	if len(vm.displayItems) > 0 {
@@ -252,6 +250,9 @@ func (vm *viewModel) update(snapshot state.Snapshot) {
 
 	if vm.currentView == "logs" {
 		vm.refreshLogs(false)
+	}
+	if vm.currentView == "problems" {
+		vm.refreshProblems(false)
 	}
 }
 
@@ -307,8 +308,7 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 		stats["subtitling"] +
 		stats["subtitled"] +
 		stats["organizing"]
-	failed := stats["failed"]
-	review := stats["review"]
+	failed, review := countProblemCounts(snapshot.Queue)
 
 	// Enhanced daemon status with better visual indicators
 	daemonStatus := fmt.Sprintf("[%s:%s:b]● OFF [-]", text.Danger, surface)
@@ -326,12 +326,20 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 		parts = append(parts, fmt.Sprintf("[%s]Active:[-] [%s]%d[-]", text.Muted, vm.colorForStatus("encoding"), processing))
 	}
 
-	// Always show failed and review (critical) with clear labels
-	if failed > 0 {
-		parts = append(parts, fmt.Sprintf("[%s]Failed:[-] [%s]%d[-]", text.Muted, text.Danger, failed))
+	failedColor := text.Danger
+	if failed == 0 {
+		failedColor = text.Muted
 	}
-	if review > 0 {
-		parts = append(parts, fmt.Sprintf("[%s]Review:[-] [%s]%d[-]", text.Muted, text.Warning, review))
+	reviewColor := text.Warning
+	if review == 0 {
+		reviewColor = text.Muted
+	}
+	if compact {
+		parts = append(parts, fmt.Sprintf("[%s]F:[-] [%s]%d[-]  •  [%s]R:[-] [%s]%d[-]",
+			text.Muted, failedColor, failed, text.Muted, reviewColor, review))
+	} else {
+		parts = append(parts, fmt.Sprintf("[%s]Failed:[-] [%s]%d[-]  •  [%s]Review:[-] [%s]%d[-]",
+			text.Muted, failedColor, failed, text.Muted, reviewColor, review))
 	}
 
 	// More informative timestamp with relative time
@@ -395,4 +403,18 @@ func filterStrings(values []string) []string {
 		out = append(out, v)
 	}
 	return out
+}
+
+func countProblemCounts(items []spindle.QueueItem) (failed, review int) {
+	for _, item := range items {
+		status := strings.ToLower(strings.TrimSpace(item.Status))
+		if status == "failed" {
+			failed++
+			continue
+		}
+		if item.NeedsReview {
+			review++
+		}
+	}
+	return failed, review
 }

@@ -70,6 +70,7 @@ type LogQuery struct {
 	Follow    bool
 	Tail      bool
 	ItemID    int64
+	Level     string
 	Component string
 	Lane      string
 	Request   string
@@ -95,6 +96,9 @@ func (c *Client) FetchLogs(ctx context.Context, query LogQuery) (LogBatch, error
 	}
 	if query.ItemID > 0 {
 		values.Set("item", strconv.FormatInt(query.ItemID, 10))
+	}
+	if level := strings.TrimSpace(query.Level); level != "" {
+		values.Set("level", level)
 	}
 	if component := strings.TrimSpace(query.Component); component != "" {
 		values.Set("component", component)

@@ -90,6 +90,7 @@ func TestClient_FetchesEndpointsAndEncodesQueries(t *testing.T) {
 		Follow:    true,
 		Tail:      true,
 		ItemID:    101,
+		Level:     "warn",
 		Component: "worker",
 		Lane:      "fast",
 		Request:   "abc",
@@ -102,6 +103,7 @@ func TestClient_FetchesEndpointsAndEncodesQueries(t *testing.T) {
 		gotLogsQuery.Get("follow") != "1" ||
 		gotLogsQuery.Get("tail") != "1" ||
 		gotLogsQuery.Get("item") != "101" ||
+		gotLogsQuery.Get("level") != "warn" ||
 		gotLogsQuery.Get("component") != "worker" ||
 		gotLogsQuery.Get("lane") != "fast" ||
 		gotLogsQuery.Get("request") != "abc" {

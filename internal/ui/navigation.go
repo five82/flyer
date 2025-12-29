@@ -41,6 +41,15 @@ func (vm *viewModel) showLogsView() {
 	vm.setCommandBar("logs")
 }
 
+func (vm *viewModel) showProblemsView() {
+	vm.currentView = "problems"
+	vm.mainContent.SwitchToPage("problems")
+	vm.clearSearch()
+	vm.refreshProblems(true)
+	vm.app.SetFocus(vm.problemsView)
+	vm.setCommandBar("problems")
+}
+
 func (vm *viewModel) showItemLogsView() {
 	vm.currentView = "logs"
 	vm.mainContent.SwitchToPage("logs")
@@ -81,6 +90,8 @@ func (vm *viewModel) currentCommandView() string {
 		return "detail"
 	case vm.logView:
 		return "logs"
+	case vm.problemsView:
+		return "problems"
 	default:
 		return "queue"
 	}
@@ -97,8 +108,30 @@ func (vm *viewModel) toggleFocus() {
 		if vm.logMode == logSourceDaemon {
 			vm.showItemLogsView()
 		} else {
-			vm.showQueueView()
+			vm.showProblemsView()
 		}
+	case vm.problemsView:
+		vm.showQueueView()
+	default:
+		vm.focusQueuePane()
+	}
+}
+
+func (vm *viewModel) toggleFocusReverse() {
+	focus := vm.app.GetFocus()
+	switch focus {
+	case vm.table:
+		vm.showProblemsView()
+	case vm.detail:
+		vm.focusQueuePane()
+	case vm.logView:
+		if vm.logMode == logSourceItem {
+			vm.showDaemonLogsView()
+		} else {
+			vm.showDetailView()
+		}
+	case vm.problemsView:
+		vm.showItemLogsView()
 	default:
 		vm.focusQueuePane()
 	}

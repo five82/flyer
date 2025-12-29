@@ -29,17 +29,15 @@ type viewModel struct {
 	lastRefresh time.Time
 
 	// Main content views
-	mainContent    *tview.Pages
-	queuePane      *tview.Flex
-	table          *tview.Table
-	detail         *tview.TextView
-	logView        *tview.TextView
-	problemTable   *tview.Table
-	problemSummary *tview.TextView
-	problemDrawer  *tview.Flex
-	mainLayout     *tview.Flex
-	theme          Theme
-	queueLayout    string // "wide" or "stacked"
+	mainContent  *tview.Pages
+	queuePane    *tview.Flex
+	table        *tview.Table
+	detail       *tview.TextView
+	logView      *tview.TextView
+	problemsView *tview.TextView
+	mainLayout   *tview.Flex
+	theme        Theme
+	queueLayout  string // "wide" or "stacked"
 
 	// Search state
 	searchInput        *tview.InputField
@@ -61,7 +59,7 @@ type viewModel struct {
 	// Data and navigation state
 	items        []spindle.QueueItem
 	displayItems []spindle.QueueItem
-	currentView  string // "queue", "detail", "logs"
+	currentView  string // "queue", "detail", "logs", "problems"
 	filterMode   queueFilter
 	lastDetailID int64
 
@@ -80,10 +78,11 @@ type viewModel struct {
 	logFilterLane      string
 	logFilterRequest   string
 
-	// Problems drawer state
-	problemEntries   []problemEntry
-	problemShortcuts map[rune]int64
-	problemsOpen     bool
+	// Problems view state
+	problemsLogLines  []string
+	problemsLogCursor map[string]uint64
+	lastProblemsKey   string
+	lastProblemsSet   time.Time
 
 	// Detail view state
 	episodeCollapsed map[int64]bool
@@ -147,24 +146,11 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	searchStatus.SetBackgroundColor(theme.SurfaceColor())
 	searchStatus.SetTextColor(hexToColor(theme.Text.Secondary))
 
-	problemsTable := tview.NewTable()
-	problemsTable.SetBorder(true)
-	problemsTable.SetTitle(" [::b]Problems[::-] ")
-	problemsTable.SetBorderColor(theme.ProblemBorderColor())
-	problemsTable.SetBackgroundColor(theme.SurfaceColor())
-	problemsTable.SetSelectable(false, false)
-	problemsTable.SetFixed(1, 0)
-
-	problemSummary := tview.NewTextView().SetDynamicColors(true)
-	problemSummary.SetBackgroundColor(theme.SurfaceColor())
-	problemSummary.SetTextColor(hexToColor(theme.Text.Primary))
-	problemSummary.SetWrap(false)
-
-	problemDrawer := tview.NewFlex().SetDirection(tview.FlexRow)
-	problemDrawer.SetBackgroundColor(theme.SurfaceColor())
-	problemDrawer.
-		AddItem(problemsTable, 0, 1, false).
-		AddItem(problemSummary, 1, 0, false)
+	problemsView := tview.NewTextView().SetDynamicColors(true)
+	problemsView.SetBorder(true).SetTitle(" [::b]Problems[::-] ")
+	problemsView.SetBackgroundColor(theme.SurfaceAltColor())
+	problemsView.SetBorderColor(theme.TableBorderColor())
+	problemsView.ScrollToEnd()
 
 	ctx := opts.Context
 	if ctx == nil {
@@ -172,28 +158,26 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	}
 
 	vm := &viewModel{
-		app:              app,
-		ctx:              ctx,
-		client:           opts.Client,
-		options:          opts,
-		statusView:       statusView,
-		cmdBar:           cmdBar,
-		logoView:         logoView,
-		table:            table,
-		detail:           detail,
-		logView:          logView,
-		searchStatus:     searchStatus,
-		problemTable:     problemsTable,
-		problemSummary:   problemSummary,
-		problemDrawer:    problemDrawer,
-		currentView:      "queue",
-		problemShortcuts: map[rune]int64{},
-		theme:            theme,
-		logFollow:        true,
-		logCursor:        make(map[string]uint64),
-		logFileCursor:    make(map[string]int64),
-		episodeCollapsed: map[int64]bool{},
-		pathExpanded:     map[int64]bool{},
+		app:               app,
+		ctx:               ctx,
+		client:            opts.Client,
+		options:           opts,
+		statusView:        statusView,
+		cmdBar:            cmdBar,
+		logoView:          logoView,
+		table:             table,
+		detail:            detail,
+		logView:           logView,
+		problemsView:      problemsView,
+		searchStatus:      searchStatus,
+		currentView:       "queue",
+		theme:             theme,
+		logFollow:         true,
+		logCursor:         make(map[string]uint64),
+		logFileCursor:     make(map[string]int64),
+		problemsLogCursor: make(map[string]uint64),
+		episodeCollapsed:  map[int64]bool{},
+		pathExpanded:      map[int64]bool{},
 	}
 
 	vm.logView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -267,6 +251,24 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		return event
 	})
 
+	vm.problemsView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case 'j':
+			// Vim-style down
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case 'k':
+			// Vim-style up
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		case 'g':
+			// Vim-style top (gg)
+			return tcell.NewEventKey(tcell.KeyHome, 0, tcell.ModNone)
+		case 'G':
+			// Vim-style bottom
+			return tcell.NewEventKey(tcell.KeyEnd, 0, tcell.ModNone)
+		}
+		return event
+	})
+
 	vm.table.SetSelectedFunc(func(row, column int) {
 		vm.updateDetail(row)
 	})
@@ -281,6 +283,8 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		vm.detail.SetBackgroundColor(vm.theme.SurfaceAltColor())
 		vm.logView.SetBorderColor(vm.theme.TableBorderColor())
 		vm.logView.SetBackgroundColor(vm.theme.SurfaceAltColor())
+		vm.problemsView.SetBorderColor(vm.theme.TableBorderColor())
+		vm.problemsView.SetBackgroundColor(vm.theme.SurfaceAltColor())
 		vm.setCommandBar("queue")
 	})
 
@@ -291,6 +295,8 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		vm.detail.SetBackgroundColor(vm.theme.FocusBackgroundColor())
 		vm.logView.SetBorderColor(vm.theme.TableBorderColor())
 		vm.logView.SetBackgroundColor(vm.theme.SurfaceAltColor())
+		vm.problemsView.SetBorderColor(vm.theme.TableBorderColor())
+		vm.problemsView.SetBackgroundColor(vm.theme.SurfaceAltColor())
 		vm.setCommandBar("detail")
 	})
 
@@ -301,7 +307,21 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		vm.detail.SetBackgroundColor(vm.theme.SurfaceAltColor())
 		vm.logView.SetBorderColor(vm.theme.TableBorderFocusColor())
 		vm.logView.SetBackgroundColor(vm.theme.FocusBackgroundColor())
+		vm.problemsView.SetBorderColor(vm.theme.TableBorderColor())
+		vm.problemsView.SetBackgroundColor(vm.theme.SurfaceAltColor())
 		vm.setCommandBar("logs")
+	})
+
+	vm.problemsView.SetFocusFunc(func() {
+		vm.table.SetBorderColor(vm.theme.TableBorderColor())
+		vm.table.SetBackgroundColor(vm.theme.SurfaceColor())
+		vm.detail.SetBorderColor(vm.theme.TableBorderColor())
+		vm.detail.SetBackgroundColor(vm.theme.SurfaceAltColor())
+		vm.logView.SetBorderColor(vm.theme.TableBorderColor())
+		vm.logView.SetBackgroundColor(vm.theme.SurfaceAltColor())
+		vm.problemsView.SetBorderColor(vm.theme.TableBorderFocusColor())
+		vm.problemsView.SetBackgroundColor(vm.theme.FocusBackgroundColor())
+		vm.setCommandBar("problems")
 	})
 
 	vm.root = tview.NewPages()
@@ -376,17 +396,14 @@ func (vm *viewModel) buildMainLayout() tview.Primitive {
 	vm.mainContent.AddPage("queue", vm.queuePane, true, true)
 	vm.mainContent.AddPage("detail-fullscreen", vm.detail, true, false)
 	vm.mainContent.AddPage("logs", logContainer, true, false)
+	vm.mainContent.AddPage("problems", vm.problemsView, true, false)
 
-	// Main layout: header + content + optional problems drawer
+	// Main layout: header + content
 	vm.mainLayout = tview.NewFlex().SetDirection(tview.FlexRow)
 	vm.mainLayout.SetBackgroundColor(vm.theme.BackgroundColor())
 	vm.mainLayout.
 		AddItem(vm.header, 2, 0, false). // keep header compact; status is one line + command bar
-		AddItem(vm.mainContent, 0, 1, true).
-		AddItem(vm.problemDrawer, 0, 0, false) // height managed dynamically
-
-	// Start with the problems drawer hidden.
-	vm.mainLayout.ResizeItem(vm.problemDrawer, 0, 0)
+		AddItem(vm.mainContent, 0, 1, true)
 
 	return vm.mainLayout
 }
@@ -495,6 +512,14 @@ func (vm *viewModel) setCommandBar(view string) {
 			{"n/N", "Next/Prev"},
 			{"l", "Source"},
 			{"q", "Queue"},
+			{"?", "More"},
+		}
+	case "problems":
+		commands = []cmd{
+			{"j/k", "Navigate"},
+			{"l", "Logs"},
+			{"q", "Queue"},
+			{"Tab", "Focus"},
 			{"?", "More"},
 		}
 	case "detail":
