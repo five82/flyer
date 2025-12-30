@@ -178,12 +178,12 @@ func (vm *viewModel) updateDetail(row int) {
 	}
 
 	hasAnyPaths := strings.TrimSpace(item.SourcePath) != "" ||
-		strings.TrimSpace(item.BackgroundLogPath) != ""
+		strings.TrimSpace(item.ItemLogPath) != ""
 
 	if hasAnyPaths {
 		writeSection("Paths")
 		writePath("Source:", item.SourcePath)
-		writePath("Log:", item.BackgroundLogPath)
+		writePath("Log:", item.ItemLogPath)
 	}
 
 	// -- EPISODES LIST --

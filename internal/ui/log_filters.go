@@ -53,7 +53,7 @@ func (vm *viewModel) showLogFilters() {
 	hint := tview.NewTextView().SetDynamicColors(true).SetWrap(true)
 	hint.SetBackgroundColor(vm.theme.SurfaceColor())
 	hint.SetTextColor(hexToColor(vm.theme.Text.Muted))
-	hint.SetText(fmt.Sprintf("[%s]Blank fields disable filters. Apply switches to daemon stream logs (filters do not apply to item background logs).[-]", vm.theme.Text.Muted))
+	hint.SetText(fmt.Sprintf("[%s]Blank fields disable filters. Apply switches to daemon stream logs (filters do not apply to item logs).[-]", vm.theme.Text.Muted))
 
 	form := tview.NewForm()
 	form.SetBackgroundColor(vm.theme.SurfaceColor())

@@ -126,7 +126,7 @@ type LogTailQuery struct {
 	WaitMS int
 }
 
-// FetchLogTail retrieves raw log lines for an item's background log file.
+// FetchLogTail retrieves raw log lines for an item's log file.
 func (c *Client) FetchLogTail(ctx context.Context, query LogTailQuery) (LogTailBatch, error) {
 	if c == nil {
 		return LogTailBatch{}, fmt.Errorf("client is nil")

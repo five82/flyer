@@ -30,13 +30,13 @@
 //
 //   - Queue View: Table of all queue items with ID, title, status, lane, and progress
 //   - Detail View: Full details for the selected queue item
-//   - Logs View: Real-time log display (daemon logs or per-item background logs)
+//   - Logs View: Real-time log display (daemon logs or per-item logs)
 //   - Problems View: Warning/error log stream for the selected item
 //
 // # Key Features
 //
 //   - Real-time updates: Auto-refreshes from state.Store at configurable intervals
-//   - Log sources: Toggle between daemon logs and item-specific background logs
+//   - Log sources: Toggle between daemon logs and item-specific logs
 //   - Search: Vim-style "/" to search logs with regex, "n/N" to navigate matches
 //   - Navigation: Tab cycles through views, arrow keys navigate tables
 //   - Color coding: k9s-inspired color scheme for status indicators

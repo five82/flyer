@@ -6,7 +6,7 @@ Flyer is a read-only terminal dashboard for the Spindle disc-ripping daemon. It 
 - **Queue view** showing all items grouped by status with live counts in the header.
 - **Detail view** displaying metadata, file paths, per-episode progress, error messages, and review flags for the selected item.
 - **Episode tracker** that summarizes each TV episode's stage (planned → ripped → encoded → final) so box sets are easy to follow even before organization completes.
-- **Log viewer** supporting daemon and per-item background logs with syntax highlighting.
+- **Log viewer** supporting daemon and per-item logs with syntax highlighting.
 - **Log search** with vim-style `/` search, `n`/`N` navigation, and regex support.
 - **Fast navigation** via single-key commands and Tab cycling between Queue → Detail → Daemon Log → Item Log.
 - **Help overlay** (`h`) showing all available keybindings.

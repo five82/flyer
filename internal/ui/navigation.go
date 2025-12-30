@@ -471,7 +471,7 @@ func (vm *viewModel) refreshItemTailLogs() {
 
 	vm.logFileCursor[key] = batch.Offset
 	if len(batch.Lines) == 0 && len(vm.rawLogLines) == 0 {
-		vm.logView.SetText("No background log entries available")
+		vm.logView.SetText("No item log entries available")
 		vm.updateLogStatus(false, fmt.Sprintf("api tail item #%d", item.ID))
 		return
 	}

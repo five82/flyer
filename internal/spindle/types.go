@@ -67,7 +67,7 @@ type QueueItem struct {
 	RippedFile         string                    `json:"rippedFile"`
 	EncodedFile        string                    `json:"encodedFile"`
 	FinalFile          string                    `json:"finalFile"`
-	BackgroundLogPath  string                    `json:"backgroundLogPath"`
+	ItemLogPath        string                    `json:"itemLogPath"`
 	NeedsReview        bool                      `json:"needsReview"`
 	ReviewReason       string                    `json:"reviewReason"`
 	Metadata           json.RawMessage           `json:"metadata"`
