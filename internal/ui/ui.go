@@ -175,7 +175,7 @@ func Run(ctx context.Context, opts Options) error {
 				app.Stop()
 				return nil
 			case 'l':
-				model.toggleLogSource()
+				model.showDaemonLogsView()
 				return nil
 			case 'p':
 				model.showProblemsView()

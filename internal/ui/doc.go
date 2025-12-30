@@ -72,7 +72,7 @@
 //
 //   - q: Queue view
 //   - d: Focus detail pane for selected item
-//   - l: Toggle log source (daemon/item)
+//   - l: Show daemon logs
 //   - i: Show logs for selected item
 //   - p: Show problems for selected item
 //   - Tab: Cycle through views

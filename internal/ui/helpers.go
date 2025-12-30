@@ -17,7 +17,7 @@ func (vm *viewModel) showHelp() {
 		{
 			title: "Navigation",
 			entries: []struct{ key, desc string }{
-				{"Tab", "Cycle focus (Queue → Detail → Daemon Log → Item Log → Problems)"},
+				{"Tab", "Cycle focus (Queue → Detail → Item Log → Problems)"},
 				{"Shift+Tab", "Cycle focus backward"},
 				{"j / k", "Move selection up/down (queue)"},
 				{"g / G", "Jump to top/bottom (queue)"},
@@ -29,7 +29,7 @@ func (vm *viewModel) showHelp() {
 		{
 			title: "Monitoring",
 			entries: []struct{ key, desc string }{
-				{"l", "Switch log source (Daemon ↔ Item)"},
+				{"l", "View daemon logs"},
 				{"i", "View item logs"},
 				{"Space", "Toggle log follow (pause/resume)"},
 				{"End / G", "Jump to bottom + follow"},

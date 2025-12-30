@@ -103,13 +103,9 @@ func (vm *viewModel) toggleFocus() {
 	case vm.table:
 		vm.focusDetailPane()
 	case vm.detail:
-		vm.showDaemonLogsView()
+		vm.showItemLogsView()
 	case vm.logView:
-		if vm.logMode == logSourceDaemon {
-			vm.showItemLogsView()
-		} else {
-			vm.showProblemsView()
-		}
+		vm.showProblemsView()
 	case vm.problemsView:
 		vm.showQueueView()
 	default:
@@ -125,28 +121,12 @@ func (vm *viewModel) toggleFocusReverse() {
 	case vm.detail:
 		vm.focusQueuePane()
 	case vm.logView:
-		if vm.logMode == logSourceItem {
-			vm.showDaemonLogsView()
-		} else {
-			vm.showDetailView()
-		}
+		vm.showDetailView()
 	case vm.problemsView:
 		vm.showItemLogsView()
 	default:
 		vm.focusQueuePane()
 	}
-}
-
-func (vm *viewModel) toggleLogSource() {
-	if vm.logMode == logSourceDaemon {
-		vm.logMode = logSourceItem
-	} else {
-		vm.logMode = logSourceDaemon
-	}
-	vm.updateLogTitle()
-	vm.resetLogBuffer()
-	// Always show logs view when toggling log source
-	vm.showLogsView()
 }
 
 func (vm *viewModel) cycleFilter() {
