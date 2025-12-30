@@ -381,7 +381,7 @@ func (vm *viewModel) formatUpdated(now time.Time, item spindle.QueueItem) string
 		}
 		return fmt.Sprintf("[%s]%dw ago[-]", color, weeks)
 	default:
-		return fmt.Sprintf("[%s]%s[-]", color, ts.Format("Jan 02"))
+		return fmt.Sprintf("[%s]%s[-]", color, ts.In(time.Local).Format("Jan 02"))
 	}
 }
 

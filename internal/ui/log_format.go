@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/five82/flyer/internal/spindle"
 )
@@ -21,7 +22,7 @@ func formatLogEvents(events []spindle.LogEvent) []string {
 func formatLogEvent(evt spindle.LogEvent) string {
 	ts := evt.Timestamp
 	if parsed := evt.ParsedTime(); !parsed.IsZero() {
-		ts = parsed.Format("2006-01-02 15:04:05")
+		ts = parsed.In(time.Local).Format("2006-01-02 15:04:05")
 	}
 	level := strings.ToUpper(strings.TrimSpace(evt.Level))
 	if level == "" {

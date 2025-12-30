@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/five82/flyer/internal/spindle"
 )
@@ -20,6 +21,12 @@ func TestComposeSubject(t *testing.T) {
 }
 
 func TestFormatLogEvent(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.FixedZone("TestLocal", -5*60*60)
+	defer func() {
+		time.Local = oldLocal
+	}()
+
 	evt := spindle.LogEvent{
 		Timestamp: "2025-12-13T10:11:12Z",
 		Level:     "warn",
@@ -32,7 +39,7 @@ func TestFormatLogEvent(t *testing.T) {
 		},
 	}
 	got := formatLogEvent(evt)
-	if wantSub := "2025-12-13 10:11:12 WARN [worker] Item #42 (rip) – hello"; !strings.Contains(got, wantSub) {
+	if wantSub := "2025-12-13 05:11:12 WARN [worker] Item #42 (rip) – hello"; !strings.Contains(got, wantSub) {
 		t.Fatalf("formatLogEvent = %q, want it to contain %q", got, wantSub)
 	}
 	if !strings.Contains(got, "\n    - path: /tmp/a") {

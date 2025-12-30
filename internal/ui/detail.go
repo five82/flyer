@@ -55,10 +55,11 @@ func (vm *viewModel) updateDetail(row int) {
 		if ts.IsZero() {
 			return ""
 		}
-		if ts.Year() == now.Year() && ts.YearDay() == now.YearDay() {
-			return ts.Format("15:04:05")
+		local := ts.In(time.Local)
+		if local.Year() == now.Year() && local.YearDay() == now.YearDay() {
+			return local.Format("15:04:05")
 		}
-		return ts.Format("Jan 02 15:04")
+		return local.Format("Jan 02 15:04")
 	}
 
 	metaParts := []string{fmt.Sprintf("[%s]#%d[-]", text.Muted, item.ID)}
