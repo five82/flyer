@@ -56,7 +56,7 @@ func (vm *viewModel) renderActiveProgress(b *strings.Builder, item spindle.Queue
 		}
 	case "ripping":
 		if eta := vm.estimateETA(item); eta != "" {
-			subLines = append(subLines, fmt.Sprintf("ETA: %s", eta))
+			subLines = append(subLines, eta)
 		}
 	}
 	for i, line := range subLines {
