@@ -13,6 +13,60 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
+// searchState groups log search state fields.
+type searchState struct {
+	input        *tview.InputField
+	hint         *tview.TextView
+	status       *tview.TextView
+	regex        *regexp.Regexp
+	matches      []int
+	currentMatch int
+	lastPattern  string
+	mode         bool
+}
+
+// queueSearchState groups queue filtering state fields.
+type queueSearchState struct {
+	input   *tview.InputField
+	hint    *tview.TextView
+	regex   *regexp.Regexp
+	pattern string
+	mode    bool
+}
+
+// logViewState groups log viewing state fields.
+type logViewState struct {
+	mode            logSource
+	follow          bool
+	lastPath        string
+	lastKey         string
+	lastFileKey     string
+	lastSet         time.Time
+	rawLines        []string
+	cursor          map[string]uint64
+	fileCursor      map[string]int64
+	currentItemID   int64
+	filterComponent string
+	filterLane      string
+	filterRequest   string
+}
+
+// problemsState groups problems view state fields.
+type problemsState struct {
+	logLines  []string
+	logCursor map[string]uint64
+	lastKey   string
+	lastSet   time.Time
+}
+
+// detailViewState groups detail view state fields.
+type detailViewState struct {
+	lastID           int64
+	episodeCollapsed map[int64]bool
+	pathExpanded     map[int64]bool
+	fullscreenMode   bool
+}
+
 type viewModel struct {
 	// Core application state
 	app     *tview.Application
@@ -20,6 +74,7 @@ type viewModel struct {
 	client  *spindle.Client
 	options Options
 	root    *tview.Pages
+	theme   Theme
 
 	// Header components
 	header      *tview.Flex
@@ -36,58 +91,20 @@ type viewModel struct {
 	logView      *tview.TextView
 	problemsView *tview.TextView
 	mainLayout   *tview.Flex
-	theme        Theme
 	queueLayout  string // "wide" or "stacked"
 
-	// Search state
-	searchInput        *tview.InputField
-	searchHint         *tview.TextView
-	searchStatus       *tview.TextView
-	searchRegex        *regexp.Regexp
-	searchMatches      []int
-	currentSearchMatch int
-	lastSearchPattern  string
-	searchMode         bool
-
-	// Queue search state
-	queueSearchInput   *tview.InputField
-	queueSearchHint    *tview.TextView
-	queueSearchRegex   *regexp.Regexp
-	queueSearchPattern string
-	queueSearchMode    bool
+	// Grouped state
+	search      searchState
+	queueSearch queueSearchState
+	logs        logViewState
+	problems    problemsState
+	detailState detailViewState
 
 	// Data and navigation state
 	items        []spindle.QueueItem
 	displayItems []spindle.QueueItem
 	currentView  string // "queue", "detail", "logs", "problems"
 	filterMode   queueFilter
-	lastDetailID int64
-
-	// Log viewing state
-	logMode            logSource
-	logFollow          bool
-	lastLogPath        string
-	lastLogKey         string
-	lastLogFileKey     string
-	lastLogSet         time.Time
-	rawLogLines        []string
-	logCursor          map[string]uint64
-	logFileCursor      map[string]int64
-	currentItemLogID   int64
-	logFilterComponent string
-	logFilterLane      string
-	logFilterRequest   string
-
-	// Problems view state
-	problemsLogLines  []string
-	problemsLogCursor map[string]uint64
-	lastProblemsKey   string
-	lastProblemsSet   time.Time
-
-	// Detail view state
-	episodeCollapsed map[int64]bool
-	pathExpanded     map[int64]bool
-	fullscreenMode   bool
 }
 
 func newViewModel(app *tview.Application, opts Options) *viewModel {
@@ -158,116 +175,39 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	}
 
 	vm := &viewModel{
-		app:               app,
-		ctx:               ctx,
-		client:            opts.Client,
-		options:           opts,
-		statusView:        statusView,
-		cmdBar:            cmdBar,
-		logoView:          logoView,
-		table:             table,
-		detail:            detail,
-		logView:           logView,
-		problemsView:      problemsView,
-		searchStatus:      searchStatus,
-		currentView:       "queue",
-		theme:             theme,
-		logFollow:         true,
-		logCursor:         make(map[string]uint64),
-		logFileCursor:     make(map[string]int64),
-		problemsLogCursor: make(map[string]uint64),
-		episodeCollapsed:  map[int64]bool{},
-		pathExpanded:      map[int64]bool{},
+		app:          app,
+		ctx:          ctx,
+		client:       opts.Client,
+		options:      opts,
+		statusView:   statusView,
+		cmdBar:       cmdBar,
+		logoView:     logoView,
+		table:        table,
+		detail:       detail,
+		logView:      logView,
+		problemsView: problemsView,
+		currentView:  "queue",
+		theme:        theme,
+		search: searchState{
+			status: searchStatus,
+		},
+		logs: logViewState{
+			follow:     true,
+			cursor:     make(map[string]uint64),
+			fileCursor: make(map[string]int64),
+		},
+		problems: problemsState{
+			logCursor: make(map[string]uint64),
+		},
+		detailState: detailViewState{
+			episodeCollapsed: map[int64]bool{},
+			pathExpanded:     map[int64]bool{},
+		},
 	}
 
-	vm.logView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch {
-		case event.Key() == tcell.KeyUp || event.Key() == tcell.KeyPgUp || event.Key() == tcell.KeyHome:
-			if vm.logFollow {
-				vm.logFollow = false
-				vm.updateLogStatus(false, vm.lastLogPath)
-				vm.setCommandBar("logs")
-			}
-			return event
-		case event.Rune() == 'k':
-			// Vim-style up
-			if vm.logFollow {
-				vm.logFollow = false
-				vm.updateLogStatus(false, vm.lastLogPath)
-				vm.setCommandBar("logs")
-			}
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-		case event.Rune() == 'j':
-			// Vim-style down
-			if vm.logFollow {
-				vm.logFollow = false
-				vm.updateLogStatus(false, vm.lastLogPath)
-				vm.setCommandBar("logs")
-			}
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case event.Rune() == 'g':
-			// Vim-style top (gg)
-			if vm.logFollow {
-				vm.logFollow = false
-				vm.updateLogStatus(false, vm.lastLogPath)
-				vm.setCommandBar("logs")
-			}
-			return tcell.NewEventKey(tcell.KeyHome, 0, tcell.ModNone)
-		case event.Key() == tcell.KeyEnd || event.Rune() == 'G':
-			vm.logFollow = true
-			vm.logView.ScrollToEnd()
-			vm.refreshLogs(true)
-			vm.updateLogStatus(vm.logFollow, vm.lastLogPath)
-			vm.setCommandBar("logs")
-			return nil
-		case event.Rune() == ' ':
-			vm.logFollow = !vm.logFollow
-			if vm.logFollow {
-				vm.logView.ScrollToEnd()
-				vm.refreshLogs(true)
-			}
-			vm.updateLogStatus(vm.logFollow, vm.lastLogPath)
-			vm.setCommandBar("logs")
-			return nil
-		}
-		return event
-	})
-
-	vm.detail.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Rune() {
-		case 'j':
-			// Vim-style down
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case 'k':
-			// Vim-style up
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-		case 'g':
-			// Vim-style top (gg)
-			return tcell.NewEventKey(tcell.KeyHome, 0, tcell.ModNone)
-		case 'G':
-			// Vim-style bottom
-			return tcell.NewEventKey(tcell.KeyEnd, 0, tcell.ModNone)
-		}
-		return event
-	})
-
-	vm.problemsView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Rune() {
-		case 'j':
-			// Vim-style down
-			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case 'k':
-			// Vim-style up
-			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-		case 'g':
-			// Vim-style top (gg)
-			return tcell.NewEventKey(tcell.KeyHome, 0, tcell.ModNone)
-		case 'G':
-			// Vim-style bottom
-			return tcell.NewEventKey(tcell.KeyEnd, 0, tcell.ModNone)
-		}
-		return event
-	})
+	vm.logView.SetInputCapture(vm.makeLogViewHandler())
+	vm.detail.SetInputCapture(makeVimNavHandler(nil))
+	vm.problemsView.SetInputCapture(makeVimNavHandler(nil))
 
 	vm.table.SetSelectedFunc(func(row, column int) {
 		vm.updateDetail(row)
@@ -276,53 +216,7 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		vm.updateDetail(row)
 	})
 
-	vm.table.SetFocusFunc(func() {
-		vm.table.SetBorderColor(vm.theme.TableBorderFocusColor())
-		vm.table.SetBackgroundColor(vm.theme.FocusBackgroundColor())
-		vm.detail.SetBorderColor(vm.theme.TableBorderColor())
-		vm.detail.SetBackgroundColor(vm.theme.SurfaceAltColor())
-		vm.logView.SetBorderColor(vm.theme.TableBorderColor())
-		vm.logView.SetBackgroundColor(vm.theme.SurfaceAltColor())
-		vm.problemsView.SetBorderColor(vm.theme.TableBorderColor())
-		vm.problemsView.SetBackgroundColor(vm.theme.SurfaceAltColor())
-		vm.setCommandBar("queue")
-	})
-
-	vm.detail.SetFocusFunc(func() {
-		vm.table.SetBorderColor(vm.theme.TableBorderColor())
-		vm.table.SetBackgroundColor(vm.theme.SurfaceColor())
-		vm.detail.SetBorderColor(vm.theme.TableBorderFocusColor())
-		vm.detail.SetBackgroundColor(vm.theme.FocusBackgroundColor())
-		vm.logView.SetBorderColor(vm.theme.TableBorderColor())
-		vm.logView.SetBackgroundColor(vm.theme.SurfaceAltColor())
-		vm.problemsView.SetBorderColor(vm.theme.TableBorderColor())
-		vm.problemsView.SetBackgroundColor(vm.theme.SurfaceAltColor())
-		vm.setCommandBar("detail")
-	})
-
-	vm.logView.SetFocusFunc(func() {
-		vm.table.SetBorderColor(vm.theme.TableBorderColor())
-		vm.table.SetBackgroundColor(vm.theme.SurfaceColor())
-		vm.detail.SetBorderColor(vm.theme.TableBorderColor())
-		vm.detail.SetBackgroundColor(vm.theme.SurfaceAltColor())
-		vm.logView.SetBorderColor(vm.theme.TableBorderFocusColor())
-		vm.logView.SetBackgroundColor(vm.theme.FocusBackgroundColor())
-		vm.problemsView.SetBorderColor(vm.theme.TableBorderColor())
-		vm.problemsView.SetBackgroundColor(vm.theme.SurfaceAltColor())
-		vm.setCommandBar("logs")
-	})
-
-	vm.problemsView.SetFocusFunc(func() {
-		vm.table.SetBorderColor(vm.theme.TableBorderColor())
-		vm.table.SetBackgroundColor(vm.theme.SurfaceColor())
-		vm.detail.SetBorderColor(vm.theme.TableBorderColor())
-		vm.detail.SetBackgroundColor(vm.theme.SurfaceAltColor())
-		vm.logView.SetBorderColor(vm.theme.TableBorderColor())
-		vm.logView.SetBackgroundColor(vm.theme.SurfaceAltColor())
-		vm.problemsView.SetBorderColor(vm.theme.TableBorderFocusColor())
-		vm.problemsView.SetBackgroundColor(vm.theme.FocusBackgroundColor())
-		vm.setCommandBar("problems")
-	})
+	vm.setupFocusHandlers()
 
 	vm.root = tview.NewPages()
 	vm.root.SetBackgroundColor(theme.BackgroundColor())
@@ -382,8 +276,8 @@ func (vm *viewModel) buildMainLayout() tview.Primitive {
 	logContainer := tview.NewFlex().SetDirection(tview.FlexRow)
 	logContainer.SetBackgroundColor(vm.theme.SurfaceColor())
 	logContainer.
-		AddItem(vm.logView, 0, 1, true).      // Main log content
-		AddItem(vm.searchStatus, 1, 0, false) // Search status bar at bottom
+		AddItem(vm.logView, 0, 1, true).       // Main log content
+		AddItem(vm.search.status, 1, 0, false) // Search status bar at bottom
 
 	// Create main content pages for different views
 	// Dual-pane queue view: table + detail side-by-side
@@ -459,9 +353,9 @@ func (vm *viewModel) maybeUpdateQueueLayout() {
 	// Enhanced layout logic for medium/large terminals
 	target := "wide"
 	if width > 0 {
-		if width < 100 {
+		if width < LayoutCompactWidth {
 			target = "stacked"
-		} else if width >= 160 {
+		} else if width >= LayoutExtraWideWidth {
 			// Extra wide layout - give more space to detail
 			vm.applyExtraWideLayout()
 			return
@@ -503,7 +397,7 @@ func (vm *viewModel) setCommandBar(view string) {
 	switch view {
 	case "logs":
 		followLabel := "Pause"
-		if !vm.logFollow {
+		if !vm.logs.follow {
 			followLabel = "Follow"
 		}
 		commands = []cmd{
@@ -526,7 +420,7 @@ func (vm *viewModel) setCommandBar(view string) {
 		}
 	case "detail":
 		fullscreenLabel := "Full"
-		if vm.fullscreenMode {
+		if vm.detailState.fullscreenMode {
 			fullscreenLabel = "Split"
 		}
 		commands = []cmd{
@@ -566,15 +460,15 @@ func (vm *viewModel) setCommandBar(view string) {
 	for _, cmd := range commands {
 		segments = append(segments, fmt.Sprintf("[%s]%s[-]:[%s]%s[-]", vm.theme.Text.AccentSoft, cmd.key, vm.theme.Text.Secondary, cmd.desc))
 	}
-	if view != "logs" && vm.queueSearchPattern != "" {
-		pattern := truncate(vm.queueSearchPattern, 18)
+	if view != "logs" && vm.queueSearch.pattern != "" {
+		pattern := truncate(vm.queueSearch.pattern, 18)
 		segments = append(segments, fmt.Sprintf("[%s]/%s[-]", vm.theme.Text.Accent, tview.Escape(pattern)))
 	}
-	if view == "logs" && vm.lastSearchPattern != "" {
-		pattern := truncate(vm.lastSearchPattern, 18)
+	if view == "logs" && vm.search.lastPattern != "" {
+		pattern := truncate(vm.search.lastPattern, 18)
 		matchInfo := ""
-		if len(vm.searchMatches) > 0 {
-			matchInfo = fmt.Sprintf(" [%s](%d)[-]", vm.theme.Text.Muted, len(vm.searchMatches))
+		if len(vm.search.matches) > 0 {
+			matchInfo = fmt.Sprintf(" [%s](%d)[-]", vm.theme.Text.Muted, len(vm.search.matches))
 		}
 		segments = append(segments, fmt.Sprintf("[%s]/%s[-]%s", vm.theme.Text.Accent, tview.Escape(pattern), matchInfo))
 	}

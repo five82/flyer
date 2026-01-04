@@ -11,24 +11,6 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
-var statusPriority = map[string]int{
-	"failed":              0,
-	"review":              1,
-	"subtitling":          2,
-	"encoding":            3,
-	"organizing":          4,
-	"ripping":             5,
-	"episode_identifying": 6,
-	"identifying":         7,
-	"episode_identified":  8,
-	"ripped":              9,
-	"subtitled":           10,
-	"encoded":             11,
-	"identified":          12,
-	"pending":             13,
-	"completed":           14,
-}
-
 func (vm *viewModel) renderTable() {
 	vm.table.Clear()
 
@@ -36,8 +18,8 @@ func (vm *viewModel) renderTable() {
 	if width <= 0 {
 		width = 120
 	}
-	showProgress := width >= 120
-	showUpdated := width >= 150
+	showProgress := width >= LayoutProgressWidth
+	showUpdated := width >= LayoutUpdatedWidth
 
 	columns := []struct {
 		label     string
@@ -100,9 +82,9 @@ func (vm *viewModel) renderTable() {
 				status == "organizing"
 		})
 	}
-	if vm.queueSearchRegex != nil {
+	if vm.queueSearch.regex != nil {
 		rows = filterItems(rows, func(it spindle.QueueItem) bool {
-			return vm.queueSearchRegex.MatchString(vm.queueSearchHaystack(it))
+			return vm.queueSearch.regex.MatchString(vm.queueSearchHaystack(it))
 		})
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
@@ -136,7 +118,7 @@ func (vm *viewModel) renderTable() {
 	} else if showProgress {
 		titleLimit = 38
 	}
-	if width < 100 {
+	if width < LayoutCompactWidth {
 		titleLimit = 28
 	}
 
@@ -193,7 +175,7 @@ func (vm *viewModel) updateQueueTitle(visible, total int) {
 		parts = append(parts, fmt.Sprintf("[%s::b]%s[-]", filterColor, strings.ToUpper(filterLabel)))
 	}
 
-	if pattern := strings.TrimSpace(vm.queueSearchPattern); pattern != "" {
+	if pattern := strings.TrimSpace(vm.queueSearch.pattern); pattern != "" {
 		pattern = truncate(pattern, 18)
 		parts = append(parts, fmt.Sprintf("[%s]/%s[-]", vm.theme.Text.AccentSoft, tview.Escape(pattern)))
 	}
@@ -280,21 +262,6 @@ func (vm *viewModel) gutterMarker(item spindle.QueueItem) string {
 	return ""
 }
 
-func effectiveQueueStage(item spindle.QueueItem) string {
-	status := strings.ToLower(strings.TrimSpace(item.Status))
-	switch status {
-	case "completed":
-		return "completed"
-	case "failed", "review":
-		// Terminal / attention states should override any stale progress.stage.
-		return status
-	}
-
-	if stage := strings.ToLower(strings.TrimSpace(item.Progress.Stage)); stage != "" {
-		return stage
-	}
-	return status
-}
 
 func (vm *viewModel) formatStage(item spindle.QueueItem) string {
 	stage := effectiveQueueStage(item)
@@ -481,12 +448,6 @@ func (vm *viewModel) colorForLane(lane string) string {
 	return vm.theme.LaneColor(lane)
 }
 
-func statusRank(status string) int {
-	if rank, ok := statusPriority[strings.ToLower(strings.TrimSpace(status))]; ok {
-		return rank
-	}
-	return 999
-}
 
 func mostRecentTimestamp(item spindle.QueueItem) time.Time {
 	updated := item.ParsedUpdatedAt()
@@ -546,33 +507,3 @@ func determineLane(item spindle.QueueItem) string {
 	}
 }
 
-func titleCase(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	parts := strings.Split(value, "_")
-	for i, part := range parts {
-		if part == "" {
-			continue
-		}
-		lower := strings.ToLower(part)
-		parts[i] = strings.ToUpper(lower[:1]) + lower[1:]
-	}
-	return strings.Join(parts, " ")
-}
-
-func truncate(value string, limit int) string {
-	value = strings.TrimSpace(value)
-	if limit <= 0 {
-		return value
-	}
-	runes := []rune(value)
-	if len(runes) <= limit {
-		return value
-	}
-	if limit <= 3 {
-		return string(runes[:limit])
-	}
-	return string(runes[:limit-3]) + "..."
-}

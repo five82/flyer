@@ -16,22 +16,22 @@ func (vm *viewModel) startSearch() {
 		return
 	}
 
-	vm.searchMode = true
-	vm.searchInput = tview.NewInputField()
-	vm.searchInput.SetLabel("/")
-	vm.searchInput.SetFieldWidth(40)
-	vm.searchInput.SetBackgroundColor(vm.theme.SurfaceColor())
-	vm.searchInput.SetFieldBackgroundColor(vm.theme.SurfaceAltColor())
-	vm.searchInput.SetFieldTextColor(hexToColor(vm.theme.Text.Primary))
+	vm.search.mode = true
+	vm.search.input = tview.NewInputField()
+	vm.search.input.SetLabel("/")
+	vm.search.input.SetFieldWidth(40)
+	vm.search.input.SetBackgroundColor(vm.theme.SurfaceColor())
+	vm.search.input.SetFieldBackgroundColor(vm.theme.SurfaceAltColor())
+	vm.search.input.SetFieldTextColor(hexToColor(vm.theme.Text.Primary))
 
-	vm.searchHint = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
-	vm.searchHint.SetBackgroundColor(vm.theme.SurfaceColor())
-	vm.searchHint.SetTextColor(hexToColor(vm.theme.Text.Muted))
-	vm.searchHint.SetText(fmt.Sprintf("[%s]Enter to search (regex, case-insensitive). Esc to cancel.[-]", vm.theme.Text.Muted))
+	vm.search.hint = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	vm.search.hint.SetBackgroundColor(vm.theme.SurfaceColor())
+	vm.search.hint.SetTextColor(hexToColor(vm.theme.Text.Muted))
+	vm.search.hint.SetText(fmt.Sprintf("[%s]Enter to search (regex, case-insensitive). Esc to cancel.[-]", vm.theme.Text.Muted))
 
-	vm.searchInput.SetChangedFunc(func(_ string) {
-		if vm.searchHint != nil {
-			vm.searchHint.SetText(fmt.Sprintf("[%s]Enter to search (regex, case-insensitive). Esc to cancel.[-]", vm.theme.Text.Muted))
+	vm.search.input.SetChangedFunc(func(_ string) {
+		if vm.search.hint != nil {
+			vm.search.hint.SetText(fmt.Sprintf("[%s]Enter to search (regex, case-insensitive). Esc to cancel.[-]", vm.theme.Text.Muted))
 		}
 	})
 
@@ -39,10 +39,10 @@ func (vm *viewModel) startSearch() {
 	searchContainer := tview.NewFlex().SetDirection(tview.FlexRow)
 	searchContainer.SetBackgroundColor(vm.theme.SurfaceColor())
 	searchContainer.AddItem(nil, 0, 1, false) // Push to bottom
-	searchContainer.AddItem(vm.searchHint, 1, 0, false)
-	searchContainer.AddItem(vm.searchInput, 1, 0, true)
+	searchContainer.AddItem(vm.search.hint, 1, 0, false)
+	searchContainer.AddItem(vm.search.input, 1, 0, true)
 
-	vm.searchInput.SetDoneFunc(func(key tcell.Key) {
+	vm.search.input.SetDoneFunc(func(key tcell.Key) {
 		switch key {
 		case tcell.KeyEnter:
 			vm.performSearch()
@@ -52,14 +52,14 @@ func (vm *viewModel) startSearch() {
 	})
 
 	vm.root.AddPage("search", searchContainer, true, true)
-	vm.app.SetFocus(vm.searchInput)
+	vm.app.SetFocus(vm.search.input)
 }
 
 func (vm *viewModel) performSearch() {
-	if vm.searchInput == nil {
+	if vm.search.input == nil {
 		return
 	}
-	searchText := strings.TrimSpace(vm.searchInput.GetText())
+	searchText := strings.TrimSpace(vm.search.input.GetText())
 	if searchText == "" {
 		vm.cancelSearch()
 		return
@@ -68,58 +68,58 @@ func (vm *viewModel) performSearch() {
 	// Compile regex for case-insensitive search
 	regex, err := regexp.Compile("(?i)" + searchText)
 	if err != nil {
-		if vm.searchHint != nil {
-			vm.searchHint.SetText(fmt.Sprintf("[%s]Invalid regex: %s[-]", vm.theme.Search.Error, tview.Escape(err.Error())))
+		if vm.search.hint != nil {
+			vm.search.hint.SetText(fmt.Sprintf("[%s]Invalid regex: %s[-]", vm.theme.Search.Error, tview.Escape(err.Error())))
 		}
 		return
 	}
 
-	vm.searchRegex = regex
-	vm.lastSearchPattern = searchText
+	vm.search.regex = regex
+	vm.search.lastPattern = searchText
 	vm.root.RemovePage("search")
-	vm.searchMode = false
-	vm.searchHint = nil
+	vm.search.mode = false
+	vm.search.hint = nil
 
 	// Find matches in current log content
 	vm.findSearchMatches()
-	if len(vm.searchMatches) > 0 {
-		vm.currentSearchMatch = 0
+	if len(vm.search.matches) > 0 {
+		vm.search.currentMatch = 0
 		vm.highlightSearchMatch()
 		vm.updateSearchStatus()
 	} else {
-		vm.searchStatus.SetText(fmt.Sprintf("[%s]Pattern not found: %s[-]", vm.theme.Search.Error, searchText))
+		vm.search.status.SetText(fmt.Sprintf("[%s]Pattern not found: %s[-]", vm.theme.Search.Error, searchText))
 	}
 }
 
 func (vm *viewModel) cancelSearch() {
 	vm.root.RemovePage("search")
-	vm.searchMode = false
+	vm.search.mode = false
 	vm.clearSearch()
-	vm.searchHint = nil
+	vm.search.hint = nil
 	vm.returnToCurrentView()
-	vm.updateLogStatus(vm.logFollow, vm.lastLogPath)
+	vm.updateLogStatus(vm.logs.follow, vm.logs.lastPath)
 }
 
 func (vm *viewModel) clearSearch() {
-	vm.searchRegex = nil
-	vm.searchMatches = []int{}
-	vm.currentSearchMatch = 0
-	vm.lastSearchPattern = ""
-	vm.searchStatus.SetText("")
-	vm.updateLogStatus(vm.logFollow, vm.lastLogPath)
+	vm.search.regex = nil
+	vm.search.matches = []int{}
+	vm.search.currentMatch = 0
+	vm.search.lastPattern = ""
+	vm.search.status.SetText("")
+	vm.updateLogStatus(vm.logs.follow, vm.logs.lastPath)
 }
 
 func (vm *viewModel) updateSearchStatus() {
-	if vm.searchRegex == nil || len(vm.searchMatches) == 0 {
-		vm.searchStatus.SetText("")
+	if vm.search.regex == nil || len(vm.search.matches) == 0 {
+		vm.search.status.SetText("")
 		return
 	}
 
-	matchNum := vm.currentSearchMatch + 1
-	totalMatches := len(vm.searchMatches)
-	vm.searchStatus.SetText(fmt.Sprintf("[%s]/%s[-] - [%s]%d/%d[-] - Press [%s]n[-] for next, [%s]N[-] for previous",
+	matchNum := vm.search.currentMatch + 1
+	totalMatches := len(vm.search.matches)
+	vm.search.status.SetText(fmt.Sprintf("[%s]/%s[-] - [%s]%d/%d[-] - Press [%s]n[-] for next, [%s]N[-] for previous",
 		vm.theme.Search.Prompt,
-		vm.lastSearchPattern,
+		vm.search.lastPattern,
 		vm.theme.Search.Count,
 		matchNum,
 		totalMatches,
@@ -128,50 +128,50 @@ func (vm *viewModel) updateSearchStatus() {
 }
 
 func (vm *viewModel) findSearchMatches() {
-	if vm.searchRegex == nil {
+	if vm.search.regex == nil {
 		return
 	}
 
-	lines := vm.rawLogLines
-	vm.searchMatches = []int{}
+	lines := vm.logs.rawLines
+	vm.search.matches = []int{}
 	for i, line := range lines {
-		if vm.searchRegex.MatchString(line) {
-			vm.searchMatches = append(vm.searchMatches, i)
+		if vm.search.regex.MatchString(line) {
+			vm.search.matches = append(vm.search.matches, i)
 		}
 	}
 }
 
 func (vm *viewModel) nextSearchMatch() {
-	if len(vm.searchMatches) == 0 {
+	if len(vm.search.matches) == 0 {
 		return
 	}
 
-	vm.currentSearchMatch = (vm.currentSearchMatch + 1) % len(vm.searchMatches)
+	vm.search.currentMatch = (vm.search.currentMatch + 1) % len(vm.search.matches)
 	vm.highlightSearchMatch()
 	vm.updateSearchStatus()
 }
 
 func (vm *viewModel) previousSearchMatch() {
-	if len(vm.searchMatches) == 0 {
+	if len(vm.search.matches) == 0 {
 		return
 	}
 
-	vm.currentSearchMatch = (vm.currentSearchMatch - 1 + len(vm.searchMatches)) % len(vm.searchMatches)
+	vm.search.currentMatch = (vm.search.currentMatch - 1 + len(vm.search.matches)) % len(vm.search.matches)
 	vm.highlightSearchMatch()
 	vm.updateSearchStatus()
 }
 
 func (vm *viewModel) highlightSearchMatch() {
-	if len(vm.searchMatches) == 0 || vm.currentSearchMatch >= len(vm.searchMatches) {
+	if len(vm.search.matches) == 0 || vm.search.currentMatch >= len(vm.search.matches) {
 		return
 	}
 
-	targetLine := vm.searchMatches[vm.currentSearchMatch]
+	targetLine := vm.search.matches[vm.search.currentMatch]
 
-	highlighted := make([]string, len(vm.rawLogLines))
-	for i, line := range vm.rawLogLines {
+	highlighted := make([]string, len(vm.logs.rawLines))
+	for i, line := range vm.logs.rawLines {
 		colored := logtail.ColorizeLine(line)
-		if vm.searchRegex.MatchString(line) {
+		if vm.search.regex.MatchString(line) {
 			if i == targetLine {
 				colored = fmt.Sprintf("[%s:%s]%s[-:-]", vm.theme.Search.HighlightActiveFg, vm.theme.Search.HighlightActiveBg, colored)
 			} else {

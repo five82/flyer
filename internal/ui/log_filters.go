@@ -9,9 +9,9 @@ import (
 )
 
 func (vm *viewModel) logFiltersActive() bool {
-	return strings.TrimSpace(vm.logFilterComponent) != "" ||
-		strings.TrimSpace(vm.logFilterLane) != "" ||
-		strings.TrimSpace(vm.logFilterRequest) != ""
+	return strings.TrimSpace(vm.logs.filterComponent) != "" ||
+		strings.TrimSpace(vm.logs.filterLane) != "" ||
+		strings.TrimSpace(vm.logs.filterRequest) != ""
 }
 
 func (vm *viewModel) showLogFilters() {
@@ -25,7 +25,7 @@ func (vm *viewModel) showLogFilters() {
 
 	componentField := tview.NewInputField().
 		SetLabel("Component: ").
-		SetText(vm.logFilterComponent).
+		SetText(vm.logs.filterComponent).
 		SetFieldWidth(28)
 	componentField.SetBackgroundColor(vm.theme.SurfaceColor())
 	componentField.SetFieldBackgroundColor(vm.theme.SurfaceAltColor())
@@ -34,7 +34,7 @@ func (vm *viewModel) showLogFilters() {
 
 	laneField := tview.NewInputField().
 		SetLabel("Lane:      ").
-		SetText(vm.logFilterLane).
+		SetText(vm.logs.filterLane).
 		SetFieldWidth(28)
 	laneField.SetBackgroundColor(vm.theme.SurfaceColor())
 	laneField.SetFieldBackgroundColor(vm.theme.SurfaceAltColor())
@@ -43,7 +43,7 @@ func (vm *viewModel) showLogFilters() {
 
 	requestField := tview.NewInputField().
 		SetLabel("Request:   ").
-		SetText(vm.logFilterRequest).
+		SetText(vm.logs.filterRequest).
 		SetFieldWidth(28)
 	requestField.SetBackgroundColor(vm.theme.SurfaceColor())
 	requestField.SetFieldBackgroundColor(vm.theme.SurfaceAltColor())
@@ -69,11 +69,11 @@ func (vm *viewModel) showLogFilters() {
 	}
 
 	apply := func(component, lane, request string) {
-		vm.logFilterComponent = strings.TrimSpace(component)
-		vm.logFilterLane = strings.TrimSpace(lane)
-		vm.logFilterRequest = strings.TrimSpace(request)
-		if vm.logMode != logSourceDaemon {
-			vm.logMode = logSourceDaemon
+		vm.logs.filterComponent = strings.TrimSpace(component)
+		vm.logs.filterLane = strings.TrimSpace(lane)
+		vm.logs.filterRequest = strings.TrimSpace(request)
+		if vm.logs.mode != logSourceDaemon {
+			vm.logs.mode = logSourceDaemon
 			vm.updateLogTitle()
 		}
 		vm.resetLogBuffer()

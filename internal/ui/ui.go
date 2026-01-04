@@ -24,11 +24,7 @@ type Options struct {
 	RefreshEvery  time.Duration
 }
 
-const (
-	logFetchLimit     = 2000
-	logBufferLimit    = 5000
-	defaultUIInterval = time.Second
-)
+// Log and UI constants are defined in layout.go
 
 type logSource int
 type queueFilter int
@@ -60,7 +56,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	refreshEvery := opts.RefreshEvery
 	if refreshEvery <= 0 {
-		refreshEvery = defaultUIInterval
+		refreshEvery = DefaultUIInterval
 	}
 	if refreshEvery > time.Second {
 		refreshEvery = time.Second
@@ -95,7 +91,7 @@ func Run(ctx context.Context, opts Options) error {
 		}
 
 		// Handle queue search mode
-		if model.queueSearchMode {
+		if model.queueSearch.mode {
 			switch event.Key() {
 			case tcell.KeyEnter:
 				model.performQueueSearch()
@@ -111,7 +107,7 @@ func Run(ctx context.Context, opts Options) error {
 		}
 
 		// Handle search mode
-		if model.searchMode {
+		if model.search.mode {
 			switch event.Key() {
 			case tcell.KeyEnter:
 				model.performSearch()
@@ -131,7 +127,7 @@ func Run(ctx context.Context, opts Options) error {
 			app.Stop()
 			return nil
 		case tcell.KeyESC:
-			if model.queueSearchRegex != nil {
+			if model.queueSearch.regex != nil {
 				model.clearQueueSearch()
 				return nil
 			}
@@ -264,7 +260,7 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 	if width <= 0 {
 		width = 120
 	}
-	compact := width < 100
+	compact := width < LayoutCompactWidth
 
 	if !snapshot.HasStatus {
 		if snapshot.LastError != nil {

@@ -88,7 +88,26 @@ type SearchPalette struct {
 	HighlightPassiveFg string
 }
 
+// themes is a registry of available theme constructors.
+var themes = map[string]func() Theme{
+	"CarbonNight": carbonNightTheme,
+}
+
+// GetTheme returns a theme by name. If the name is not found, returns the default theme.
+func GetTheme(name string) Theme {
+	if fn, ok := themes[name]; ok {
+		return fn()
+	}
+	return carbonNightTheme()
+}
+
+// defaultTheme returns the default theme (CarbonNight).
 func defaultTheme() Theme {
+	return carbonNightTheme()
+}
+
+// carbonNightTheme returns the CarbonNight dark theme.
+func carbonNightTheme() Theme {
 	return Theme{
 		Name: "CarbonNight",
 		Base: BasePalette{

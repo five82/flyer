@@ -11,6 +11,18 @@ import (
 	"time"
 )
 
+// StatusFetcher defines the interface for fetching Spindle status and logs.
+// This interface is implemented by *Client and can be used for testing.
+type StatusFetcher interface {
+	FetchStatus(ctx context.Context) (*StatusResponse, error)
+	FetchQueue(ctx context.Context) ([]QueueItem, error)
+	FetchLogs(ctx context.Context, query LogQuery) (LogBatch, error)
+	FetchLogTail(ctx context.Context, query LogTailQuery) (LogTailBatch, error)
+}
+
+// Ensure Client implements StatusFetcher at compile time.
+var _ StatusFetcher = (*Client)(nil)
+
 // Client talks to the Spindle HTTP API.
 type Client struct {
 	baseURL   *url.URL

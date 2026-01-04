@@ -16,28 +16,28 @@ func (vm *viewModel) refreshProblems(force bool) {
 		vm.updateProblemsTitle(nil)
 		return
 	}
-	if !force && time.Since(vm.lastProblemsSet) < 400*time.Millisecond {
+	if !force && time.Since(vm.problems.lastSet) < LogRefreshDebounce {
 		return
 	}
 
 	item := vm.selectedItem()
 	if item == nil {
 		vm.problemsView.SetText("Select an item to view problems")
-		vm.problemsLogLines = nil
-		vm.lastProblemsKey = ""
+		vm.problems.logLines = nil
+		vm.problems.lastKey = ""
 		vm.updateProblemsTitle(nil)
 		return
 	}
 
 	key := fmt.Sprintf("problems-item-%d", item.ID)
-	since := vm.problemsLogCursor[key]
+	since := vm.problems.logCursor[key]
 	req := spindle.LogQuery{
 		Since:  since,
-		Limit:  logFetchLimit,
+		Limit:  LogFetchLimit,
 		ItemID: item.ID,
 		Level:  "warn",
 	}
-	if since == 0 || key != vm.lastProblemsKey {
+	if since == 0 || key != vm.problems.lastKey {
 		req.Tail = true
 	}
 
@@ -45,7 +45,7 @@ func (vm *viewModel) refreshProblems(force bool) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	reqCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	reqCtx, cancel := context.WithTimeout(ctx, LogFetchTimeout)
 	defer cancel()
 
 	batch, err := vm.client.FetchLogs(reqCtx, req)
@@ -55,29 +55,29 @@ func (vm *viewModel) refreshProblems(force bool) {
 		return
 	}
 
-	if key != vm.lastProblemsKey || req.Since == 0 {
-		vm.problemsLogLines = nil
+	if key != vm.problems.lastKey || req.Since == 0 {
+		vm.problems.logLines = nil
 	}
-	vm.lastProblemsKey = key
-	vm.problemsLogCursor[key] = batch.Next
+	vm.problems.lastKey = key
+	vm.problems.logCursor[key] = batch.Next
 
 	newLines := formatLogEvents(batch.Events)
 	if len(newLines) > 0 {
-		vm.problemsLogLines = append(vm.problemsLogLines, newLines...)
-		if overflow := len(vm.problemsLogLines) - logBufferLimit; overflow > 0 {
-			vm.problemsLogLines = append([]string(nil), vm.problemsLogLines[overflow:]...)
+		vm.problems.logLines = append(vm.problems.logLines, newLines...)
+		if overflow := len(vm.problems.logLines) - LogBufferLimit; overflow > 0 {
+			vm.problems.logLines = append([]string(nil), vm.problems.logLines[overflow:]...)
 		}
 	}
 
-	if len(vm.problemsLogLines) == 0 {
+	if len(vm.problems.logLines) == 0 {
 		vm.problemsView.SetText("No warnings or errors for this item")
 		vm.updateProblemsTitle(item)
 		return
 	}
 
-	colorized := logtail.ColorizeLines(vm.problemsLogLines)
+	colorized := logtail.ColorizeLines(vm.problems.logLines)
 	vm.displayProblems(colorized)
-	vm.lastProblemsSet = time.Now()
+	vm.problems.lastSet = time.Now()
 	vm.updateProblemsTitle(item)
 }
 
