@@ -199,7 +199,7 @@ func (vm *viewModel) renderEncodingConfig(b *strings.Builder, item spindle.Queue
 		parts = append(parts, fmt.Sprintf("Preset %s", cfg.Preset))
 	}
 	if cfg.Quality != "" {
-		parts = append(parts, fmt.Sprintf("CRF %s", cfg.Quality))
+		parts = append(parts, cfg.Quality)
 	}
 
 	if len(parts) > 0 {
