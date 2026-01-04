@@ -283,7 +283,9 @@ func (vm *viewModel) renderActiveContext(b *strings.Builder, item spindle.QueueI
 	// Specs section
 	vm.writeSection(b, "Specs")
 	vm.renderVideoSpecs(b, item)
+	vm.renderAudioInfo(b, item)
 	vm.renderEncodingConfig(b, item)
+	vm.renderCropInfo(b, item)
 
 	// Current stage
 	currentStage := normalizeEpisodeStage(item.Progress.Stage)
@@ -330,11 +332,12 @@ func (vm *viewModel) renderCompletedContext(b *strings.Builder, item spindle.Que
 	vm.writeSection(b, "Results")
 	vm.renderSizeResult(b, item)
 	vm.renderVideoSpecs(b, item)
+	vm.renderAudioInfo(b, item)
 	vm.renderEncodingConfig(b, item)
+	vm.renderEncodeStats(b, item)
 
-	// Subtitle summary (TV shows with multiple episodes)
+	// Subtitle summary (TV shows with multiple episodes) - inline in results
 	if len(episodes) > 1 && mediaType != "movie" {
-		vm.writeSection(b, "Subtitles")
 		vm.renderSubtitleSummary(b, item)
 	}
 

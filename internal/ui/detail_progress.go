@@ -185,7 +185,7 @@ func (vm *viewModel) renderVideoSpecs(b *strings.Builder, item spindle.QueueItem
 	}
 }
 
-// renderEncodingConfig renders the encoding config line (preset + CRF).
+// renderEncodingConfig renders the encoding config line (preset + CRF + tune).
 func (vm *viewModel) renderEncodingConfig(b *strings.Builder, item spindle.QueueItem) {
 	enc := item.Encoding
 	if enc == nil || enc.Config == nil {
@@ -200,6 +200,9 @@ func (vm *viewModel) renderEncodingConfig(b *strings.Builder, item spindle.Queue
 	}
 	if cfg.Quality != "" {
 		parts = append(parts, cfg.Quality)
+	}
+	if cfg.Tune != "" {
+		parts = append(parts, cfg.Tune)
 	}
 
 	if len(parts) > 0 {
@@ -264,7 +267,7 @@ func (vm *viewModel) renderSubtitleSummary(b *strings.Builder, item spindle.Queu
 	}
 
 	text := vm.theme.Text
-	fmt.Fprintf(b, "[%s]Subtitles:[-] [%s]%s[-]\n", text.Muted, text.Accent, strings.Join(parts, " • "))
+	fmt.Fprintf(b, "[%s]Subs:[-]      [%s]%s[-]\n", text.Muted, text.Accent, strings.Join(parts, " • "))
 }
 
 // renderPathsExpanded renders paths without truncation (for failed items).
@@ -281,4 +284,63 @@ func (vm *viewModel) renderPathsExpanded(b *strings.Builder, item spindle.QueueI
 
 	writePath("Source:", item.SourcePath)
 	writePath("Log:", item.ItemLogPath)
+}
+
+// renderCropInfo renders the crop detection line.
+func (vm *viewModel) renderCropInfo(b *strings.Builder, item spindle.QueueItem) {
+	enc := item.Encoding
+	if enc == nil || enc.Crop == nil {
+		return
+	}
+	crop := enc.Crop
+	text := vm.theme.Text
+
+	if crop.Disabled {
+		fmt.Fprintf(b, "[%s]Crop:[-]      [%s]Disabled[-]\n", text.Muted, text.Faint)
+		return
+	}
+	if crop.Message != "" {
+		fmt.Fprintf(b, "[%s]Crop:[-]      [%s]%s[-]\n", text.Muted, text.Secondary, crop.Message)
+	} else if crop.Required && crop.Crop != "" {
+		fmt.Fprintf(b, "[%s]Crop:[-]      [%s]%s[-]\n", text.Muted, text.Secondary, crop.Crop)
+	}
+}
+
+// renderEncodeStats renders duration and average speed (for completed).
+func (vm *viewModel) renderEncodeStats(b *strings.Builder, item spindle.QueueItem) {
+	enc := item.Encoding
+	if enc == nil || enc.Result == nil {
+		return
+	}
+	r := enc.Result
+	if r.DurationSeconds <= 0 && r.AverageSpeed <= 0 {
+		return
+	}
+
+	parts := []string{}
+	if r.DurationSeconds > 0 {
+		dur := time.Duration(r.DurationSeconds * float64(time.Second))
+		parts = append(parts, humanizeDuration(dur))
+	}
+	if r.AverageSpeed > 0 {
+		parts = append(parts, fmt.Sprintf("%.1fx avg", r.AverageSpeed))
+	}
+
+	text := vm.theme.Text
+	fmt.Fprintf(b, "[%s]Encoded:[-]   [%s]%s[-]\n", text.Muted, text.Secondary, strings.Join(parts, " @ "))
+}
+
+// renderAudioInfo renders the source audio format and commentary count.
+func (vm *viewModel) renderAudioInfo(b *strings.Builder, item spindle.QueueItem) {
+	if item.PrimaryAudioDescription == "" {
+		return
+	}
+
+	audio := item.PrimaryAudioDescription
+	if item.CommentaryCount > 0 {
+		audio = fmt.Sprintf("%s + %d commentary", audio, item.CommentaryCount)
+	}
+
+	text := vm.theme.Text
+	fmt.Fprintf(b, "[%s]Audio:[-]     [%s]%s[-]\n", text.Muted, text.Secondary, audio)
 }
