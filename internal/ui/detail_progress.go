@@ -283,10 +283,14 @@ func (vm *viewModel) renderCropInfo(b *strings.Builder, item spindle.QueueItem) 
 		fmt.Fprintf(b, "[%s]Crop:[-]      [%s]Disabled[-]\n", text.Muted, text.Faint)
 		return
 	}
-	if crop.Message != "" {
-		fmt.Fprintf(b, "[%s]Crop:[-]      [%s]%s[-]\n", text.Muted, text.Secondary, crop.Message)
-	} else if crop.Required && crop.Crop != "" {
-		fmt.Fprintf(b, "[%s]Crop:[-]      [%s]%s[-]\n", text.Muted, text.Secondary, crop.Crop)
+
+	if crop.Required && crop.Crop != "" {
+		// Strip "crop=" prefix for cleaner display
+		cropVal := strings.TrimPrefix(crop.Crop, "crop=")
+		fmt.Fprintf(b, "[%s]Crop:[-]      [%s]%s[-]\n", text.Muted, text.Accent, cropVal)
+	} else if crop.Message != "" {
+		// Detection complete but no cropping needed
+		fmt.Fprintf(b, "[%s]Crop:[-]      [%s]None[-]\n", text.Muted, text.Faint)
 	}
 }
 
