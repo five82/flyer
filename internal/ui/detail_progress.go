@@ -202,7 +202,7 @@ func (vm *viewModel) renderEncodingConfig(b *strings.Builder, item spindle.Queue
 		parts = append(parts, cfg.Quality)
 	}
 	if cfg.Tune != "" {
-		parts = append(parts, cfg.Tune)
+		parts = append(parts, fmt.Sprintf("Tune %s", cfg.Tune))
 	}
 
 	if len(parts) > 0 {
