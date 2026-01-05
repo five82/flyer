@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"math"
 	"strings"
 	"time"
 
@@ -45,19 +44,26 @@ func (vm *viewModel) renderActiveProgress(b *strings.Builder, item spindle.Queue
 	bar := vm.drawProgressBar(percent, 30, color)
 	fmt.Fprintf(b, "\n[%s::b]%s %s[::-]  %s %3.0f%%", color, icon, label, bar, percent)
 
-	subLines := make([]string, 0, 2)
+	subLines := make([]string, 0, 1)
 	if msg := strings.TrimSpace(item.Progress.Message); msg != "" {
+		switch stage {
+		case "encoding":
+			// Append fps to the message line to avoid duplication
+			if item.Encoding != nil && item.Encoding.FPS > 0 {
+				fps := fmt.Sprintf("%.0f fps", item.Encoding.FPS)
+				if strings.HasSuffix(msg, ")") {
+					msg = msg[:len(msg)-1] + ", " + fps + ")"
+				} else {
+					msg += " • " + fps
+				}
+			}
+		case "ripping":
+			// Append ETA to the message line for consistency
+			if eta := vm.estimateETA(item); eta != "" {
+				msg += " • " + eta
+			}
+		}
 		subLines = append(subLines, msg)
-	}
-	switch stage {
-	case "encoding":
-		if stats := formatEncodingMetrics(item.Encoding); stats != "" {
-			subLines = append(subLines, stats)
-		}
-	case "ripping":
-		if eta := vm.estimateETA(item); eta != "" {
-			subLines = append(subLines, eta)
-		}
 	}
 	for i, line := range subLines {
 		branch := "└─"
@@ -109,28 +115,6 @@ func (vm *viewModel) drawProgressBar(percent float64, width int, color string) s
 	}
 
 	return bar.String()
-}
-
-func formatEncodingMetrics(enc *spindle.EncodingStatus) string {
-	if enc == nil {
-		return ""
-	}
-	parts := make([]string, 0, 4)
-	if eta := enc.ETADuration(); eta > 0 {
-		parts = append(parts, fmt.Sprintf("ETA %s", humanizeDuration(eta)))
-	}
-	if enc.Speed > 0 {
-		parts = append(parts, fmt.Sprintf("%.1fx", enc.Speed))
-	}
-	if enc.FPS > 0 {
-		parts = append(parts, fmt.Sprintf("%.0f fps", enc.FPS))
-	}
-	// Frame summary
-	if enc.TotalFrames > 0 && enc.CurrentFrame > 0 {
-		percent := int(math.Round((float64(enc.CurrentFrame) / float64(enc.TotalFrames)) * 100))
-		parts = append(parts, fmt.Sprintf("%d/%d (%d%%)", enc.CurrentFrame, enc.TotalFrames, percent))
-	}
-	return strings.Join(parts, " • ")
 }
 
 func (vm *viewModel) estimateETA(item spindle.QueueItem) string {
