@@ -185,13 +185,7 @@ func (vm *viewModel) describeEpisodeTotals(episodes []spindle.EpisodeStatus, tot
 	if len(episodes) == 0 {
 		return "No episodes"
 	}
-	// Count failed episodes
-	failedCount := 0
-	for _, ep := range episodes {
-		if ep.IsFailed() {
-			failedCount++
-		}
-	}
+	failedCount := len(spindle.FilterFailed(episodes))
 	parts := []string{}
 	if failedCount > 0 {
 		parts = append(parts, fmt.Sprintf("%d failed", failedCount))
@@ -355,7 +349,7 @@ func (vm *viewModel) movieFocusLine(summary spindle.RipSpecSummary, stage string
 	return fmt.Sprintf("%s %s", stageChip, name)
 }
 
-func (vm *viewModel) describeItemFileStates(item spindle.QueueItem, stage string) string {
+func (vm *viewModel) describeItemFileStates(item spindle.QueueItem) string {
 	parts := []string{}
 	if item.RippedFile != "" {
 		parts = append(parts, "Ripped")

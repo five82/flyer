@@ -78,9 +78,9 @@ func (vm *viewModel) updateDetail(row int) {
 	// Context-specific rendering
 	switch determineDetailContext(item) {
 	case contextFailed:
-		vm.renderFailedContext(&b, item, summary, titleLookup, episodeTitleIndex, episodes, totals, mediaType)
+		vm.renderFailedContext(&b, item, episodes, mediaType)
 	case contextCompleted:
-		vm.renderCompletedContext(&b, item, summary, titleLookup, episodeTitleIndex, episodes, totals, mediaType)
+		vm.renderCompletedContext(&b, item, titleLookup, episodeTitleIndex, episodes, totals, mediaType)
 	case contextActive:
 		vm.renderActiveContext(&b, item, summary, titleLookup, episodeTitleIndex, episodes, totals, mediaType)
 	case contextPending:
@@ -91,7 +91,7 @@ func (vm *viewModel) updateDetail(row int) {
 	prevRow, prevCol := vm.detail.GetScrollOffset()
 	itemChanged := vm.detailState.lastID != item.ID
 	vm.detail.SetText(content)
-	vm.scrollDetailToActive(content, itemChanged, prevRow, prevCol)
+	vm.scrollDetailToActive(itemChanged, prevRow, prevCol)
 	vm.detailState.lastID = item.ID
 }
 
@@ -194,7 +194,7 @@ func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.Queue
 	}
 }
 
-func (vm *viewModel) scrollDetailToActive(content string, itemChanged bool, prevRow, prevCol int) {
+func (vm *viewModel) scrollDetailToActive(itemChanged bool, prevRow, prevCol int) {
 	// Basic scroll preservation or reset
 	if itemChanged {
 		vm.detail.ScrollTo(0, 0)
@@ -314,7 +314,7 @@ func (vm *viewModel) renderActiveContext(b *strings.Builder, item spindle.QueueI
 			vm.writeSection(b, "Current Selection")
 			fmt.Fprint(b, cut)
 			b.WriteString("\n")
-			if files := vm.describeItemFileStates(item, currentStage); files != "" {
+			if files := vm.describeItemFileStates(item); files != "" {
 				fmt.Fprintf(b, "[%s]Files:[-]   %s\n", text.Muted, files)
 			}
 		}
@@ -327,7 +327,7 @@ func (vm *viewModel) renderActiveContext(b *strings.Builder, item spindle.QueueI
 }
 
 // renderCompletedContext renders the detail view for completed items.
-func (vm *viewModel) renderCompletedContext(b *strings.Builder, item spindle.QueueItem, summary spindle.RipSpecSummary, titleLookup map[int]*spindle.RipSpecTitleInfo, episodeTitleIndex map[string]int, episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, mediaType string) {
+func (vm *viewModel) renderCompletedContext(b *strings.Builder, item spindle.QueueItem, titleLookup map[int]*spindle.RipSpecTitleInfo, episodeTitleIndex map[string]int, episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, mediaType string) {
 	// Results section
 	vm.writeSection(b, "Results")
 	vm.renderSizeResult(b, item)
@@ -349,7 +349,7 @@ func (vm *viewModel) renderCompletedContext(b *strings.Builder, item spindle.Que
 }
 
 // renderFailedContext renders the detail view for failed or review items.
-func (vm *viewModel) renderFailedContext(b *strings.Builder, item spindle.QueueItem, summary spindle.RipSpecSummary, titleLookup map[int]*spindle.RipSpecTitleInfo, episodeTitleIndex map[string]int, episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, mediaType string) {
+func (vm *viewModel) renderFailedContext(b *strings.Builder, item spindle.QueueItem, episodes []spindle.EpisodeStatus, mediaType string) {
 	text := vm.theme.Text
 
 	// Attention section (always show for failed)

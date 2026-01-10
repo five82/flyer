@@ -127,12 +127,7 @@ func (vm *viewModel) buildStructuredProblems(item *spindle.QueueItem) []string {
 	}
 
 	// Per-episode errors
-	var failedEpisodes []spindle.EpisodeStatus
-	for _, ep := range item.Episodes {
-		if ep.IsFailed() {
-			failedEpisodes = append(failedEpisodes, ep)
-		}
-	}
+	failedEpisodes := spindle.FilterFailed(item.Episodes)
 	if len(failedEpisodes) > 0 {
 		lines = append(lines, fmt.Sprintf("[%s::b]Failed Episodes[-::-]", text.Danger))
 		for _, ep := range failedEpisodes {

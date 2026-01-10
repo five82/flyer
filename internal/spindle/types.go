@@ -52,29 +52,29 @@ type QueueListResponse struct {
 
 // QueueItem describes a queue entry in transport-friendly form.
 type QueueItem struct {
-	ID                 int64                     `json:"id"`
-	DiscTitle          string                    `json:"discTitle"`
-	SourcePath         string                    `json:"sourcePath"`
-	Status             string                    `json:"status"`
-	ProcessingLane     string                    `json:"processingLane"`
-	DraptoPreset       string                    `json:"draptoPresetProfile,omitempty"`
-	Progress           QueueProgress             `json:"progress"`
-	Encoding           *EncodingStatus           `json:"encoding,omitempty"`
-	ErrorMessage       string                    `json:"errorMessage"`
-	CreatedAt          string                    `json:"createdAt"`
-	UpdatedAt          string                    `json:"updatedAt"`
-	DiscFingerprint    string                    `json:"discFingerprint"`
-	RippedFile         string                    `json:"rippedFile"`
-	EncodedFile        string                    `json:"encodedFile"`
-	FinalFile          string                    `json:"finalFile"`
-	ItemLogPath        string                    `json:"itemLogPath"`
-	NeedsReview        bool                      `json:"needsReview"`
-	ReviewReason       string                    `json:"reviewReason"`
-	Metadata           json.RawMessage           `json:"metadata"`
-	RipSpec            json.RawMessage           `json:"ripSpec"`
-	Episodes           []EpisodeStatus           `json:"episodes"`
-	EpisodeTotals      *EpisodeTotals            `json:"episodeTotals"`
-	EpisodesSynced     bool                      `json:"episodesSynchronized"`
+	ID                      int64                     `json:"id"`
+	DiscTitle               string                    `json:"discTitle"`
+	SourcePath              string                    `json:"sourcePath"`
+	Status                  string                    `json:"status"`
+	ProcessingLane          string                    `json:"processingLane"`
+	DraptoPreset            string                    `json:"draptoPresetProfile,omitempty"`
+	Progress                QueueProgress             `json:"progress"`
+	Encoding                *EncodingStatus           `json:"encoding,omitempty"`
+	ErrorMessage            string                    `json:"errorMessage"`
+	CreatedAt               string                    `json:"createdAt"`
+	UpdatedAt               string                    `json:"updatedAt"`
+	DiscFingerprint         string                    `json:"discFingerprint"`
+	RippedFile              string                    `json:"rippedFile"`
+	EncodedFile             string                    `json:"encodedFile"`
+	FinalFile               string                    `json:"finalFile"`
+	ItemLogPath             string                    `json:"itemLogPath"`
+	NeedsReview             bool                      `json:"needsReview"`
+	ReviewReason            string                    `json:"reviewReason"`
+	Metadata                json.RawMessage           `json:"metadata"`
+	RipSpec                 json.RawMessage           `json:"ripSpec"`
+	Episodes                []EpisodeStatus           `json:"episodes"`
+	EpisodeTotals           *EpisodeTotals            `json:"episodeTotals"`
+	EpisodesSynced          bool                      `json:"episodesSynchronized"`
 	SubtitleGeneration      *SubtitleGenerationStatus `json:"subtitleGeneration"`
 	PrimaryAudioDescription string                    `json:"primaryAudioDescription"`
 	CommentaryCount         int                       `json:"commentaryCount"`
@@ -227,6 +227,17 @@ type EpisodeStatus struct {
 // IsFailed returns true if the episode has a failed status.
 func (e EpisodeStatus) IsFailed() bool {
 	return strings.EqualFold(strings.TrimSpace(e.Status), "failed")
+}
+
+// FilterFailed returns episodes with failed status from the given slice.
+func FilterFailed(episodes []EpisodeStatus) []EpisodeStatus {
+	var failed []EpisodeStatus
+	for _, ep := range episodes {
+		if ep.IsFailed() {
+			failed = append(failed, ep)
+		}
+	}
+	return failed
 }
 
 type EpisodeTotals struct {
@@ -531,49 +542,64 @@ func (e ripSpecEnvelope) titleByID() map[int]ripSpecTitle {
 
 func (e ripSpecEnvelope) assetsByKey() map[string]assetPaths {
 	lookup := make(map[string]assetPaths)
-	add := func(list []ripSpecAsset, setter func(assetPaths, ripSpecAsset) assetPaths) {
-		for _, asset := range list {
-			key := strings.ToLower(strings.TrimSpace(asset.EpisodeKey))
-			if key == "" {
-				continue
-			}
-			entry := lookup[key]
-			entry = setter(entry, asset)
-			lookup[key] = entry
-		}
+
+	normalizeKey := func(key string) string {
+		return strings.ToLower(strings.TrimSpace(key))
 	}
-	add(e.Assets.Ripped, func(a assetPaths, asset ripSpecAsset) assetPaths {
-		a.Ripped = asset.Path
-		return a
-	})
-	add(e.Assets.Encoded, func(a assetPaths, asset ripSpecAsset) assetPaths {
-		a.Encoded = asset.Path
-		// Track status/error from encoded (first per-episode stage)
+
+	for _, asset := range e.Assets.Ripped {
+		key := normalizeKey(asset.EpisodeKey)
+		if key == "" {
+			continue
+		}
+		entry := lookup[key]
+		entry.Ripped = asset.Path
+		lookup[key] = entry
+	}
+
+	for _, asset := range e.Assets.Encoded {
+		key := normalizeKey(asset.EpisodeKey)
+		if key == "" {
+			continue
+		}
+		entry := lookup[key]
+		entry.Encoded = asset.Path
 		if asset.Status != "" {
-			a.Status = asset.Status
+			entry.Status = asset.Status
 		}
 		if asset.ErrorMsg != "" {
-			a.ErrorMessage = asset.ErrorMsg
+			entry.ErrorMessage = asset.ErrorMsg
 		}
-		return a
-	})
-	add(e.Assets.Subtitled, func(a assetPaths, asset ripSpecAsset) assetPaths {
-		a.Subtitled = asset.Path
-		// Override with subtitled status if failed
+		lookup[key] = entry
+	}
+
+	for _, asset := range e.Assets.Subtitled {
+		key := normalizeKey(asset.EpisodeKey)
+		if key == "" {
+			continue
+		}
+		entry := lookup[key]
+		entry.Subtitled = asset.Path
 		if strings.EqualFold(asset.Status, "failed") {
-			a.Status = asset.Status
-			a.ErrorMessage = asset.ErrorMsg
+			entry.Status = asset.Status
+			entry.ErrorMessage = asset.ErrorMsg
 		}
-		return a
-	})
-	add(e.Assets.Final, func(a assetPaths, asset ripSpecAsset) assetPaths {
-		a.Final = asset.Path
-		// Override with final status if failed
+		lookup[key] = entry
+	}
+
+	for _, asset := range e.Assets.Final {
+		key := normalizeKey(asset.EpisodeKey)
+		if key == "" {
+			continue
+		}
+		entry := lookup[key]
+		entry.Final = asset.Path
 		if strings.EqualFold(asset.Status, "failed") {
-			a.Status = asset.Status
-			a.ErrorMessage = asset.ErrorMsg
+			entry.Status = asset.Status
+			entry.ErrorMessage = asset.ErrorMsg
 		}
-		return a
-	})
+		lookup[key] = entry
+	}
+
 	return lookup
 }
