@@ -245,6 +245,10 @@ func (t Theme) TableSelectionTextColor() tcell.Color {
 	return hexToColor(t.Table.SelectionText)
 }
 
+func (t Theme) TableSelectionTextHex() string {
+	return t.Table.SelectionText
+}
+
 func (t Theme) TableBorderColor() tcell.Color {
 	if strings.TrimSpace(t.Table.Border) != "" {
 		return hexToColor(t.Table.Border)

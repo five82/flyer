@@ -217,9 +217,10 @@ func clampPercent(p float64) float64 {
 
 func (vm *viewModel) selectedItem() *spindle.QueueItem {
 	row, _ := vm.table.GetSelection()
-	if row <= 0 || row-1 >= len(vm.displayItems) {
+	itemIdx := rowToItem(row)
+	if itemIdx < 0 || itemIdx >= len(vm.displayItems) {
 		return nil
 	}
-	item := vm.displayItems[row-1]
+	item := vm.displayItems[itemIdx]
 	return &item
 }

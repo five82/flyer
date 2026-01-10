@@ -110,35 +110,42 @@ func (vm *viewModel) queueSearchHaystack(item spindle.QueueItem) string {
 }
 
 func (vm *viewModel) moveQueueSelection(delta int) {
-	rows := vm.table.GetRowCount() - 1
-	if rows <= 0 {
+	itemCount := len(vm.displayItems)
+	if itemCount <= 0 {
 		return
 	}
+
 	row, _ := vm.table.GetSelection()
-	if row <= 0 {
-		row = 1
+	itemIdx := rowToItem(row)
+	if itemIdx < 0 {
+		itemIdx = 0
 	}
-	row += delta
-	if row < 1 {
-		row = 1
+
+	itemIdx += delta
+	if itemIdx < 0 {
+		itemIdx = 0
 	}
-	if row > rows {
-		row = rows
+	if itemIdx >= itemCount {
+		itemIdx = itemCount - 1
 	}
-	vm.table.Select(row, 0)
+
+	vm.table.Select(itemToFirstRow(itemIdx), 0)
+	vm.applySelectionStyling()
 }
 
 func (vm *viewModel) selectQueueTop() {
-	if vm.table.GetRowCount()-1 <= 0 {
+	if len(vm.displayItems) == 0 {
 		return
 	}
-	vm.table.Select(1, 0)
+	vm.table.Select(itemToFirstRow(0), 0)
+	vm.applySelectionStyling()
 }
 
 func (vm *viewModel) selectQueueBottom() {
-	rows := vm.table.GetRowCount() - 1
-	if rows <= 0 {
+	itemCount := len(vm.displayItems)
+	if itemCount <= 0 {
 		return
 	}
-	vm.table.Select(rows, 0)
+	vm.table.Select(itemToFirstRow(itemCount-1), 0)
+	vm.applySelectionStyling()
 }

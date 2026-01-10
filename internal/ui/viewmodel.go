@@ -234,6 +234,7 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 		vm.updateDetail(row)
 	})
 	vm.table.SetSelectionChangedFunc(func(row, column int) {
+		vm.applySelectionStyling()
 		vm.updateDetail(row)
 	})
 
@@ -389,8 +390,8 @@ func (vm *viewModel) maybeUpdateQueueLayout() {
 }
 
 func (vm *viewModel) ensureSelection() {
-	rows := vm.table.GetRowCount() - 1 // excludes header
-	if rows == 0 {
+	itemCount := len(vm.displayItems)
+	if itemCount == 0 {
 		vm.table.Select(0, 0)
 		vm.detail.SetText(fmt.Sprintf("[%s]Queue is empty.[-]\nAdd discs to Spindle or check logs at:\n[%s]%s[-]",
 			vm.theme.Text.Muted,
@@ -399,12 +400,13 @@ func (vm *viewModel) ensureSelection() {
 		return
 	}
 	row, _ := vm.table.GetSelection()
-	if row <= 0 {
-		vm.table.Select(1, 0)
+	itemIdx := rowToItem(row)
+	if itemIdx < 0 {
+		vm.table.Select(itemToFirstRow(0), 0)
+	} else if itemIdx >= itemCount {
+		vm.table.Select(itemToFirstRow(itemCount-1), 0)
 	}
-	if row > rows {
-		vm.table.Select(rows, 0)
-	}
+	vm.applySelectionStyling()
 }
 
 func (vm *viewModel) setCommandBar(view string) {
