@@ -23,31 +23,16 @@ func (vm *viewModel) showLogFilters() {
 		vm.showLogsView()
 	}
 
-	componentField := tview.NewInputField().
-		SetLabel("Component: ").
-		SetText(vm.logs.filterComponent).
-		SetFieldWidth(28)
-	componentField.SetBackgroundColor(vm.theme.SurfaceColor())
-	componentField.SetFieldBackgroundColor(vm.theme.SurfaceAltColor())
-	componentField.SetFieldTextColor(hexToColor(vm.theme.Text.Primary))
+	componentField := vm.newThemedInputField("Component: ", 28)
+	componentField.SetText(vm.logs.filterComponent)
 	componentField.SetLabelColor(hexToColor(vm.theme.Text.Muted))
 
-	laneField := tview.NewInputField().
-		SetLabel("Lane:      ").
-		SetText(vm.logs.filterLane).
-		SetFieldWidth(28)
-	laneField.SetBackgroundColor(vm.theme.SurfaceColor())
-	laneField.SetFieldBackgroundColor(vm.theme.SurfaceAltColor())
-	laneField.SetFieldTextColor(hexToColor(vm.theme.Text.Primary))
+	laneField := vm.newThemedInputField("Lane:      ", 28)
+	laneField.SetText(vm.logs.filterLane)
 	laneField.SetLabelColor(hexToColor(vm.theme.Text.Muted))
 
-	requestField := tview.NewInputField().
-		SetLabel("Request:   ").
-		SetText(vm.logs.filterRequest).
-		SetFieldWidth(28)
-	requestField.SetBackgroundColor(vm.theme.SurfaceColor())
-	requestField.SetFieldBackgroundColor(vm.theme.SurfaceAltColor())
-	requestField.SetFieldTextColor(hexToColor(vm.theme.Text.Primary))
+	requestField := vm.newThemedInputField("Request:   ", 28)
+	requestField.SetText(vm.logs.filterRequest)
 	requestField.SetLabelColor(hexToColor(vm.theme.Text.Muted))
 
 	hint := tview.NewTextView().SetDynamicColors(true).SetWrap(true)

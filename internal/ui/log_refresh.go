@@ -12,6 +12,14 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
+// trimLogBuffer trims the log buffer to the limit by removing oldest entries.
+func trimLogBuffer(lines []string, limit int) []string {
+	if overflow := len(lines) - limit; overflow > 0 {
+		return append([]string(nil), lines[overflow:]...)
+	}
+	return lines
+}
+
 func (vm *viewModel) refreshLogs(force bool) {
 	if vm.logs.mode == logSourceDaemon && vm.client == nil {
 		vm.logView.SetText("Spindle daemon unavailable")
@@ -86,9 +94,7 @@ func (vm *viewModel) refreshItemTailLogs() {
 	}
 	if len(batch.Lines) > 0 {
 		vm.logs.rawLines = append(vm.logs.rawLines, batch.Lines...)
-		if overflow := len(vm.logs.rawLines) - LogBufferLimit; overflow > 0 {
-			vm.logs.rawLines = append([]string(nil), vm.logs.rawLines[overflow:]...)
-		}
+		vm.logs.rawLines = trimLogBuffer(vm.logs.rawLines, LogBufferLimit)
 	}
 
 	colorized := logtail.ColorizeLines(vm.logs.rawLines)
@@ -140,9 +146,7 @@ func (vm *viewModel) refreshStreamLogs() {
 	newLines := formatLogEvents(batch.Events)
 	if len(newLines) > 0 {
 		vm.logs.rawLines = append(vm.logs.rawLines, newLines...)
-		if overflow := len(vm.logs.rawLines) - LogBufferLimit; overflow > 0 {
-			vm.logs.rawLines = append([]string(nil), vm.logs.rawLines[overflow:]...)
-		}
+		vm.logs.rawLines = trimLogBuffer(vm.logs.rawLines, LogBufferLimit)
 	}
 	if len(vm.logs.rawLines) == 0 {
 		vm.logView.SetText("No log entries available")

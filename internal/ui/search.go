@@ -17,12 +17,7 @@ func (vm *viewModel) startSearch() {
 	}
 
 	vm.search.mode = true
-	vm.search.input = tview.NewInputField()
-	vm.search.input.SetLabel("/")
-	vm.search.input.SetFieldWidth(40)
-	vm.search.input.SetBackgroundColor(vm.theme.SurfaceColor())
-	vm.search.input.SetFieldBackgroundColor(vm.theme.SurfaceAltColor())
-	vm.search.input.SetFieldTextColor(hexToColor(vm.theme.Text.Primary))
+	vm.search.input = vm.newThemedInputField("/", 40)
 
 	vm.search.hint = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	vm.search.hint.SetBackgroundColor(vm.theme.SurfaceColor())
@@ -35,12 +30,7 @@ func (vm *viewModel) startSearch() {
 		}
 	})
 
-	// Create a simple container for the search input
-	searchContainer := tview.NewFlex().SetDirection(tview.FlexRow)
-	searchContainer.SetBackgroundColor(vm.theme.SurfaceColor())
-	searchContainer.AddItem(nil, 0, 1, false) // Push to bottom
-	searchContainer.AddItem(vm.search.hint, 1, 0, false)
-	searchContainer.AddItem(vm.search.input, 1, 0, true)
+	searchContainer := vm.newSearchContainer(vm.search.hint, vm.search.input)
 
 	vm.search.input.SetDoneFunc(func(key tcell.Key) {
 		switch key {

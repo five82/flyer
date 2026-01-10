@@ -37,3 +37,15 @@ const (
 	// DefaultUIInterval is the default UI refresh interval.
 	DefaultUIInterval = time.Second
 )
+
+// Modal sizing constants.
+const (
+	// ModalMinHeight is the minimum height for modal dialogs.
+	ModalMinHeight = 16
+
+	// ModalMaxHeight is the maximum height for modal dialogs.
+	ModalMaxHeight = 28
+
+	// ModalHeightPadding is added to content rows to calculate modal height.
+	ModalHeightPadding = 8
+)

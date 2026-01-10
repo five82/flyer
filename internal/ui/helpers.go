@@ -135,25 +135,12 @@ func (vm *viewModel) showHelp() {
 		return event
 	})
 
-	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch {
-		case event.Key() == tcell.KeyEsc,
-			event.Key() == tcell.KeyCtrlC,
-			event.Rune() == '?',
-			event.Rune() == 'h',
-			event.Rune() == 'H':
-			closeModal()
-			return nil
-		}
-		return event
-	})
-
-	height := row + 8
-	if height < 16 {
-		height = 16
+	height := row + ModalHeightPadding
+	if height < ModalMinHeight {
+		height = ModalMinHeight
 	}
-	if height > 28 {
-		height = 28
+	if height > ModalMaxHeight {
+		height = ModalMaxHeight
 	}
 
 	vm.root.RemovePage("modal")

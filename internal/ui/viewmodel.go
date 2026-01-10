@@ -107,6 +107,27 @@ type viewModel struct {
 	filterMode   queueFilter
 }
 
+// newThemedInputField creates a styled input field with consistent theming.
+func (vm *viewModel) newThemedInputField(label string, width int) *tview.InputField {
+	input := tview.NewInputField()
+	input.SetLabel(label)
+	input.SetFieldWidth(width)
+	input.SetBackgroundColor(vm.theme.SurfaceColor())
+	input.SetFieldBackgroundColor(vm.theme.SurfaceAltColor())
+	input.SetFieldTextColor(hexToColor(vm.theme.Text.Primary))
+	return input
+}
+
+// newSearchContainer creates a flex container for search/filter inputs.
+func (vm *viewModel) newSearchContainer(hint *tview.TextView, input *tview.InputField) *tview.Flex {
+	container := tview.NewFlex().SetDirection(tview.FlexRow)
+	container.SetBackgroundColor(vm.theme.SurfaceColor())
+	container.AddItem(nil, 0, 1, false)
+	container.AddItem(hint, 1, 0, false)
+	container.AddItem(input, 1, 0, true)
+	return container
+}
+
 func newViewModel(app *tview.Application, opts Options) *viewModel {
 	theme := defaultTheme()
 
@@ -328,10 +349,6 @@ func (vm *viewModel) applyQueueLayout(layout string) {
 	}
 }
 
-func (vm *viewModel) applyExtraWideLayout() {
-	vm.applyQueueLayout("extra-wide")
-}
-
 func (vm *viewModel) maybeUpdateQueueLayout() {
 	if vm == nil || vm.app == nil || vm.queuePane == nil {
 		return
@@ -357,7 +374,7 @@ func (vm *viewModel) maybeUpdateQueueLayout() {
 			target = "stacked"
 		} else if width >= LayoutExtraWideWidth {
 			// Extra wide layout - give more space to detail
-			vm.applyExtraWideLayout()
+			vm.applyQueueLayout("extra-wide")
 			return
 		} else if height >= 40 {
 			// Tall layout - can use stacked with better proportions

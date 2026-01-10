@@ -11,6 +11,31 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
+// processingStatuses defines which statuses are considered "processing".
+var processingStatuses = map[string]struct{}{
+	"identifying":         {},
+	"ripping":             {},
+	"episode_identifying": {},
+	"episode_identified":  {},
+	"encoding":            {},
+	"subtitling":          {},
+	"subtitled":           {},
+	"organizing":          {},
+}
+
+// isProcessingStatus returns true if the status is a processing status.
+func isProcessingStatus(status string) bool {
+	_, ok := processingStatuses[strings.ToLower(strings.TrimSpace(status))]
+	return ok
+}
+
+// tableColumn defines a column in the queue table.
+type tableColumn struct {
+	label     string
+	align     int
+	expansion int
+}
+
 func (vm *viewModel) renderTable() {
 	vm.table.Clear()
 
@@ -21,35 +46,19 @@ func (vm *viewModel) renderTable() {
 	showProgress := width >= LayoutProgressWidth
 	showUpdated := width >= LayoutUpdatedWidth
 
-	columns := []struct {
-		label     string
-		align     int
-		expansion int
-	}{
+	columns := []tableColumn{
 		{"!", tview.AlignCenter, 1}, // gutter marker
 		{"ID", tview.AlignRight, 1},
 		{"Title", tview.AlignLeft, 7},
 		{"Stage", tview.AlignLeft, 7},
 	}
 	if showProgress {
-		columns = append(columns, struct {
-			label     string
-			align     int
-			expansion int
-		}{"%", tview.AlignLeft, 4})
+		columns = append(columns, tableColumn{"%", tview.AlignLeft, 4})
 	}
 	if showUpdated {
-		columns = append(columns, struct {
-			label     string
-			align     int
-			expansion int
-		}{"Updated", tview.AlignLeft, 3})
+		columns = append(columns, tableColumn{"Updated", tview.AlignLeft, 3})
 	}
-	columns = append(columns, struct {
-		label     string
-		align     int
-		expansion int
-	}{"Flags", tview.AlignLeft, 2})
+	columns = append(columns, tableColumn{"Flags", tview.AlignLeft, 2})
 
 	headerBackground := vm.theme.TableHeaderBackground()
 	headerText := vm.theme.TableHeaderTextColor()
@@ -71,15 +80,7 @@ func (vm *viewModel) renderTable() {
 		rows = filterItems(rows, func(it spindle.QueueItem) bool { return it.NeedsReview })
 	case filterProcessing:
 		rows = filterItems(rows, func(it spindle.QueueItem) bool {
-			status := strings.ToLower(strings.TrimSpace(it.Status))
-			return status == "identifying" ||
-				status == "ripping" ||
-				status == "episode_identifying" ||
-				status == "episode_identified" ||
-				status == "encoding" ||
-				status == "subtitling" ||
-				status == "subtitled" ||
-				status == "organizing"
+			return isProcessingStatus(it.Status)
 		})
 	}
 	if vm.queueSearch.regex != nil {

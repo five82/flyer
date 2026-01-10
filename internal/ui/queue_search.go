@@ -17,12 +17,7 @@ func (vm *viewModel) startQueueSearch() {
 	}
 
 	vm.queueSearch.mode = true
-	vm.queueSearch.input = tview.NewInputField()
-	vm.queueSearch.input.SetLabel("/")
-	vm.queueSearch.input.SetFieldWidth(40)
-	vm.queueSearch.input.SetBackgroundColor(vm.theme.SurfaceColor())
-	vm.queueSearch.input.SetFieldBackgroundColor(vm.theme.SurfaceAltColor())
-	vm.queueSearch.input.SetFieldTextColor(hexToColor(vm.theme.Text.Primary))
+	vm.queueSearch.input = vm.newThemedInputField("/", 40)
 
 	vm.queueSearch.hint = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	vm.queueSearch.hint.SetBackgroundColor(vm.theme.SurfaceColor())
@@ -35,11 +30,7 @@ func (vm *viewModel) startQueueSearch() {
 		}
 	})
 
-	searchContainer := tview.NewFlex().SetDirection(tview.FlexRow)
-	searchContainer.SetBackgroundColor(vm.theme.SurfaceColor())
-	searchContainer.AddItem(nil, 0, 1, false)
-	searchContainer.AddItem(vm.queueSearch.hint, 1, 0, false)
-	searchContainer.AddItem(vm.queueSearch.input, 1, 0, true)
+	searchContainer := vm.newSearchContainer(vm.queueSearch.hint, vm.queueSearch.input)
 
 	vm.queueSearch.input.SetDoneFunc(func(key tcell.Key) {
 		switch key {

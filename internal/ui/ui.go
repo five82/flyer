@@ -270,16 +270,7 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 			}
 			path := truncateMiddle(vm.options.Config.DaemonLogPath(), 50)
 
-			// Provide more specific error messages
-			errorMsg := "Connection failed"
-			errStr := snapshot.LastError.Error()
-			if strings.Contains(errStr, "connection refused") {
-				errorMsg = "Daemon not running"
-			} else if strings.Contains(errStr, "timeout") {
-				errorMsg = "Connection timeout"
-			} else if strings.Contains(errStr, "no such host") {
-				errorMsg = "Host not found"
-			}
+			errorMsg := classifyConnectionError(snapshot.LastError)
 
 			vm.statusView.SetText(fmt.Sprintf("[%s::b]SPINDLE %s[-]  [%s::b]Retrying...[-]  [%s]%s[-]  [%s]logs[-] [%s]%s[-]",
 				text.Danger,
@@ -296,14 +287,10 @@ func (vm *viewModel) renderStatus(snapshot state.Snapshot) {
 		return
 	}
 	stats := snapshot.Status.Workflow.QueueStats
-	processing := stats["identifying"] +
-		stats["ripping"] +
-		stats["episode_identifying"] +
-		stats["episode_identified"] +
-		stats["encoding"] +
-		stats["subtitling"] +
-		stats["subtitled"] +
-		stats["organizing"]
+	processing := 0
+	for status := range processingStatuses {
+		processing += stats[status]
+	}
 	failed, review := countProblemCounts(snapshot.Queue)
 
 	// Enhanced daemon status with better visual indicators
@@ -399,6 +386,21 @@ func filterStrings(values []string) []string {
 		out = append(out, v)
 	}
 	return out
+}
+
+// classifyConnectionError returns a user-friendly error message.
+func classifyConnectionError(err error) string {
+	errStr := err.Error()
+	switch {
+	case strings.Contains(errStr, "connection refused"):
+		return "Daemon not running"
+	case strings.Contains(errStr, "timeout"):
+		return "Connection timeout"
+	case strings.Contains(errStr, "no such host"):
+		return "Host not found"
+	default:
+		return "Connection failed"
+	}
 }
 
 func countProblemCounts(items []spindle.QueueItem) (failed, review int) {

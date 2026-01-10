@@ -64,9 +64,7 @@ func (vm *viewModel) refreshProblems(force bool) {
 	newLines := formatLogEvents(batch.Events)
 	if len(newLines) > 0 {
 		vm.problems.logLines = append(vm.problems.logLines, newLines...)
-		if overflow := len(vm.problems.logLines) - LogBufferLimit; overflow > 0 {
-			vm.problems.logLines = append([]string(nil), vm.problems.logLines[overflow:]...)
-		}
+		vm.problems.logLines = trimLogBuffer(vm.problems.logLines, LogBufferLimit)
 	}
 
 	// Build structured problem info from the item itself
