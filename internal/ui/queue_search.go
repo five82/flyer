@@ -111,23 +111,13 @@ func (vm *viewModel) queueSearchHaystack(item spindle.QueueItem) string {
 
 func (vm *viewModel) moveQueueSelection(delta int) {
 	itemCount := len(vm.displayItems)
-	if itemCount <= 0 {
+	if itemCount == 0 {
 		return
 	}
 
 	row, _ := vm.table.GetSelection()
-	itemIdx := rowToItem(row)
-	if itemIdx < 0 {
-		itemIdx = 0
-	}
-
-	itemIdx += delta
-	if itemIdx < 0 {
-		itemIdx = 0
-	}
-	if itemIdx >= itemCount {
-		itemIdx = itemCount - 1
-	}
+	itemIdx := max(0, rowToItem(row)) + delta
+	itemIdx = max(0, min(itemIdx, itemCount-1))
 
 	vm.table.Select(itemToRow(itemIdx), 0)
 	vm.applySelectionStyling()

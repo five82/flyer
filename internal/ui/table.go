@@ -228,29 +228,18 @@ func filterItems(items []spindle.QueueItem, keep func(spindle.QueueItem) bool) [
 // formatQueueRow formats "#ID Title · Stage Progress%" for the queue list.
 func (vm *viewModel) formatQueueRow(item spindle.QueueItem, selected bool) string {
 	title := composeTitle(item)
-	stage := effectiveQueueStage(item)
-	stage = titleCase(stage)
+	stage := titleCase(effectiveQueueStage(item))
 
-	// Build status part
-	var statusParts []string
-	statusParts = append(statusParts, stage)
-
+	statusParts := []string{stage}
 	if isProcessingStatus(item.Status) && item.Progress.Percent > 0 {
-		percent := item.Progress.Percent
-		if percent > 100 {
-			percent = 100
-		}
-		statusParts = append(statusParts, fmt.Sprintf("%.0f%%", percent))
+		statusParts = append(statusParts, fmt.Sprintf("%.0f%%", min(item.Progress.Percent, 100)))
 	}
-
-	// Add markers
 	if strings.TrimSpace(item.ErrorMessage) != "" {
 		statusParts = append(statusParts, "!")
 	}
 	if item.NeedsReview {
 		statusParts = append(statusParts, "R")
 	}
-
 	status := strings.Join(statusParts, " ")
 
 	if selected {
@@ -308,15 +297,6 @@ func (vm *viewModel) colorForLane(lane string) string {
 func mostRecentTimestamp(item spindle.QueueItem) time.Time {
 	updated := item.ParsedUpdatedAt()
 	created := item.ParsedCreatedAt()
-	if updated.IsZero() && created.IsZero() {
-		return time.Time{}
-	}
-	if updated.IsZero() {
-		return created
-	}
-	if created.IsZero() {
-		return updated
-	}
 	if updated.After(created) {
 		return updated
 	}
