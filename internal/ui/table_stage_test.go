@@ -7,7 +7,7 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
-func TestFormatStageWithDetail_PrefersCompletedOverStaleProgressStage(t *testing.T) {
+func TestFormatQueueRow_PrefersCompletedOverStaleProgressStage(t *testing.T) {
 	vm := &viewModel{theme: defaultTheme()}
 	item := spindle.QueueItem{
 		Status: "completed",
@@ -16,13 +16,13 @@ func TestFormatStageWithDetail_PrefersCompletedOverStaleProgressStage(t *testing
 		},
 	}
 
-	got := vm.formatStageWithDetail(item, false)
+	got := vm.formatQueueRow(item, false)
 	if !strings.Contains(got, "Completed") {
-		t.Fatalf("formatStageWithDetail = %q, want stage to include %q", got, "Completed")
+		t.Fatalf("formatQueueRow = %q, want stage to include %q", got, "Completed")
 	}
 }
 
-func TestFormatStageWithDetail_PrefersFailedOverProgressStage(t *testing.T) {
+func TestFormatQueueRow_PrefersFailedOverProgressStage(t *testing.T) {
 	vm := &viewModel{theme: defaultTheme()}
 	item := spindle.QueueItem{
 		Status: "failed",
@@ -31,8 +31,8 @@ func TestFormatStageWithDetail_PrefersFailedOverProgressStage(t *testing.T) {
 		},
 	}
 
-	got := vm.formatStageWithDetail(item, false)
+	got := vm.formatQueueRow(item, false)
 	if !strings.Contains(got, "Failed") {
-		t.Fatalf("formatStageWithDetail = %q, want stage to include %q", got, "Failed")
+		t.Fatalf("formatQueueRow = %q, want stage to include %q", got, "Failed")
 	}
 }

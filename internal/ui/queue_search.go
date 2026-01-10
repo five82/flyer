@@ -129,7 +129,7 @@ func (vm *viewModel) moveQueueSelection(delta int) {
 		itemIdx = itemCount - 1
 	}
 
-	vm.table.Select(itemToFirstRow(itemIdx), 0)
+	vm.table.Select(itemToRow(itemIdx), 0)
 	vm.applySelectionStyling()
 }
 
@@ -137,7 +137,7 @@ func (vm *viewModel) selectQueueTop() {
 	if len(vm.displayItems) == 0 {
 		return
 	}
-	vm.table.Select(itemToFirstRow(0), 0)
+	vm.table.Select(itemToRow(0), 0)
 	vm.applySelectionStyling()
 }
 
@@ -146,6 +146,6 @@ func (vm *viewModel) selectQueueBottom() {
 	if itemCount <= 0 {
 		return
 	}
-	vm.table.Select(itemToFirstRow(itemCount-1), 0)
+	vm.table.Select(itemToRow(itemCount-1), 0)
 	vm.applySelectionStyling()
 }

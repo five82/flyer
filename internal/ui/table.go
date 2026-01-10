@@ -29,13 +29,10 @@ func isProcessingStatus(status string) bool {
 	return ok
 }
 
-// rowsPerItem defines how many table rows each queue item occupies.
-const rowsPerItem = 2
-
-// itemToFirstRow converts an item index (0-based) to the first table row for that item.
+// itemToRow converts an item index (0-based) to the table row.
 // Row 0 is the header, so item 0 starts at row 1.
-func itemToFirstRow(itemIdx int) int {
-	return 1 + itemIdx*rowsPerItem
+func itemToRow(itemIdx int) int {
+	return 1 + itemIdx
 }
 
 // rowToItem converts a table row to the item index.
@@ -44,43 +41,22 @@ func rowToItem(row int) int {
 	if row <= 0 {
 		return -1
 	}
-	return (row - 1) / rowsPerItem
-}
-
-// tableColumn defines a column in the queue table.
-type tableColumn struct {
-	label     string
-	align     int
-	expansion int
+	return row - 1
 }
 
 func (vm *viewModel) renderTable() {
 	vm.table.Clear()
 
-	_, _, width, _ := vm.table.GetInnerRect()
-	if width <= 0 {
-		width = 120
-	}
-	showUpdated := width >= LayoutUpdatedWidth
-
-	// Multi-line layout: 3 columns - gutter, content, right
-	columns := []tableColumn{
-		{"", tview.AlignCenter, 1},    // gutter
-		{"Title", tview.AlignLeft, 8}, // main content
-		{"", tview.AlignRight, 2},     // flags/updated
-	}
-
+	// Single column layout - format title and status together
 	headerBackground := vm.theme.TableHeaderBackground()
 	headerText := vm.theme.TableHeaderTextColor()
-	for col, column := range columns {
-		header := tview.NewTableCell(fmt.Sprintf("[%s::b]%s[-]", vm.theme.Text.Heading, column.label)).
-			SetSelectable(false).
-			SetAlign(column.align).
-			SetExpansion(column.expansion).
-			SetBackgroundColor(headerBackground).
-			SetTextColor(headerText)
-		vm.table.SetCell(0, col, header)
-	}
+	header := tview.NewTableCell("").
+		SetSelectable(false).
+		SetAlign(tview.AlignLeft).
+		SetExpansion(1).
+		SetBackgroundColor(headerBackground).
+		SetTextColor(headerText)
+	vm.table.SetCell(0, 0, header)
 
 	rows := append([]spindle.QueueItem(nil), vm.items...)
 	switch vm.filterMode {
@@ -123,30 +99,9 @@ func (vm *viewModel) renderTable() {
 
 	vm.updateQueueTitle(len(rows), len(vm.items))
 
-	// Title limit increased since it gets full width
-	titleLimit := 60
-	if width < LayoutCompactWidth {
-		titleLimit = 40
-	}
-
-	now := time.Now()
 	for itemIdx, item := range rows {
-		row1 := itemToFirstRow(itemIdx)
-		row2 := row1 + 1
-
-		// Row 1: [gutter] [#ID Title] [Flags]
-		vm.table.SetCell(row1, 0, vm.makeCell(vm.gutterMarker(item, false), tview.AlignCenter, 1))
-		vm.table.SetCell(row1, 1, vm.makeCell(vm.formatTitleWithID(item, titleLimit, false), tview.AlignLeft, 8))
-		vm.table.SetCell(row1, 2, vm.makeCell(vm.formatFlags(item), tview.AlignRight, 2))
-
-		// Row 2: [spacer] [Stage · Progress Detail] [Updated]
-		vm.table.SetCell(row2, 0, vm.makeCell("", tview.AlignCenter, 1))
-		vm.table.SetCell(row2, 1, vm.makeCell(vm.formatStageWithDetail(item, false), tview.AlignLeft, 8))
-		updatedText := ""
-		if showUpdated {
-			updatedText = vm.formatUpdated(now, item, false)
-		}
-		vm.table.SetCell(row2, 2, vm.makeCell(updatedText, tview.AlignRight, 2))
+		row := itemToRow(itemIdx)
+		vm.table.SetCell(row, 0, vm.makeCell(vm.formatQueueRow(item, false), tview.AlignLeft, 1))
 	}
 
 	vm.displayItems = rows
@@ -203,11 +158,11 @@ func (vm *viewModel) renderTablePreservingSelection() {
 
 	if selectedID != 0 {
 		if itemIdx := vm.findItemIndexByID(selectedID); itemIdx >= 0 {
-			vm.table.Select(itemToFirstRow(itemIdx), 0)
+			vm.table.Select(itemToRow(itemIdx), 0)
 			vm.applySelectionStyling()
 			return
 		}
-		vm.table.Select(itemToFirstRow(0), 0)
+		vm.table.Select(itemToRow(0), 0)
 		vm.applySelectionStyling()
 		return
 	}
@@ -215,9 +170,9 @@ func (vm *viewModel) renderTablePreservingSelection() {
 	row, _ := vm.table.GetSelection()
 	itemIdx := rowToItem(row)
 	if itemIdx < 0 {
-		vm.table.Select(itemToFirstRow(0), 0)
+		vm.table.Select(itemToRow(0), 0)
 	} else if itemIdx >= itemCount {
-		vm.table.Select(itemToFirstRow(itemCount-1), 0)
+		vm.table.Select(itemToRow(itemCount-1), 0)
 	}
 	vm.applySelectionStyling()
 }
@@ -232,28 +187,16 @@ func (vm *viewModel) findItemIndexByID(id int64) int {
 	return -1
 }
 
-// applySelectionStyling applies visual highlighting to both rows of the selected item.
+// applySelectionStyling applies visual highlighting to the selected row.
 func (vm *viewModel) applySelectionStyling() {
 	row, _ := vm.table.GetSelection()
 	selectedIdx := rowToItem(row)
 
-	_, _, width, _ := vm.table.GetInnerRect()
-	if width <= 0 {
-		width = 120
-	}
-	showUpdated := width >= LayoutUpdatedWidth
-	titleLimit := 60
-	if width < LayoutCompactWidth {
-		titleLimit = 40
-	}
-
-	now := time.Now()
 	selBg := vm.theme.TableSelectionBackground()
 	surfaceBg := vm.theme.SurfaceColor()
 
 	for itemIdx, item := range vm.displayItems {
-		row1 := itemToFirstRow(itemIdx)
-		row2 := row1 + 1
+		r := itemToRow(itemIdx)
 		isSelected := itemIdx == selectedIdx
 
 		bg := surfaceBg
@@ -261,19 +204,7 @@ func (vm *viewModel) applySelectionStyling() {
 			bg = selBg
 		}
 
-		// Row 1: [gutter] [#ID Title] [Flags]
-		vm.table.GetCell(row1, 0).SetText(vm.gutterMarker(item, isSelected)).SetBackgroundColor(bg)
-		vm.table.GetCell(row1, 1).SetText(vm.formatTitleWithID(item, titleLimit, isSelected)).SetBackgroundColor(bg)
-		vm.table.GetCell(row1, 2).SetText(vm.formatFlags(item)).SetBackgroundColor(bg)
-
-		// Row 2: [spacer] [Stage · Progress Detail] [Updated]
-		vm.table.GetCell(row2, 0).SetText("").SetBackgroundColor(bg)
-		vm.table.GetCell(row2, 1).SetText(vm.formatStageWithDetail(item, isSelected)).SetBackgroundColor(bg)
-		updatedText := ""
-		if showUpdated {
-			updatedText = vm.formatUpdated(now, item, isSelected)
-		}
-		vm.table.GetCell(row2, 2).SetText(updatedText).SetBackgroundColor(bg)
+		vm.table.GetCell(r, 0).SetText(vm.formatQueueRow(item, isSelected)).SetBackgroundColor(bg)
 	}
 }
 
@@ -294,174 +225,51 @@ func filterItems(items []spindle.QueueItem, keep func(spindle.QueueItem) bool) [
 	return out
 }
 
-// formatTitleWithID formats the title with ID prefix for the multi-line layout.
-func (vm *viewModel) formatTitleWithID(item spindle.QueueItem, limit int, selected bool) string {
+// formatQueueRow formats "#ID Title · Stage Progress%" for the queue list.
+func (vm *viewModel) formatQueueRow(item spindle.QueueItem, selected bool) string {
 	title := composeTitle(item)
-	title = truncate(title, limit)
-
-	if selected {
-		selColor := vm.theme.TableSelectionTextHex()
-		return fmt.Sprintf("[%s]#%d %s[-]", selColor, item.ID, tview.Escape(title))
-	}
-
-	color := vm.theme.Text.Primary
-	if item.NeedsReview {
-		color = vm.theme.Badges.Review
-	}
-	idPrefix := fmt.Sprintf("[%s]#%d[-] ", vm.theme.Text.Muted, item.ID)
-	return idPrefix + fmt.Sprintf("[%s]%s[-]", color, tview.Escape(title))
-}
-
-// formatStageWithDetail formats stage and progress detail for the second row.
-func (vm *viewModel) formatStageWithDetail(item spindle.QueueItem, selected bool) string {
 	stage := effectiveQueueStage(item)
 	stage = titleCase(stage)
 
-	// For selected rows, use a single color for the entire line
-	if selected {
-		selColor := vm.theme.TableSelectionTextHex()
-		var parts []string
-		parts = append(parts, tview.Escape(stage))
-
-		if isProcessingStatus(item.Status) && item.Progress.Percent > 0 {
-			percent := item.Progress.Percent
-			if percent > 100 {
-				percent = 100
-			}
-			parts = append(parts, fmt.Sprintf("%3.0f%%", percent))
-		}
-
-		detail := strings.TrimSpace(item.Progress.Message)
-		if strings.TrimSpace(item.ErrorMessage) != "" {
-			detail = item.ErrorMessage
-		} else if item.NeedsReview && strings.TrimSpace(item.ReviewReason) != "" {
-			detail = item.ReviewReason
-		}
-		if detail != "" {
-			parts = append(parts, tview.Escape(truncate(detail, 50)))
-		}
-
-		return fmt.Sprintf("[%s]%s[-]", selColor, strings.Join(parts, " · "))
-	}
-
-	var parts []string
-	parts = append(parts, fmt.Sprintf("[%s]%s[-]", vm.colorForStatus(item.Status), tview.Escape(stage)))
+	// Build status part
+	var statusParts []string
+	statusParts = append(statusParts, stage)
 
 	if isProcessingStatus(item.Status) && item.Progress.Percent > 0 {
 		percent := item.Progress.Percent
 		if percent > 100 {
 			percent = 100
 		}
-		parts = append(parts, fmt.Sprintf("[%s]%3.0f%%[-]", vm.colorForStatus(item.Status), percent))
+		statusParts = append(statusParts, fmt.Sprintf("%.0f%%", percent))
 	}
 
-	detail := strings.TrimSpace(item.Progress.Message)
-	detailColor := vm.theme.Text.Muted
-
+	// Add markers
 	if strings.TrimSpace(item.ErrorMessage) != "" {
-		detail = item.ErrorMessage
-		detailColor = vm.theme.Text.Danger
-	} else if item.NeedsReview && strings.TrimSpace(item.ReviewReason) != "" {
-		detail = item.ReviewReason
-		detailColor = vm.theme.Text.Warning
+		statusParts = append(statusParts, "!")
+	}
+	if item.NeedsReview {
+		statusParts = append(statusParts, "R")
 	}
 
-	if detail != "" {
-		detail = truncate(detail, 50)
-		parts = append(parts, fmt.Sprintf("[%s]%s[-]", detailColor, tview.Escape(detail)))
-	}
+	status := strings.Join(statusParts, " ")
 
-	sep := fmt.Sprintf(" [%s]·[-] ", vm.theme.Text.Faint)
-	return strings.Join(parts, sep)
-}
-
-func (vm *viewModel) gutterMarker(item spindle.QueueItem, selected bool) string {
 	if selected {
 		selColor := vm.theme.TableSelectionTextHex()
-		if strings.TrimSpace(item.ErrorMessage) != "" {
-			return fmt.Sprintf("[%s::b]![-]", selColor)
-		}
-		if item.NeedsReview {
-			return fmt.Sprintf("[%s::b]R[-]", selColor)
-		}
-		return ""
+		return fmt.Sprintf("[%s]#%d %s · %s[-]", selColor, item.ID, tview.Escape(title), status)
 	}
 
-	if strings.TrimSpace(item.ErrorMessage) != "" {
-		return vm.badge("!", vm.theme.Badges.Error)
-	}
+	// Normal colors
+	titleColor := vm.theme.Text.Primary
 	if item.NeedsReview {
-		return vm.badge("R", vm.theme.Badges.Review)
-	}
-	return ""
-}
-
-func (vm *viewModel) formatUpdated(now time.Time, item spindle.QueueItem, selected bool) string {
-	color := vm.theme.Text.Muted
-	if selected {
-		color = vm.theme.TableSelectionTextHex()
+		titleColor = vm.theme.Badges.Review
 	}
 
-	ts := mostRecentTimestamp(item)
-	if ts.IsZero() {
-		return fmt.Sprintf("[%s]-[-]", color)
-	}
-	diff := now.Sub(ts)
-	if diff < 0 {
-		diff = 0
-	}
-	switch {
-	case diff < time.Minute:
-		return fmt.Sprintf("[%s]just now[-]", color)
-	case diff < time.Hour:
-		return fmt.Sprintf("[%s]%dm ago[-]", color, int(diff.Minutes()))
-	case diff < 24*time.Hour:
-		return fmt.Sprintf("[%s]%dh ago[-]", color, int(diff.Hours()))
-	case diff < 7*24*time.Hour:
-		return fmt.Sprintf("[%s]%dd ago[-]", color, int(diff.Hours()/24))
-	case diff < 30*24*time.Hour:
-		weeks := int(diff.Hours() / (24 * 7))
-		if weeks < 1 {
-			weeks = 1
-		}
-		return fmt.Sprintf("[%s]%dw ago[-]", color, weeks)
-	default:
-		return fmt.Sprintf("[%s]%s[-]", color, ts.In(time.Local).Format("Jan 02"))
-	}
-}
+	idPart := fmt.Sprintf("[%s]#%d[-]", vm.theme.Text.Muted, item.ID)
+	titlePart := fmt.Sprintf("[%s]%s[-]", titleColor, tview.Escape(title))
+	statusPart := fmt.Sprintf("[%s]%s[-]", vm.colorForStatus(item.Status), status)
+	sep := fmt.Sprintf(" [%s]·[-] ", vm.theme.Text.Faint)
 
-func (vm *viewModel) formatFlags(item spindle.QueueItem) string {
-	var flags []string
-	if item.NeedsReview {
-		flags = append(flags, vm.badge("REV", vm.theme.Badges.Review))
-	}
-	if strings.TrimSpace(item.ErrorMessage) != "" {
-		flags = append(flags, vm.badge("ERR", vm.theme.Badges.Error))
-	}
-	if strings.TrimSpace(item.ItemLogPath) != "" {
-		flags = append(flags, vm.badge("LOG", vm.theme.Badges.Log))
-	}
-	if isRipCacheHitMessage(item.Progress.Message) {
-		flags = append(flags, vm.badge("CACHE", vm.theme.Badges.Info))
-	}
-	if badge := vm.subtitleFallbackBadge(item); badge != "" {
-		flags = append(flags, badge)
-	}
-	if badge := vm.episodeProgressBadge(item); badge != "" {
-		flags = append(flags, badge)
-	}
-	return strings.Join(flags, " ")
-}
-
-func (vm *viewModel) subtitleFallbackBadge(item spindle.QueueItem) string {
-	if item.SubtitleGeneration == nil || !item.SubtitleGeneration.FallbackUsed {
-		return ""
-	}
-	label := "AI"
-	if item.SubtitleGeneration.WhisperX > 1 {
-		label = fmt.Sprintf("AI%d", item.SubtitleGeneration.WhisperX)
-	}
-	return vm.badge(label, vm.theme.Badges.Fallback)
+	return idPart + " " + titlePart + sep + statusPart
 }
 
 func (vm *viewModel) colorForStatus(status string) string {
@@ -491,46 +299,6 @@ func (vm *viewModel) badge(text, color string) string {
 		fg = vm.theme.Base.Background
 	}
 	return fmt.Sprintf("[%s:%s] %s [-:-]", color, fg, text)
-}
-
-func (vm *viewModel) episodeProgressBadge(item spindle.QueueItem) string {
-	episodes, totals := item.EpisodeSnapshot()
-	if totals.Planned < 2 {
-		return ""
-	}
-
-	// Count failed and subtitled episodes
-	failed := len(spindle.FilterFailed(episodes))
-	subtitled := 0
-	for _, ep := range episodes {
-		stage := normalizeEpisodeStage(ep.Stage)
-		if stage == "subtitled" || stage == "final" {
-			subtitled++
-		}
-	}
-
-	// If there are failed episodes, show that prominently
-	if failed > 0 {
-		label := fmt.Sprintf("EP %d/%d ✗%d", totals.Final, totals.Planned, failed)
-		return vm.badge(label, vm.theme.Text.Danger)
-	}
-
-	completed := totals.Final
-	color := vm.theme.StatusColor("pending")
-	if totals.Final == totals.Planned && totals.Planned > 0 {
-		color = vm.theme.StatusColor("completed")
-	} else if subtitled > 0 {
-		completed = subtitled
-		color = vm.theme.StatusColor("subtitled")
-	} else if totals.Encoded > 0 {
-		completed = totals.Encoded
-		color = vm.theme.StatusColor("encoding")
-	} else if totals.Ripped > 0 {
-		completed = totals.Ripped
-		color = vm.theme.StatusColor("ripping")
-	}
-	label := fmt.Sprintf("EP %d/%d", completed, totals.Planned)
-	return vm.badge(label, color)
 }
 
 func (vm *viewModel) colorForLane(lane string) string {

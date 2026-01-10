@@ -402,9 +402,9 @@ func (vm *viewModel) ensureSelection() {
 	row, _ := vm.table.GetSelection()
 	itemIdx := rowToItem(row)
 	if itemIdx < 0 {
-		vm.table.Select(itemToFirstRow(0), 0)
+		vm.table.Select(itemToRow(0), 0)
 	} else if itemIdx >= itemCount {
-		vm.table.Select(itemToFirstRow(itemCount-1), 0)
+		vm.table.Select(itemToRow(itemCount-1), 0)
 	}
 	vm.applySelectionStyling()
 }
