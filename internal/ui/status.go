@@ -53,40 +53,49 @@ func effectiveQueueStage(item spindle.QueueItem) string {
 }
 
 // normalizeEpisodeStage normalizes a status/stage string to a canonical form
-// for the simplified pipeline display.
+// for the pipeline display.
 func normalizeEpisodeStage(status string) string {
 	s := strings.ToLower(strings.TrimSpace(status))
 	if s == "" {
 		return ""
 	}
+	// Identification stages (disc or episode)
 	if s == "episode_identifying" || strings.Contains(s, "episode identification") {
-		// This stage happens after ripping and before encoding; treat it as "encoding"
-		// for the simplified pipeline display.
-		return "encoding"
+		return "identifying"
 	}
 	if s == "episode_identified" || strings.Contains(s, "episode identified") {
-		// Episode identification has completed; encoding is the next step.
-		return "encoding"
+		return "identified"
 	}
+	if s == "identifying" || s == "identified" {
+		return s
+	}
+	// Subtitling stages
 	if s == "subtitled" {
 		return "subtitled"
 	}
 	if strings.HasPrefix(s, "subtitl") {
 		return "subtitling"
 	}
+	// Encoding stages
 	if s == "encoded" {
 		return "encoded"
 	}
 	if strings.HasPrefix(s, "encod") {
 		return "encoding"
 	}
+	// Ripping stages
 	if s == "ripped" {
 		return "ripped"
 	}
 	if strings.HasPrefix(s, "rip") {
 		return "ripping"
 	}
-	if s == "final" || s == "completed" || s == "complete" || s == "success" || s == "done" || s == "organizing" {
+	// Organizing stage (distinct from final)
+	if s == "organizing" {
+		return "organizing"
+	}
+	// Final/completed states
+	if s == "final" || s == "completed" || s == "complete" || s == "success" || s == "done" {
 		return "final"
 	}
 	return "planned"
@@ -95,15 +104,19 @@ func normalizeEpisodeStage(status string) string {
 // pipelineStageForStatus maps a normalized stage to a pipeline stage ID.
 func pipelineStageForStatus(stage string) string {
 	switch stage {
+	case "identifying", "identified":
+		return "identifying"
 	case "ripping", "ripped":
 		return "ripped"
 	case "encoding", "encoded":
 		return "encoded"
 	case "subtitling", "subtitled":
 		return "subtitled"
+	case "organizing":
+		return "organizing"
 	case "final", "completed":
 		return "final"
-	case "planned", "identifying", "identified", "pending":
+	case "planned", "pending":
 		return "planned"
 	}
 	return "planned"
@@ -119,13 +132,19 @@ func singleItemPipelineCount(stageID string, item spindle.QueueItem, activeStage
 
 	// Prefer concrete file evidence, then fall back to inferred stage.
 	switch stageID {
+	case "identifying":
+		// Identification is complete once we've moved past it.
+		switch activeStage {
+		case "identified", "ripping", "ripped", "encoding", "encoded", "subtitling", "subtitled", "organizing", "final":
+			return plannedCount
+		}
 	case "ripped":
 		if strings.TrimSpace(item.RippedFile) != "" {
 			return plannedCount
 		}
 		// Once we've moved past ripping, treat ripped as done.
 		switch activeStage {
-		case "ripped", "encoding", "encoded", "subtitling", "subtitled", "final":
+		case "ripped", "encoding", "encoded", "subtitling", "subtitled", "organizing", "final":
 			return plannedCount
 		}
 	case "encoded":
@@ -133,12 +152,17 @@ func singleItemPipelineCount(stageID string, item spindle.QueueItem, activeStage
 			return plannedCount
 		}
 		switch activeStage {
-		case "encoded", "subtitling", "subtitled", "final":
+		case "encoded", "subtitling", "subtitled", "organizing", "final":
 			return plannedCount
 		}
 	case "subtitled":
 		switch activeStage {
-		case "subtitled", "final":
+		case "subtitled", "organizing", "final":
+			return plannedCount
+		}
+	case "organizing":
+		// Organizing is complete only when we've reached final.
+		if activeStage == "final" {
 			return plannedCount
 		}
 	case "final":

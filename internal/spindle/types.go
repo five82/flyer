@@ -82,9 +82,11 @@ type QueueItem struct {
 
 // QueueProgress tracks stage progress for an item.
 type QueueProgress struct {
-	Stage   string  `json:"stage"`
-	Percent float64 `json:"percent"`
-	Message string  `json:"message"`
+	Stage       string  `json:"stage"`
+	Percent     float64 `json:"percent"`
+	Message     string  `json:"message"`
+	BytesCopied int64   `json:"bytesCopied,omitempty"` // Only set during organizing
+	TotalBytes  int64   `json:"totalBytes,omitempty"`  // Only set during organizing
 }
 
 type EncodingStatus struct {

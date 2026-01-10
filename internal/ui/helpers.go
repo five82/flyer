@@ -260,7 +260,6 @@ func humanizeDuration(d time.Duration) string {
 	}
 }
 
-
 func formatBytes(value int64) string {
 	const (
 		kiB = 1024

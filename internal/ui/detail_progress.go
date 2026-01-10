@@ -22,6 +22,10 @@ func (vm *viewModel) renderActiveProgress(b *strings.Builder, item spindle.Queue
 	icon := ""
 
 	switch stage {
+	case "identifying":
+		label = "IDENTIFYING"
+		icon = "🔍"
+		color = vm.theme.StatusColor("identifying")
 	case "ripping":
 		label = "RIPPING"
 		icon = "⏵"
@@ -30,19 +34,47 @@ func (vm *viewModel) renderActiveProgress(b *strings.Builder, item spindle.Queue
 		label = "ENCODING"
 		icon = "⚙"
 		color = vm.theme.StatusColor("encoding")
-		// Use specific encoding percent if valid
-		if enc := item.Encoding; enc != nil && enc.TotalFrames > 0 && enc.CurrentFrame > 0 {
-			p := (float64(enc.CurrentFrame) / float64(enc.TotalFrames)) * 100
-			if p > 0 {
-				percent = p
+		// Check for encoding substage from Drapto
+		if enc := item.Encoding; enc != nil {
+			substage := strings.ToLower(strings.TrimSpace(enc.Stage))
+			switch {
+			case strings.Contains(substage, "analysis") || strings.Contains(substage, "crop"):
+				label = "ANALYZING"
+				icon = "🔍"
+			case strings.Contains(substage, "valid"):
+				label = "VALIDATING"
+				icon = "✓"
+			}
+			// Use specific encoding percent if valid
+			if enc.TotalFrames > 0 && enc.CurrentFrame > 0 {
+				p := (float64(enc.CurrentFrame) / float64(enc.TotalFrames)) * 100
+				if p > 0 {
+					percent = p
+				}
 			}
 		}
+	case "subtitling":
+		label = "SUBTITLING"
+		icon = "💬"
+		color = vm.theme.StatusColor("subtitling")
+	case "organizing":
+		label = "ORGANIZING"
+		icon = "📁"
+		color = vm.theme.StatusColor("organizing")
 	default:
 		return // No active progress bar for other stages
 	}
 
 	bar := vm.drawProgressBar(percent, 30, color)
 	fmt.Fprintf(b, "\n[%s::b]%s %s[::-]  %s %3.0f%%", color, icon, label, bar, percent)
+
+	// Add byte progress for organizing stage
+	if stage == "organizing" && item.Progress.TotalBytes > 0 {
+		fmt.Fprintf(b, "  [%s]%s / %s[-]",
+			vm.theme.Text.Muted,
+			formatBytes(item.Progress.BytesCopied),
+			formatBytes(item.Progress.TotalBytes))
+	}
 
 	subLines := make([]string, 0, 1)
 	if msg := strings.TrimSpace(item.Progress.Message); msg != "" {

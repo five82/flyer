@@ -98,15 +98,17 @@ func (vm *viewModel) updateDetail(row int) {
 func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem, totals spindle.EpisodeTotals) {
 	text := vm.theme.Text
 
-	// Stages: Planned -> Ripped -> Encoded -> Subtitled -> Final
+	// Stages: Planned -> Identifying -> Ripped -> Encoded -> Subtitled -> Organizing -> Final
 	stages := []struct {
 		id    string
 		label string
 	}{
 		{"planned", "Planned"},
+		{"identifying", "Identifying"},
 		{"ripped", "Ripped"},
 		{"encoded", "Encoded"},
 		{"subtitled", "Subtitled"},
+		{"organizing", "Organizing"},
 		{"final", "Final"},
 	}
 
@@ -124,13 +126,26 @@ func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.Queue
 		plannedCount = 1
 	}
 
-	// For TV episode items, derive subtitle completion by inspecting episode stages.
+	// For TV episode items, derive identifying/subtitled/organizing by inspecting episode stages.
+	identifyingCount := 0
 	subtitledCount := 0
+	organizingCount := 0
 	if totals.Planned > 0 {
 		episodes, _ := item.EpisodeSnapshot()
 		for _, ep := range episodes {
-			if normalizeEpisodeStage(ep.Stage) == "subtitled" || normalizeEpisodeStage(ep.Stage) == "final" {
+			epStage := normalizeEpisodeStage(ep.Stage)
+			// Identifying is complete if we've moved past it
+			switch epStage {
+			case "identified", "ripping", "ripped", "encoding", "encoded", "subtitling", "subtitled", "organizing", "final":
+				identifyingCount++
+			}
+			// Subtitled includes both subtitled and final
+			if epStage == "subtitled" || epStage == "final" {
 				subtitledCount++
+			}
+			// Organizing is complete only when final
+			if epStage == "final" {
+				organizingCount++
 			}
 		}
 	}
@@ -145,12 +160,16 @@ func (vm *viewModel) renderPipelineStatus(b *strings.Builder, item spindle.Queue
 			switch stage.id {
 			case "planned":
 				count = totals.Planned
+			case "identifying":
+				count = identifyingCount
 			case "ripped":
 				count = totals.Ripped
 			case "encoded":
 				count = totals.Encoded
 			case "subtitled":
 				count = subtitledCount
+			case "organizing":
+				count = organizingCount
 			case "final":
 				count = totals.Final
 			}
@@ -335,6 +354,7 @@ func (vm *viewModel) renderCompletedContext(b *strings.Builder, item spindle.Que
 	vm.renderAudioInfo(b, item)
 	vm.renderEncodingConfig(b, item)
 	vm.renderEncodeStats(b, item)
+	vm.renderValidationSummary(b, item)
 
 	// Subtitle summary (TV shows with multiple episodes) - inline in results
 	if len(episodes) > 1 && mediaType != "movie" {
@@ -363,6 +383,19 @@ func (vm *viewModel) renderFailedContext(b *strings.Builder, item spindle.QueueI
 	}
 	if msg := strings.TrimSpace(item.ErrorMessage); msg != "" {
 		fmt.Fprintf(b, "[%s]Error:[-]    [%s]%s[-]\n", text.Danger, text.Primary, tview.Escape(msg))
+	}
+	// Show detailed error info from Drapto if available
+	if item.Encoding != nil && item.Encoding.Error != nil {
+		err := item.Encoding.Error
+		if title := strings.TrimSpace(err.Title); title != "" && title != strings.TrimSpace(item.ErrorMessage) {
+			fmt.Fprintf(b, "[%s]Cause:[-]    [%s]%s[-]\n", text.Muted, text.Primary, tview.Escape(title))
+		}
+		if ctx := strings.TrimSpace(err.Context); ctx != "" {
+			fmt.Fprintf(b, "[%s]Context:[-]  [%s]%s[-]\n", text.Muted, text.Secondary, tview.Escape(ctx))
+		}
+		if suggestion := strings.TrimSpace(err.Suggestion); suggestion != "" {
+			fmt.Fprintf(b, "[%s]Suggest:[-]  [%s]%s[-]\n", text.Muted, vm.theme.StatusColor("completed"), tview.Escape(suggestion))
+		}
 	}
 
 	// Last progress section
@@ -399,6 +432,9 @@ func (vm *viewModel) renderFailedContext(b *strings.Builder, item spindle.QueueI
 		}
 	}
 
+	// Validation details (show all steps if there are failures)
+	vm.renderValidationDetails(b, item)
+
 	// Paths section (always expanded for debugging)
 	vm.writeSection(b, "Paths")
 	vm.renderPathsExpanded(b, item)
@@ -416,5 +452,76 @@ func (vm *viewModel) renderPendingContext(b *strings.Builder, item spindle.Queue
 	if metaRows := summarizeMetadata(item.Metadata); len(metaRows) > 0 {
 		vm.writeSection(b, "Metadata")
 		b.WriteString(vm.formatMetadata(metaRows))
+	}
+}
+
+// renderValidationSummary renders a one-line validation summary for completed items.
+func (vm *viewModel) renderValidationSummary(b *strings.Builder, item spindle.QueueItem) {
+	if item.Encoding == nil || item.Encoding.Validation == nil {
+		return
+	}
+	text := vm.theme.Text
+	v := item.Encoding.Validation
+	total := len(v.Steps)
+	if total == 0 {
+		return
+	}
+	passed := 0
+	for _, step := range v.Steps {
+		if step.Passed {
+			passed++
+		}
+	}
+	if v.Passed {
+		fmt.Fprintf(b, "[%s]Validation:[-] [%s]✓ Passed[-] [%s](%d/%d checks)[-]\n",
+			text.Muted, vm.theme.StatusColor("completed"), text.Faint, passed, total)
+	} else {
+		fmt.Fprintf(b, "[%s]Validation:[-] [%s]✗ Failed[-] [%s](%d/%d checks)[-]\n",
+			text.Muted, text.Danger, text.Faint, passed, total)
+	}
+}
+
+// renderValidationDetails renders detailed validation step results for failed items.
+func (vm *viewModel) renderValidationDetails(b *strings.Builder, item spindle.QueueItem) {
+	if item.Encoding == nil || item.Encoding.Validation == nil {
+		return
+	}
+	v := item.Encoding.Validation
+	if len(v.Steps) == 0 {
+		return
+	}
+	// Only show details if validation failed or if there are any failed steps
+	hasFailures := !v.Passed
+	if !hasFailures {
+		for _, step := range v.Steps {
+			if !step.Passed {
+				hasFailures = true
+				break
+			}
+		}
+	}
+	if !hasFailures {
+		return
+	}
+
+	text := vm.theme.Text
+	vm.writeSection(b, "Validation")
+
+	for _, step := range v.Steps {
+		icon := "✓"
+		color := vm.theme.StatusColor("completed")
+		if !step.Passed {
+			icon = "✗"
+			color = text.Danger
+		}
+		name := strings.TrimSpace(step.Name)
+		if name == "" {
+			name = "Check"
+		}
+		fmt.Fprintf(b, "[%s]%s[-] [%s]%s[-]", color, icon, text.Secondary, name)
+		if details := strings.TrimSpace(step.Details); details != "" {
+			fmt.Fprintf(b, " [%s]%s[-]", text.Faint, tview.Escape(details))
+		}
+		b.WriteString("\n")
 	}
 }

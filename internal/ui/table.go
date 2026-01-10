@@ -262,7 +262,6 @@ func (vm *viewModel) gutterMarker(item spindle.QueueItem) string {
 	return ""
 }
 
-
 func (vm *viewModel) formatStage(item spindle.QueueItem) string {
 	stage := effectiveQueueStage(item)
 	stage = titleCase(stage)
@@ -420,12 +419,23 @@ func (vm *viewModel) episodeProgressBadge(item spindle.QueueItem) string {
 	if totals.Planned < 2 {
 		return ""
 	}
+
+	// Count failed and subtitled episodes
+	failed := len(spindle.FilterFailed(episodes))
 	subtitled := 0
 	for _, ep := range episodes {
-		if ep.Stage == "subtitled" || ep.Stage == "final" {
+		stage := normalizeEpisodeStage(ep.Stage)
+		if stage == "subtitled" || stage == "final" {
 			subtitled++
 		}
 	}
+
+	// If there are failed episodes, show that prominently
+	if failed > 0 {
+		label := fmt.Sprintf("EP %d/%d ✗%d", totals.Final, totals.Planned, failed)
+		return vm.badge(label, vm.theme.Text.Danger)
+	}
+
 	completed := totals.Final
 	color := vm.theme.StatusColor("pending")
 	if totals.Final == totals.Planned && totals.Planned > 0 {
@@ -447,7 +457,6 @@ func (vm *viewModel) episodeProgressBadge(item spindle.QueueItem) string {
 func (vm *viewModel) colorForLane(lane string) string {
 	return vm.theme.LaneColor(lane)
 }
-
 
 func mostRecentTimestamp(item spindle.QueueItem) time.Time {
 	updated := item.ParsedUpdatedAt()
@@ -506,4 +515,3 @@ func determineLane(item spindle.QueueItem) string {
 		return ""
 	}
 }
-

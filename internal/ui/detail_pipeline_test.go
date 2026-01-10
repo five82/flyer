@@ -40,16 +40,27 @@ func TestRenderPipelineStatus_MovieCompleted_UsesChecks(t *testing.T) {
 }
 
 func TestNormalizeEpisodeStage_MapsEpisodeIdentificationLabels(t *testing.T) {
-	tests := []string{
+	// Episode identification stages map to "identifying" (active) or "identified" (complete)
+	identifyingTests := []string{
 		"episode_identifying",
 		"Episode identification",
 		"Episode identification (42%)",
+		"identifying",
+	}
+	for _, in := range identifyingTests {
+		if got := normalizeEpisodeStage(in); got != "identifying" {
+			t.Fatalf("normalizeEpisodeStage(%q) = %q, want %q", in, got, "identifying")
+		}
+	}
+
+	identifiedTests := []string{
 		"episode_identified",
 		"Episode identified",
+		"identified",
 	}
-	for _, in := range tests {
-		if got := normalizeEpisodeStage(in); got != "encoding" {
-			t.Fatalf("normalizeEpisodeStage(%q) = %q, want %q", in, got, "encoding")
+	for _, in := range identifiedTests {
+		if got := normalizeEpisodeStage(in); got != "identified" {
+			t.Fatalf("normalizeEpisodeStage(%q) = %q, want %q", in, got, "identified")
 		}
 	}
 }

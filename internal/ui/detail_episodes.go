@@ -155,6 +155,9 @@ func (vm *viewModel) episodeStageChip(stage string, failed bool) string {
 	case "final", "completed":
 		color = vm.theme.StatusColor("completed")
 		label = "DONE"
+	case "organizing":
+		color = vm.theme.StatusColor("subtitled") // Use subtitled color for now
+		label = "ORGZ"
 	case "subtitled":
 		color = vm.theme.StatusColor("subtitled")
 		label = "SUB"
@@ -164,6 +167,9 @@ func (vm *viewModel) episodeStageChip(stage string, failed bool) string {
 	case "ripped":
 		color = vm.theme.StatusColor("ripped")
 		label = "RIPD"
+	case "identified":
+		color = vm.theme.StatusColor("ripped") // Use ripped color for identification complete
+		label = "IDNT"
 	case "planned":
 		color = vm.theme.Text.Muted
 		label = "PLAN"
@@ -175,6 +181,9 @@ func (vm *viewModel) episodeStageChip(stage string, failed bool) string {
 		label = "WORK"
 	case "subtitling":
 		color = vm.theme.StatusColor("subtitling")
+		label = "WORK"
+	case "identifying":
+		color = vm.theme.StatusColor("identifying")
 		label = "WORK"
 	}
 
