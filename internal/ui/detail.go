@@ -37,12 +37,13 @@ func determineDetailContext(item spindle.QueueItem) detailContext {
 }
 
 func (vm *viewModel) updateDetail(row int) {
-	if row <= 0 || row-1 >= len(vm.displayItems) {
+	itemIdx := rowToItem(row)
+	if itemIdx < 0 || itemIdx >= len(vm.displayItems) {
 		vm.detail.SetText(fmt.Sprintf("[%s]Select an item to view details[-]", vm.theme.Text.Faint))
 		vm.detailState.lastID = 0
 		return
 	}
-	item := vm.displayItems[row-1]
+	item := vm.displayItems[itemIdx]
 
 	// Pre-calculation
 	summary, ripSpecErr := item.ParseRipSpec()

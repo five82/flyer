@@ -30,33 +30,20 @@ func isProcessingStatus(status string) bool {
 }
 
 // itemToRow converts an item index (0-based) to the table row.
-// Row 0 is the header, so item 0 starts at row 1.
 func itemToRow(itemIdx int) int {
-	return 1 + itemIdx
+	return itemIdx
 }
 
 // rowToItem converts a table row to the item index.
-// Returns -1 if the row is the header (row 0).
 func rowToItem(row int) int {
-	if row <= 0 {
+	if row < 0 {
 		return -1
 	}
-	return row - 1
+	return row
 }
 
 func (vm *viewModel) renderTable() {
 	vm.table.Clear()
-
-	// Single column layout - format title and status together
-	headerBackground := vm.theme.TableHeaderBackground()
-	headerText := vm.theme.TableHeaderTextColor()
-	header := tview.NewTableCell("").
-		SetSelectable(false).
-		SetAlign(tview.AlignLeft).
-		SetExpansion(1).
-		SetBackgroundColor(headerBackground).
-		SetTextColor(headerText)
-	vm.table.SetCell(0, 0, header)
 
 	rows := append([]spindle.QueueItem(nil), vm.items...)
 	switch vm.filterMode {
