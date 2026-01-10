@@ -10,6 +10,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/five82/flyer/internal/prefs"
 	"github.com/five82/flyer/internal/spindle"
 )
 
@@ -129,7 +130,8 @@ func (vm *viewModel) newSearchContainer(hint *tview.TextView, input *tview.Input
 }
 
 func newViewModel(app *tview.Application, opts Options) *viewModel {
-	theme := defaultTheme()
+	// Load theme from saved preferences, falling back to default
+	theme := GetTheme(opts.Prefs.Theme)
 
 	// Override focus borders to use single lines instead of double lines
 	tview.Borders.HorizontalFocus = tview.Borders.Horizontal
@@ -249,6 +251,71 @@ func newViewModel(app *tview.Application, opts Options) *viewModel {
 	vm.setCommandBar("queue")
 
 	return vm
+}
+
+// cycleTheme switches to the next available theme and reapplies all colors.
+func (vm *viewModel) cycleTheme() {
+	nextName := NextTheme(vm.theme.Name)
+	vm.theme = GetTheme(nextName)
+
+	// Persist theme preference (ignore errors - graceful degradation)
+	_ = prefs.Save(vm.options.PrefsPath, prefs.Prefs{Theme: nextName})
+
+	// Update tview global styles
+	tview.Styles.PrimitiveBackgroundColor = vm.theme.BackgroundColor()
+	tview.Styles.ContrastBackgroundColor = vm.theme.SurfaceColor()
+	tview.Styles.MoreContrastBackgroundColor = vm.theme.SurfaceAltColor()
+
+	// Update root
+	vm.root.SetBackgroundColor(vm.theme.BackgroundColor())
+
+	// Update header components
+	vm.statusView.SetBackgroundColor(vm.theme.SurfaceColor())
+	vm.statusView.SetTextColor(hexToColor(vm.theme.Text.Primary))
+	vm.cmdBar.SetBackgroundColor(vm.theme.SurfaceColor())
+	vm.cmdBar.SetTextColor(hexToColor(vm.theme.Text.Secondary))
+	vm.logoView.SetBackgroundColor(vm.theme.SurfaceColor())
+	vm.logoView.SetText(createLogo(vm.theme))
+
+	// Update table
+	vm.table.SetBackgroundColor(vm.theme.SurfaceColor())
+	vm.table.SetBorderColor(vm.theme.TableBorderColor())
+	vm.table.SetSelectedStyle(tcell.StyleDefault.Background(vm.theme.TableSelectionBackground()).Foreground(vm.theme.TableSelectionTextColor()))
+
+	// Update detail view
+	vm.detail.SetBackgroundColor(vm.theme.SurfaceAltColor())
+	vm.detail.SetBorderColor(vm.theme.TableBorderColor())
+
+	// Update log view
+	vm.logView.SetBackgroundColor(vm.theme.SurfaceAltColor())
+	vm.logView.SetBorderColor(vm.theme.TableBorderColor())
+
+	// Update problems view
+	vm.problemsView.SetBackgroundColor(vm.theme.SurfaceAltColor())
+	vm.problemsView.SetBorderColor(vm.theme.TableBorderColor())
+
+	// Update search status
+	if vm.search.status != nil {
+		vm.search.status.SetBackgroundColor(vm.theme.SurfaceColor())
+		vm.search.status.SetTextColor(hexToColor(vm.theme.Text.Secondary))
+	}
+
+	// Rebuild header backgrounds
+	if vm.header != nil {
+		vm.header.SetBackgroundColor(vm.theme.SurfaceColor())
+	}
+
+	// Reapply focus styles for current view
+	vm.applyFocusStyles(vm.currentView)
+
+	// Refresh content with new theme colors
+	vm.renderTablePreservingSelection()
+	if row, _ := vm.table.GetSelection(); row > 0 {
+		vm.updateDetail(row)
+	}
+
+	// Update command bar to show theme change
+	vm.setCommandBar(vm.currentView)
 }
 
 func (vm *viewModel) buildMainLayout() tview.Primitive {
@@ -491,6 +558,9 @@ func (vm *viewModel) setCommandBar(view string) {
 		}
 		segments = append(segments, fmt.Sprintf("[%s]/%s[-]%s", vm.theme.Text.Accent, tview.Escape(pattern), matchInfo))
 	}
+
+	// Add theme indicator
+	segments = append(segments, fmt.Sprintf("[%s]T[-]:[%s]%s[-]", vm.theme.Text.AccentSoft, vm.theme.Text.Muted, vm.theme.Name))
 
 	vm.cmdBar.SetText(strings.Join(segments, "  "))
 }

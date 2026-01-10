@@ -51,6 +51,7 @@ func (vm *viewModel) showHelp() {
 		{
 			title: "System",
 			entries: []struct{ key, desc string }{
+				{"T", "Cycle theme (Dracula/Slate)"},
 				{"h or ?", "Show this help"},
 				{"e", "Exit Flyer"},
 				{"Ctrl+C", "Quit immediately"},

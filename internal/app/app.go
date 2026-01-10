@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/five82/flyer/internal/config"
+	"github.com/five82/flyer/internal/prefs"
 	"github.com/five82/flyer/internal/spindle"
 	"github.com/five82/flyer/internal/state"
 	"github.com/five82/flyer/internal/ui"
@@ -14,7 +15,8 @@ import (
 // Options configure the Flyer application.
 type Options struct {
 	ConfigPath string
-	PollEvery  int // seconds; zero uses default
+	PrefsPath  string // empty uses default ~/.config/flyer/prefs.toml
+	PollEvery  int    // seconds; zero uses default
 }
 
 // Run boots the Flyer TUI until the context is cancelled.
@@ -23,6 +25,8 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("load spindle config: %w", err)
 	}
+
+	userPrefs, _ := prefs.Load(opts.PrefsPath) // Graceful degradation on error
 
 	client, err := spindle.NewClient(cfg.APIBind)
 	if err != nil {
@@ -48,6 +52,8 @@ func Run(ctx context.Context, opts Options) error {
 		Context:       ctx,
 		DaemonLogPath: cfg.DaemonLogPath(),
 		Config:        cfg,
+		Prefs:         userPrefs,
+		PrefsPath:     opts.PrefsPath,
 		RefreshEvery:  interval,
 	}
 

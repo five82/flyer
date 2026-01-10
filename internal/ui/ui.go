@@ -10,6 +10,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/five82/flyer/internal/config"
+	"github.com/five82/flyer/internal/prefs"
 	"github.com/five82/flyer/internal/spindle"
 	"github.com/five82/flyer/internal/state"
 )
@@ -21,6 +22,8 @@ type Options struct {
 	Context       context.Context
 	DaemonLogPath string
 	Config        config.Config
+	Prefs         prefs.Prefs
+	PrefsPath     string
 	RefreshEvery  time.Duration
 }
 
@@ -181,6 +184,9 @@ func Run(ctx context.Context, opts Options) error {
 				return nil
 			case 't':
 				model.toggleEpisodesCollapsed()
+				return nil
+			case 'T':
+				model.cycleTheme()
 				return nil
 			case 'P':
 				model.togglePathDetail()

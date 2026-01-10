@@ -88,9 +88,13 @@ type SearchPalette struct {
 	HighlightPassiveFg string
 }
 
+// themeOrder defines the order for theme cycling.
+var themeOrder = []string{"Dracula", "Slate"}
+
 // themes is a registry of available theme constructors.
 var themes = map[string]func() Theme{
-	"CarbonNight": carbonNightTheme,
+	"Dracula": draculaTheme,
+	"Slate":   slateTheme,
 }
 
 // GetTheme returns a theme by name. If the name is not found, returns the default theme.
@@ -98,101 +102,215 @@ func GetTheme(name string) Theme {
 	if fn, ok := themes[name]; ok {
 		return fn()
 	}
-	return carbonNightTheme()
+	return draculaTheme()
 }
 
-// defaultTheme returns the default theme (CarbonNight).
+// defaultTheme returns the default theme (Dracula).
 func defaultTheme() Theme {
-	return carbonNightTheme()
+	return draculaTheme()
 }
 
-// carbonNightTheme returns the CarbonNight dark theme.
-func carbonNightTheme() Theme {
+// ThemeNames returns the list of available theme names in cycling order.
+func ThemeNames() []string {
+	return themeOrder
+}
+
+// NextTheme returns the name of the next theme after the given one.
+func NextTheme(current string) string {
+	for i, name := range themeOrder {
+		if name == current {
+			return themeOrder[(i+1)%len(themeOrder)]
+		}
+	}
+	return themeOrder[0]
+}
+
+// draculaTheme returns the Dracula dark theme.
+// Official palette: https://draculatheme.com/spec
+// UI colors derived from dracula/visual-studio-code canonical implementation:
+//   - BGDarker #191A21: outermost background, status areas
+//   - BGDark #21222C: sidebar, secondary surfaces
+//   - Background #282A36: editor, main content panels
+//   - BGLight #343746: activity bar, focus states
+//   - Selection #44475A: list/text selection
+func draculaTheme() Theme {
 	return Theme{
-		Name: "CarbonNight",
+		Name: "Dracula",
 		Base: BasePalette{
-			Background: "#05070f",
-			Surface:    "#0f172a",
-			SurfaceAlt: "#172033",
-			FocusBg:    "#1a2942", // Slightly brighter than SurfaceAlt for focus indication
+			Background: "#191A21", // BGDarker (outermost, darkest)
+			Surface:    "#282A36", // Background (main content panels)
+			SurfaceAlt: "#21222C", // BGDark (secondary surfaces)
+			FocusBg:    "#2d303d", // Subtle focus (between Background and BGLight)
 		},
 		Border: BorderPalette{
-			Default: "#1f2937",
-			Muted:   "#111827",
-			Focus:   "#38bdf8",
-			Danger:  "#f87171",
+			Default: "#44475A", // Selection
+			Muted:   "#21222C", // BGDark
+			Focus:   "#BD93F9", // Purple
+			Danger:  "#FF5555", // Red
 		},
 		Text: TextPalette{
-			Heading:    "#f8fafc", // Keep white for headings
-			Primary:    "#f1f5f9", // Brighter primary for better readability
-			Secondary:  "#cbd5f5", // Good secondary, keep as is
-			Muted:      "#94a3b8", // Good muted, keep as is
-			Faint:      "#64748b", // Good faint, keep as is
-			Accent:     "#38bdf8", // Brighter accent for better visibility
-			AccentSoft: "#0ea5e9", // Brighter soft accent
-			Success:    "#22c55e", // Brighter success green
-			Warning:    "#f59e0b", // Brighter warning amber
-			Danger:     "#ef4444", // Brighter danger red
-			Info:       "#06b6d4", // Brighter info cyan
+			Heading:    "#F8F8F2", // Foreground
+			Primary:    "#F8F8F2", // Foreground
+			Secondary:  "#F8F8F2", // Foreground (per spec, main text is Foreground)
+			Muted:      "#6272A4", // Comment
+			Faint:      "#44475A", // Selection (dimmest readable)
+			Accent:     "#BD93F9", // Purple
+			AccentSoft: "#FF79C6", // Pink
+			Success:    "#50FA7B", // Green
+			Warning:    "#FFB86C", // Orange
+			Danger:     "#FF5555", // Red
+			Info:       "#8BE9FD", // Cyan
 		},
 		Table: TablePalette{
-			HeaderBg:         "#1e293b",
-			HeaderText:       "#f1f5f9",
-			SelectionBg:      "#1d4ed8",
-			SelectionText:    "#f8fafc",
-			Border:           "#273449",
-			BorderFocus:      "#38bdf8",
-			ProblemHeaderBg:  "#2d1f1f",
-			ProblemHeaderTxt: "#fde68a",
+			HeaderBg:         "#21222C", // BGDark (like inactive tabs)
+			HeaderText:       "#F8F8F2", // Foreground
+			SelectionBg:      "#44475A", // Selection
+			SelectionText:    "#F8F8F2", // Foreground
+			Border:           "#44475A", // Selection
+			BorderFocus:      "#BD93F9", // Purple
+			ProblemHeaderBg:  "#21222C", // BGDark
+			ProblemHeaderTxt: "#FFB86C", // Orange
 		},
 		Problems: ProblemPalette{
-			Border:         "#f97316",
-			Shortcut:       "#fbbf24",
-			Warning:        "#f59e0b",
-			Danger:         "#f87171",
-			SummaryPrimary: "#f8fafc",
-			SummaryMuted:   "#94a3b8",
-			BarBackground:  "#1a0f0f",
-			BarText:        "#fb7185",
+			Border:         "#FFB86C", // Orange
+			Shortcut:       "#F1FA8C", // Yellow
+			Warning:        "#FFB86C", // Orange
+			Danger:         "#FF5555", // Red
+			SummaryPrimary: "#F8F8F2", // Foreground
+			SummaryMuted:   "#6272A4", // Comment
+			BarBackground:  "#191A21", // BGDarker
+			BarText:        "#FF79C6", // Pink
 		},
 		Search: SearchPalette{
-			Prompt:             "#7dd3fc",
-			Match:              "#e2e8f0",
-			Count:              "#fbbf24",
-			Hint:               "#94a3b8",
-			Error:              "#f87171",
-			HighlightActiveFg:  "#05070f",
-			HighlightActiveBg:  "#facc15",
-			HighlightPassiveFg: "#f97316",
+			Prompt:             "#8BE9FD", // Cyan
+			Match:              "#F8F8F2", // Foreground
+			Count:              "#F1FA8C", // Yellow
+			Hint:               "#6272A4", // Comment
+			Error:              "#FF5555", // Red
+			HighlightActiveFg:  "#191A21", // BGDarker
+			HighlightActiveBg:  "#F1FA8C", // Yellow
+			HighlightPassiveFg: "#FFB86C", // Orange
 		},
 		Badges: BadgePalette{
-			Review:   "#fbbf24",
-			Error:    "#f87171",
-			Log:      "#38bdf8",
-			Info:     "#5eead4",
-			Fallback: "#a78bfa",
+			Review:   "#FFB86C", // Orange
+			Error:    "#FF5555", // Red
+			Log:      "#8BE9FD", // Cyan
+			Info:     "#50FA7B", // Green
+			Fallback: "#BD93F9", // Purple
 		},
 		StatusColors: map[string]string{
-			"pending":             "#64748b", // Muted gray for waiting state
-			"identifying":         "#3b82f6", // Bright blue for active identification
-			"identified":          "#1d4ed8", // Deeper blue for completed identification
-			"ripping":             "#8b5cf6", // Vibrant purple for active ripping
-			"ripped":              "#0ea5e9", // Blue-cyan for ripped completion (distinct from ripping WORK)
-			"episode_identifying": "#a855f7", // Light purple for episode identification
-			"episode_identified":  "#9333ea", // Medium purple for episode identified
-			"encoding":            "#ec4899", // Bright pink for active encoding
-			"encoded":             "#10b981", // Emerald green for encoded completion
-			"subtitling":          "#06b6d4", // Cyan for active subtitling
-			"subtitled":           "#14b8a6", // Teal for subtitle completion
-			"organizing":          "#f59e0b", // Amber for organizing phase
-			"completed":           "#16a34a", // Deep green for final completion
-			"failed":              "#dc2626", // Strong red for failures
-			"review":              "#ea580c", // Dark orange for review state
+			"pending":             "#6272A4", // Comment (muted)
+			"identifying":         "#8BE9FD", // Cyan (active)
+			"identified":          "#6272A4", // Comment (completed)
+			"ripping":             "#BD93F9", // Purple (active)
+			"ripped":              "#6272A4", // Comment (completed)
+			"episode_identifying": "#8BE9FD", // Cyan
+			"episode_identified":  "#6272A4", // Comment
+			"encoding":            "#FF79C6", // Pink (active)
+			"encoded":             "#50FA7B", // Green (success)
+			"subtitling":          "#8BE9FD", // Cyan (active)
+			"subtitled":           "#50FA7B", // Green (success)
+			"organizing":          "#FFB86C", // Orange
+			"completed":           "#50FA7B", // Green (success)
+			"failed":              "#FF5555", // Red (error)
+			"review":              "#FFB86C", // Orange (attention)
 		},
 		LaneColors: map[string]string{
-			"foreground": "#7dd3fc",
-			"background": "#64748b",
-			"attention":  "#fbbf24",
+			"foreground": "#8BE9FD", // Cyan
+			"background": "#6272A4", // Comment
+			"attention":  "#F1FA8C", // Yellow
+		},
+	}
+}
+
+// slateTheme returns the Slate dark theme.
+// Based on Tailwind CSS Slate/Sky palette: https://tailwindcss.com/docs/colors
+func slateTheme() Theme {
+	return Theme{
+		Name: "Slate",
+		Base: BasePalette{
+			Background: "#020617", // slate-950
+			Surface:    "#0f172a", // slate-900
+			SurfaceAlt: "#1e293b", // slate-800
+			FocusBg:    "#283548", // between slate-800 and slate-700
+		},
+		Border: BorderPalette{
+			Default: "#334155", // slate-700
+			Muted:   "#1e293b", // slate-800
+			Focus:   "#38bdf8", // sky-400
+			Danger:  "#f87171", // red-400
+		},
+		Text: TextPalette{
+			Heading:    "#f8fafc", // slate-50
+			Primary:    "#f1f5f9", // slate-100
+			Secondary:  "#cbd5e1", // slate-300
+			Muted:      "#94a3b8", // slate-400
+			Faint:      "#64748b", // slate-500
+			Accent:     "#38bdf8", // sky-400
+			AccentSoft: "#0ea5e9", // sky-500
+			Success:    "#22c55e", // green-500
+			Warning:    "#f59e0b", // amber-500
+			Danger:     "#ef4444", // red-500
+			Info:       "#06b6d4", // cyan-500
+		},
+		Table: TablePalette{
+			HeaderBg:         "#1e293b", // slate-800
+			HeaderText:       "#f1f5f9", // slate-100
+			SelectionBg:      "#0284c7", // sky-600
+			SelectionText:    "#f8fafc", // slate-50
+			Border:           "#334155", // slate-700
+			BorderFocus:      "#38bdf8", // sky-400
+			ProblemHeaderBg:  "#1e293b", // slate-800
+			ProblemHeaderTxt: "#fde68a", // amber-200
+		},
+		Problems: ProblemPalette{
+			Border:         "#f97316", // orange-500
+			Shortcut:       "#fbbf24", // amber-400
+			Warning:        "#f59e0b", // amber-500
+			Danger:         "#f87171", // red-400
+			SummaryPrimary: "#f8fafc", // slate-50
+			SummaryMuted:   "#94a3b8", // slate-400
+			BarBackground:  "#0f172a", // slate-900
+			BarText:        "#fb7185", // rose-400
+		},
+		Search: SearchPalette{
+			Prompt:             "#7dd3fc", // sky-300
+			Match:              "#e2e8f0", // slate-200
+			Count:              "#fbbf24", // amber-400
+			Hint:               "#94a3b8", // slate-400
+			Error:              "#f87171", // red-400
+			HighlightActiveFg:  "#020617", // slate-950
+			HighlightActiveBg:  "#facc15", // yellow-400
+			HighlightPassiveFg: "#f97316", // orange-500
+		},
+		Badges: BadgePalette{
+			Review:   "#fbbf24", // amber-400
+			Error:    "#f87171", // red-400
+			Log:      "#38bdf8", // sky-400
+			Info:     "#5eead4", // teal-300
+			Fallback: "#a78bfa", // violet-400
+		},
+		StatusColors: map[string]string{
+			"pending":             "#64748b", // slate-500 (muted)
+			"identifying":         "#38bdf8", // sky-400 (active)
+			"identified":          "#0284c7", // sky-600 (completed)
+			"ripping":             "#8b5cf6", // violet-500 (active)
+			"ripped":              "#6366f1", // indigo-500 (completed)
+			"episode_identifying": "#a78bfa", // violet-400
+			"episode_identified":  "#8b5cf6", // violet-500
+			"encoding":            "#ec4899", // pink-500 (active)
+			"encoded":             "#22c55e", // green-500 (success)
+			"subtitling":          "#06b6d4", // cyan-500 (active)
+			"subtitled":           "#14b8a6", // teal-500 (success)
+			"organizing":          "#f59e0b", // amber-500
+			"completed":           "#16a34a", // green-600 (success)
+			"failed":              "#dc2626", // red-600 (error)
+			"review":              "#ea580c", // orange-600 (attention)
+		},
+		LaneColors: map[string]string{
+			"foreground": "#7dd3fc", // sky-300
+			"background": "#64748b", // slate-500
+			"attention":  "#fbbf24", // amber-400
 		},
 	}
 }
