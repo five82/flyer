@@ -10,20 +10,19 @@ import (
 // Lower values appear first (higher priority).
 var statusPriority = map[string]int{
 	"failed":              0,
-	"review":              1,
-	"subtitling":          2,
-	"encoding":            3,
-	"organizing":          4,
-	"ripping":             5,
-	"episode_identifying": 6,
-	"identifying":         7,
-	"episode_identified":  8,
-	"ripped":              9,
-	"subtitled":           10,
-	"encoded":             11,
-	"identified":          12,
-	"pending":             13,
-	"completed":           14,
+	"subtitling":          1,
+	"encoding":            2,
+	"organizing":          3,
+	"ripping":             4,
+	"episode_identifying": 5,
+	"identifying":         6,
+	"episode_identified":  7,
+	"ripped":              8,
+	"subtitled":           9,
+	"encoded":             10,
+	"identified":          11,
+	"pending":             12,
+	"completed":           13,
 }
 
 // statusRank returns the display priority for a status.
@@ -41,7 +40,7 @@ func effectiveQueueStage(item spindle.QueueItem) string {
 	switch status {
 	case "completed":
 		return "completed"
-	case "failed", "review":
+	case "failed":
 		// Terminal / attention states should override any stale progress.stage.
 		return status
 	}

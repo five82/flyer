@@ -510,7 +510,7 @@ func determineLane(item spindle.QueueItem) string {
 		return "foreground"
 	case "ripped", "episode_identifying", "episode_identified", "encoding", "encoded", "subtitling", "subtitled", "organizing", "completed":
 		return "background"
-	case "failed", "review":
+	case "failed":
 		return "attention"
 	default:
 		return ""
