@@ -12,6 +12,10 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	configPath := flag.String("config", "", "override spindle config path (optional)")
 	pollSeconds := flag.Int("poll", 0, "refresh interval in seconds (optional, defaults to 2s)")
 	flag.Parse()
@@ -26,6 +30,7 @@ func main() {
 
 	if err := app.Run(ctx, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "flyer: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
