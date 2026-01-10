@@ -126,6 +126,28 @@ func (vm *viewModel) buildStructuredProblems(item *spindle.QueueItem) []string {
 		lines = append(lines, "")
 	}
 
+	// Per-episode errors
+	var failedEpisodes []spindle.EpisodeStatus
+	for _, ep := range item.Episodes {
+		if ep.IsFailed() {
+			failedEpisodes = append(failedEpisodes, ep)
+		}
+	}
+	if len(failedEpisodes) > 0 {
+		lines = append(lines, fmt.Sprintf("[%s::b]Failed Episodes[-::-]", text.Danger))
+		for _, ep := range failedEpisodes {
+			epLabel := ep.Key
+			if ep.Title != "" {
+				epLabel = fmt.Sprintf("%s - %s", ep.Key, ep.Title)
+			}
+			lines = append(lines, fmt.Sprintf("  [%s]✗[-] [%s]%s[-]", text.Danger, text.Primary, epLabel))
+			if msg := strings.TrimSpace(ep.ErrorMessage); msg != "" {
+				lines = append(lines, fmt.Sprintf("      [%s]%s[-]", text.Secondary, msg))
+			}
+		}
+		lines = append(lines, "")
+	}
+
 	// Encoding error details
 	if item.Encoding != nil && item.Encoding.Error != nil {
 		err := item.Encoding.Error

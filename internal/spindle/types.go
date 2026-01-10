@@ -204,6 +204,8 @@ type EpisodeStatus struct {
 	Episode                   int            `json:"episode"`
 	Title                     string         `json:"title"`
 	Stage                     string         `json:"stage"`
+	Status                    string         `json:"status,omitempty"`       // pending, completed, failed
+	ErrorMessage              string         `json:"errorMessage,omitempty"` // per-episode error
 	Active                    bool           `json:"active,omitempty"`
 	Progress                  *QueueProgress `json:"progress,omitempty"`
 	RuntimeSeconds            int            `json:"runtimeSeconds"`
@@ -220,6 +222,11 @@ type EpisodeStatus struct {
 	GeneratedSubtitleDecision string         `json:"generatedSubtitleDecision"`
 	MatchScore                float64        `json:"matchScore"`
 	MatchedEpisode            int            `json:"matchedEpisode"`
+}
+
+// IsFailed returns true if the episode has a failed status.
+func (e EpisodeStatus) IsFailed() bool {
+	return strings.EqualFold(strings.TrimSpace(e.Status), "failed")
 }
 
 type EpisodeTotals struct {
@@ -443,6 +450,13 @@ func deriveEpisodesFromRipSpec(raw json.RawMessage) ([]EpisodeStatus, EpisodeTot
 				status.FinalPath = asset.Final
 				status.Stage = "final"
 			}
+			// Per-episode status and error
+			if asset.Status != "" {
+				status.Status = asset.Status
+			}
+			if asset.ErrorMessage != "" {
+				status.ErrorMessage = asset.ErrorMessage
+			}
 		}
 		statuses = append(statuses, status)
 	}
@@ -491,13 +505,17 @@ type ripSpecAssets struct {
 type ripSpecAsset struct {
 	EpisodeKey string `json:"episode_key"`
 	Path       string `json:"path"`
+	Status     string `json:"status,omitempty"`
+	ErrorMsg   string `json:"error_msg,omitempty"`
 }
 
 type assetPaths struct {
-	Ripped    string
-	Encoded   string
-	Subtitled string
-	Final     string
+	Ripped       string
+	Encoded      string
+	Subtitled    string
+	Final        string
+	Status       string // Overall status (failed if any asset failed)
+	ErrorMessage string // Error message from failed asset
 }
 
 func (e ripSpecEnvelope) titleByID() map[int]ripSpecTitle {
@@ -513,20 +531,49 @@ func (e ripSpecEnvelope) titleByID() map[int]ripSpecTitle {
 
 func (e ripSpecEnvelope) assetsByKey() map[string]assetPaths {
 	lookup := make(map[string]assetPaths)
-	add := func(list []ripSpecAsset, setter func(assetPaths, string) assetPaths) {
+	add := func(list []ripSpecAsset, setter func(assetPaths, ripSpecAsset) assetPaths) {
 		for _, asset := range list {
 			key := strings.ToLower(strings.TrimSpace(asset.EpisodeKey))
 			if key == "" {
 				continue
 			}
 			entry := lookup[key]
-			entry = setter(entry, asset.Path)
+			entry = setter(entry, asset)
 			lookup[key] = entry
 		}
 	}
-	add(e.Assets.Ripped, func(a assetPaths, path string) assetPaths { a.Ripped = path; return a })
-	add(e.Assets.Encoded, func(a assetPaths, path string) assetPaths { a.Encoded = path; return a })
-	add(e.Assets.Subtitled, func(a assetPaths, path string) assetPaths { a.Subtitled = path; return a })
-	add(e.Assets.Final, func(a assetPaths, path string) assetPaths { a.Final = path; return a })
+	add(e.Assets.Ripped, func(a assetPaths, asset ripSpecAsset) assetPaths {
+		a.Ripped = asset.Path
+		return a
+	})
+	add(e.Assets.Encoded, func(a assetPaths, asset ripSpecAsset) assetPaths {
+		a.Encoded = asset.Path
+		// Track status/error from encoded (first per-episode stage)
+		if asset.Status != "" {
+			a.Status = asset.Status
+		}
+		if asset.ErrorMsg != "" {
+			a.ErrorMessage = asset.ErrorMsg
+		}
+		return a
+	})
+	add(e.Assets.Subtitled, func(a assetPaths, asset ripSpecAsset) assetPaths {
+		a.Subtitled = asset.Path
+		// Override with subtitled status if failed
+		if strings.EqualFold(asset.Status, "failed") {
+			a.Status = asset.Status
+			a.ErrorMessage = asset.ErrorMsg
+		}
+		return a
+	})
+	add(e.Assets.Final, func(a assetPaths, asset ripSpecAsset) assetPaths {
+		a.Final = asset.Path
+		// Override with final status if failed
+		if strings.EqualFold(asset.Status, "failed") {
+			a.Status = asset.Status
+			a.ErrorMessage = asset.ErrorMsg
+		}
+		return a
+	})
 	return lookup
 }

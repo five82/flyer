@@ -142,7 +142,11 @@ func (vm *viewModel) episodeStage(ep spindle.EpisodeStatus, currentGlobalStage s
 	return ep.Stage
 }
 
-func (vm *viewModel) episodeStageChip(stage string) string {
+func (vm *viewModel) episodeStageChip(stage string, failed bool) string {
+	if failed {
+		return fmt.Sprintf("[%s:%s] FAIL [-:-]", vm.theme.Base.Background, vm.theme.Text.Danger)
+	}
+
 	stage = strings.ToLower(stage)
 	color := vm.theme.Text.Muted
 	label := "WAIT"
@@ -181,7 +185,17 @@ func (vm *viewModel) describeEpisodeTotals(episodes []spindle.EpisodeStatus, tot
 	if len(episodes) == 0 {
 		return "No episodes"
 	}
+	// Count failed episodes
+	failedCount := 0
+	for _, ep := range episodes {
+		if ep.IsFailed() {
+			failedCount++
+		}
+	}
 	parts := []string{}
+	if failedCount > 0 {
+		parts = append(parts, fmt.Sprintf("%d failed", failedCount))
+	}
 	if totals.Final > 0 {
 		parts = append(parts, fmt.Sprintf("%d done", totals.Final))
 	}
@@ -200,11 +214,13 @@ func (vm *viewModel) describeEpisodeTotals(episodes []spindle.EpisodeStatus, tot
 
 func (vm *viewModel) formatEpisodeLine(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int, active bool, stageName string) string {
 	label := formatEpisodeLabel(ep)
-	stage := vm.episodeStageChip(stageName)
+	stage := vm.episodeStageChip(stageName, ep.IsFailed())
 	title, extra, _ := vm.describeEpisode(ep, titles, keyLookup)
 
 	marker := fmt.Sprintf("[%s]·[-]", vm.theme.Text.Faint)
-	if active {
+	if ep.IsFailed() {
+		marker = fmt.Sprintf("[%s]✗[-]", vm.theme.Text.Danger)
+	} else if active {
 		marker = fmt.Sprintf("[%s::b]>[-]", vm.theme.Text.Accent)
 	}
 
@@ -321,7 +337,7 @@ func (vm *viewModel) describeEpisodeFileStates(ep *spindle.EpisodeStatus) string
 }
 
 func (vm *viewModel) formatEpisodeFocusLine(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int, stageName string) string {
-	stage := vm.episodeStageChip(stageName)
+	stage := vm.episodeStageChip(stageName, ep.IsFailed())
 	title, _, _ := vm.describeEpisode(ep, titles, keyLookup)
 	return fmt.Sprintf("%s [%s::b]%s[-:-:-]", stage, vm.theme.Text.Primary, tview.Escape(title))
 }
@@ -335,7 +351,7 @@ func (vm *viewModel) movieFocusLine(summary spindle.RipSpecSummary, stage string
 	if name == "" {
 		name = fmt.Sprintf("Title %02d", main.ID)
 	}
-	stageChip := vm.episodeStageChip(stage)
+	stageChip := vm.episodeStageChip(stage, false)
 	return fmt.Sprintf("%s %s", stageChip, name)
 }
 
