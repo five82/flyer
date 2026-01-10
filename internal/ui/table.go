@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"github.com/five82/flyer/internal/spindle"
@@ -136,16 +135,16 @@ func (vm *viewModel) renderTable() {
 		row2 := row1 + 1
 
 		// Row 1: [gutter] [#ID Title] [Flags]
-		vm.table.SetCell(row1, 0, vm.makeCell(vm.gutterMarker(item), tview.AlignCenter, 1))
-		vm.table.SetCell(row1, 1, vm.makeCell(vm.formatTitleWithID(item, titleLimit), tview.AlignLeft, 8))
+		vm.table.SetCell(row1, 0, vm.makeCell(vm.gutterMarker(item, false), tview.AlignCenter, 1))
+		vm.table.SetCell(row1, 1, vm.makeCell(vm.formatTitleWithID(item, titleLimit, false), tview.AlignLeft, 8))
 		vm.table.SetCell(row1, 2, vm.makeCell(vm.formatFlags(item), tview.AlignRight, 2))
 
 		// Row 2: [spacer] [Stage · Progress Detail] [Updated]
 		vm.table.SetCell(row2, 0, vm.makeCell("", tview.AlignCenter, 1))
-		vm.table.SetCell(row2, 1, vm.makeCell(vm.formatStageWithDetail(item), tview.AlignLeft, 8))
+		vm.table.SetCell(row2, 1, vm.makeCell(vm.formatStageWithDetail(item, false), tview.AlignLeft, 8))
 		updatedText := ""
 		if showUpdated {
-			updatedText = vm.formatUpdated(now, item)
+			updatedText = vm.formatUpdated(now, item, false)
 		}
 		vm.table.SetCell(row2, 2, vm.makeCell(updatedText, tview.AlignRight, 2))
 	}
@@ -252,30 +251,27 @@ func (vm *viewModel) applySelectionStyling() {
 	selBg := vm.theme.TableSelectionBackground()
 	surfaceBg := vm.theme.SurfaceColor()
 
-	// Re-render all items, applying selection styling to the selected one
 	for itemIdx, item := range vm.displayItems {
 		row1 := itemToFirstRow(itemIdx)
 		row2 := row1 + 1
 		isSelected := itemIdx == selectedIdx
 
-		var bg tcell.Color
+		bg := surfaceBg
 		if isSelected {
 			bg = selBg
-		} else {
-			bg = surfaceBg
 		}
 
 		// Row 1: [gutter] [#ID Title] [Flags]
-		vm.table.GetCell(row1, 0).SetText(vm.gutterMarkerStyled(item, isSelected)).SetBackgroundColor(bg)
-		vm.table.GetCell(row1, 1).SetText(vm.formatTitleWithIDStyled(item, titleLimit, isSelected)).SetBackgroundColor(bg)
-		vm.table.GetCell(row1, 2).SetText(vm.formatFlagsStyled(item, isSelected)).SetBackgroundColor(bg)
+		vm.table.GetCell(row1, 0).SetText(vm.gutterMarker(item, isSelected)).SetBackgroundColor(bg)
+		vm.table.GetCell(row1, 1).SetText(vm.formatTitleWithID(item, titleLimit, isSelected)).SetBackgroundColor(bg)
+		vm.table.GetCell(row1, 2).SetText(vm.formatFlags(item)).SetBackgroundColor(bg)
 
 		// Row 2: [spacer] [Stage · Progress Detail] [Updated]
 		vm.table.GetCell(row2, 0).SetText("").SetBackgroundColor(bg)
-		vm.table.GetCell(row2, 1).SetText(vm.formatStageWithDetailStyled(item, isSelected)).SetBackgroundColor(bg)
+		vm.table.GetCell(row2, 1).SetText(vm.formatStageWithDetail(item, isSelected)).SetBackgroundColor(bg)
 		updatedText := ""
 		if showUpdated {
-			updatedText = vm.formatUpdatedStyled(now, item, isSelected)
+			updatedText = vm.formatUpdated(now, item, isSelected)
 		}
 		vm.table.GetCell(row2, 2).SetText(updatedText).SetBackgroundColor(bg)
 	}
@@ -299,9 +295,15 @@ func filterItems(items []spindle.QueueItem, keep func(spindle.QueueItem) bool) [
 }
 
 // formatTitleWithID formats the title with ID prefix for the multi-line layout.
-func (vm *viewModel) formatTitleWithID(item spindle.QueueItem, limit int) string {
+func (vm *viewModel) formatTitleWithID(item spindle.QueueItem, limit int, selected bool) string {
 	title := composeTitle(item)
 	title = truncate(title, limit)
+
+	if selected {
+		selColor := vm.theme.TableSelectionTextHex()
+		return fmt.Sprintf("[%s]#%d %s[-]", selColor, item.ID, tview.Escape(title))
+	}
+
 	color := vm.theme.Text.Primary
 	if item.NeedsReview {
 		color = vm.theme.Badges.Review
@@ -311,14 +313,40 @@ func (vm *viewModel) formatTitleWithID(item spindle.QueueItem, limit int) string
 }
 
 // formatStageWithDetail formats stage and progress detail for the second row.
-func (vm *viewModel) formatStageWithDetail(item spindle.QueueItem) string {
+func (vm *viewModel) formatStageWithDetail(item spindle.QueueItem, selected bool) string {
 	stage := effectiveQueueStage(item)
 	stage = titleCase(stage)
+
+	// For selected rows, use a single color for the entire line
+	if selected {
+		selColor := vm.theme.TableSelectionTextHex()
+		var parts []string
+		parts = append(parts, tview.Escape(stage))
+
+		if isProcessingStatus(item.Status) && item.Progress.Percent > 0 {
+			percent := item.Progress.Percent
+			if percent > 100 {
+				percent = 100
+			}
+			parts = append(parts, fmt.Sprintf("%3.0f%%", percent))
+		}
+
+		detail := strings.TrimSpace(item.Progress.Message)
+		if strings.TrimSpace(item.ErrorMessage) != "" {
+			detail = item.ErrorMessage
+		} else if item.NeedsReview && strings.TrimSpace(item.ReviewReason) != "" {
+			detail = item.ReviewReason
+		}
+		if detail != "" {
+			parts = append(parts, tview.Escape(truncate(detail, 50)))
+		}
+
+		return fmt.Sprintf("[%s]%s[-]", selColor, strings.Join(parts, " · "))
+	}
 
 	var parts []string
 	parts = append(parts, fmt.Sprintf("[%s]%s[-]", vm.colorForStatus(item.Status), tview.Escape(stage)))
 
-	// Add compact progress percentage if actively processing
 	if isProcessingStatus(item.Status) && item.Progress.Percent > 0 {
 		percent := item.Progress.Percent
 		if percent > 100 {
@@ -327,7 +355,6 @@ func (vm *viewModel) formatStageWithDetail(item spindle.QueueItem) string {
 		parts = append(parts, fmt.Sprintf("[%s]%3.0f%%[-]", vm.colorForStatus(item.Status), percent))
 	}
 
-	// Add detail message
 	detail := strings.TrimSpace(item.Progress.Message)
 	detailColor := vm.theme.Text.Muted
 
@@ -348,7 +375,18 @@ func (vm *viewModel) formatStageWithDetail(item spindle.QueueItem) string {
 	return strings.Join(parts, sep)
 }
 
-func (vm *viewModel) gutterMarker(item spindle.QueueItem) string {
+func (vm *viewModel) gutterMarker(item spindle.QueueItem, selected bool) string {
+	if selected {
+		selColor := vm.theme.TableSelectionTextHex()
+		if strings.TrimSpace(item.ErrorMessage) != "" {
+			return fmt.Sprintf("[%s::b]![-]", selColor)
+		}
+		if item.NeedsReview {
+			return fmt.Sprintf("[%s::b]R[-]", selColor)
+		}
+		return ""
+	}
+
 	if strings.TrimSpace(item.ErrorMessage) != "" {
 		return vm.badge("!", vm.theme.Badges.Error)
 	}
@@ -358,40 +396,20 @@ func (vm *viewModel) gutterMarker(item spindle.QueueItem) string {
 	return ""
 }
 
-func (vm *viewModel) formatStage(item spindle.QueueItem) string {
-	stage := effectiveQueueStage(item)
-	stage = titleCase(stage)
-	stage = truncate(stage, 22)
-
-	detail := strings.TrimSpace(item.Progress.Message)
-	detailColor := vm.theme.Text.Muted
-
-	if strings.TrimSpace(item.ErrorMessage) != "" {
-		detail = item.ErrorMessage
-		detailColor = vm.theme.Text.Danger
-	} else if item.NeedsReview && strings.TrimSpace(item.ReviewReason) != "" {
-		detail = item.ReviewReason
-		detailColor = vm.theme.Text.Warning
+func (vm *viewModel) formatUpdated(now time.Time, item spindle.QueueItem, selected bool) string {
+	color := vm.theme.Text.Muted
+	if selected {
+		color = vm.theme.TableSelectionTextHex()
 	}
 
-	if detail != "" {
-		detail = truncate(detail, 36)
-		return fmt.Sprintf("[%s]%s[-] [%s]·[-] [%s]%s[-]", vm.colorForStatus(item.Status), tview.Escape(stage), vm.theme.Text.Faint, detailColor, tview.Escape(detail))
-	}
-
-	return fmt.Sprintf("[%s]%s[-]", vm.colorForStatus(item.Status), tview.Escape(stage))
-}
-
-func (vm *viewModel) formatUpdated(now time.Time, item spindle.QueueItem) string {
 	ts := mostRecentTimestamp(item)
 	if ts.IsZero() {
-		return fmt.Sprintf("[%s]-[-]", vm.theme.Text.Muted)
+		return fmt.Sprintf("[%s]-[-]", color)
 	}
 	diff := now.Sub(ts)
 	if diff < 0 {
 		diff = 0
 	}
-	color := vm.theme.Text.Muted
 	switch {
 	case diff < time.Minute:
 		return fmt.Sprintf("[%s]just now[-]", color)
@@ -433,110 +451,6 @@ func (vm *viewModel) formatFlags(item spindle.QueueItem) string {
 		flags = append(flags, badge)
 	}
 	return strings.Join(flags, " ")
-}
-
-// Styled variants for selection - use selection text color for better contrast
-
-func (vm *viewModel) gutterMarkerStyled(item spindle.QueueItem, selected bool) string {
-	if !selected {
-		return vm.gutterMarker(item)
-	}
-	selColor := vm.theme.TableSelectionTextHex()
-	if strings.TrimSpace(item.ErrorMessage) != "" {
-		return fmt.Sprintf("[%s::b]![-]", selColor)
-	}
-	if item.NeedsReview {
-		return fmt.Sprintf("[%s::b]R[-]", selColor)
-	}
-	return ""
-}
-
-func (vm *viewModel) formatTitleWithIDStyled(item spindle.QueueItem, limit int, selected bool) string {
-	if !selected {
-		return vm.formatTitleWithID(item, limit)
-	}
-	selColor := vm.theme.TableSelectionTextHex()
-	title := composeTitle(item)
-	title = truncate(title, limit)
-	return fmt.Sprintf("[%s]#%d %s[-]", selColor, item.ID, tview.Escape(title))
-}
-
-func (vm *viewModel) formatStageWithDetailStyled(item spindle.QueueItem, selected bool) string {
-	if !selected {
-		return vm.formatStageWithDetail(item)
-	}
-	selColor := vm.theme.TableSelectionTextHex()
-
-	stage := effectiveQueueStage(item)
-	stage = titleCase(stage)
-
-	var parts []string
-	parts = append(parts, tview.Escape(stage))
-
-	// Add compact progress percentage if actively processing
-	if isProcessingStatus(item.Status) && item.Progress.Percent > 0 {
-		percent := item.Progress.Percent
-		if percent > 100 {
-			percent = 100
-		}
-		parts = append(parts, fmt.Sprintf("%3.0f%%", percent))
-	}
-
-	// Add detail message
-	detail := strings.TrimSpace(item.Progress.Message)
-	if strings.TrimSpace(item.ErrorMessage) != "" {
-		detail = item.ErrorMessage
-	} else if item.NeedsReview && strings.TrimSpace(item.ReviewReason) != "" {
-		detail = item.ReviewReason
-	}
-
-	if detail != "" {
-		detail = truncate(detail, 50)
-		parts = append(parts, tview.Escape(detail))
-	}
-
-	return fmt.Sprintf("[%s]%s[-]", selColor, strings.Join(parts, " · "))
-}
-
-func (vm *viewModel) formatUpdatedStyled(now time.Time, item spindle.QueueItem, selected bool) string {
-	if !selected {
-		return vm.formatUpdated(now, item)
-	}
-	selColor := vm.theme.TableSelectionTextHex()
-	ts := mostRecentTimestamp(item)
-	if ts.IsZero() {
-		return fmt.Sprintf("[%s]-[-]", selColor)
-	}
-	diff := now.Sub(ts)
-	if diff < 0 {
-		diff = 0
-	}
-	switch {
-	case diff < time.Minute:
-		return fmt.Sprintf("[%s]just now[-]", selColor)
-	case diff < time.Hour:
-		return fmt.Sprintf("[%s]%dm ago[-]", selColor, int(diff.Minutes()))
-	case diff < 24*time.Hour:
-		return fmt.Sprintf("[%s]%dh ago[-]", selColor, int(diff.Hours()))
-	case diff < 7*24*time.Hour:
-		return fmt.Sprintf("[%s]%dd ago[-]", selColor, int(diff.Hours()/24))
-	case diff < 30*24*time.Hour:
-		weeks := int(diff.Hours() / (24 * 7))
-		if weeks < 1 {
-			weeks = 1
-		}
-		return fmt.Sprintf("[%s]%dw ago[-]", selColor, weeks)
-	default:
-		return fmt.Sprintf("[%s]%s[-]", selColor, ts.In(time.Local).Format("Jan 02"))
-	}
-}
-
-func (vm *viewModel) formatFlagsStyled(item spindle.QueueItem, selected bool) string {
-	if !selected {
-		return vm.formatFlags(item)
-	}
-	// For selected rows, keep the badges as-is since they have their own distinct styling
-	return vm.formatFlags(item)
 }
 
 func (vm *viewModel) subtitleFallbackBadge(item spindle.QueueItem) string {
