@@ -17,7 +17,7 @@ func TestNormalizeEpisodeStage_AllowsEmptyForFallback(t *testing.T) {
 }
 
 func TestRenderPipelineStatus_MovieCompleted_UsesChecks(t *testing.T) {
-	vm := &viewModel{theme: defaultTheme()}
+	vm := &viewModel{theme: GetTheme("Dracula")}
 	item := spindle.QueueItem{
 		Status:    "completed",
 		Progress:  spindle.QueueProgress{Stage: ""},

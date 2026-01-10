@@ -8,7 +8,7 @@ import (
 )
 
 func TestFormatQueueRow_PrefersCompletedOverStaleProgressStage(t *testing.T) {
-	vm := &viewModel{theme: defaultTheme()}
+	vm := &viewModel{theme: GetTheme("Dracula")}
 	item := spindle.QueueItem{
 		Status: "completed",
 		Progress: spindle.QueueProgress{
@@ -23,7 +23,7 @@ func TestFormatQueueRow_PrefersCompletedOverStaleProgressStage(t *testing.T) {
 }
 
 func TestFormatQueueRow_PrefersFailedOverProgressStage(t *testing.T) {
-	vm := &viewModel{theme: defaultTheme()}
+	vm := &viewModel{theme: GetTheme("Dracula")}
 	item := spindle.QueueItem{
 		Status: "failed",
 		Progress: spindle.QueueProgress{

@@ -6,7 +6,7 @@ import (
 )
 
 func TestEpisodeStageChip_UsesExpectedColors(t *testing.T) {
-	th := defaultTheme()
+	th := GetTheme("Dracula")
 	vm := &viewModel{theme: th}
 
 	t.Run("ripping", func(t *testing.T) {

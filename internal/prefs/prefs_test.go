@@ -10,10 +10,7 @@ func TestLoad_MissingFileUsesDefaults(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	p, err := Load("")
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+	p := Load("")
 	if p.Theme != defaultTheme {
 		t.Fatalf("Theme = %q, want %q", p.Theme, defaultTheme)
 	}
@@ -33,10 +30,7 @@ func TestLoad_ReadsExistingFile(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	p, err := Load("")
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+	p := Load("")
 	if p.Theme != "Slate" {
 		t.Fatalf("Theme = %q, want %q", p.Theme, "Slate")
 	}
@@ -49,10 +43,7 @@ func TestLoad_ExplicitPath(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	p, err := Load(prefsFile)
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+	p := Load(prefsFile)
 	if p.Theme != "Slate" {
 		t.Fatalf("Theme = %q, want %q", p.Theme, "Slate")
 	}
@@ -67,10 +58,7 @@ func TestSave_CreatesFileAndDirs(t *testing.T) {
 		t.Fatalf("Save returned error: %v", err)
 	}
 
-	loaded, err := Load(prefsFile)
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+	loaded := Load(prefsFile)
 	if loaded.Theme != "Slate" {
 		t.Fatalf("Theme = %q, want %q", loaded.Theme, "Slate")
 	}
@@ -83,10 +71,7 @@ func TestLoad_EmptyThemeFallsBackToDefault(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	p, err := Load(prefsFile)
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+	p := Load(prefsFile)
 	if p.Theme != defaultTheme {
 		t.Fatalf("Theme = %q, want %q", p.Theme, defaultTheme)
 	}
@@ -99,10 +84,7 @@ func TestLoad_InvalidTOMLFallsBackToDefault(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	p, err := Load(prefsFile)
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
+	p := Load(prefsFile)
 	if p.Theme != defaultTheme {
 		t.Fatalf("Theme = %q, want %q", p.Theme, defaultTheme)
 	}

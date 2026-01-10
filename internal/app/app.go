@@ -26,7 +26,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("load spindle config: %w", err)
 	}
 
-	userPrefs, _ := prefs.Load(opts.PrefsPath) // Graceful degradation on error
+	userPrefs := prefs.Load(opts.PrefsPath)
 
 	client, err := spindle.NewClient(cfg.APIBind)
 	if err != nil {

@@ -105,11 +105,6 @@ func GetTheme(name string) Theme {
 	return draculaTheme()
 }
 
-// defaultTheme returns the default theme (Dracula).
-func defaultTheme() Theme {
-	return draculaTheme()
-}
-
 // ThemeNames returns the list of available theme names in cycling order.
 func ThemeNames() []string {
 	return themeOrder
@@ -368,17 +363,11 @@ func (t Theme) TableSelectionTextHex() string {
 }
 
 func (t Theme) TableBorderColor() tcell.Color {
-	if strings.TrimSpace(t.Table.Border) != "" {
-		return hexToColor(t.Table.Border)
-	}
-	return t.BorderColor()
+	return hexToColor(t.Table.Border)
 }
 
 func (t Theme) TableBorderFocusColor() tcell.Color {
-	if strings.TrimSpace(t.Table.BorderFocus) != "" {
-		return hexToColor(t.Table.BorderFocus)
-	}
-	return t.BorderFocusColor()
+	return hexToColor(t.Table.BorderFocus)
 }
 
 func (t Theme) ProblemBorderColor() tcell.Color {

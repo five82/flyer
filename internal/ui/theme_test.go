@@ -7,7 +7,7 @@ import (
 )
 
 func TestThemeLookups(t *testing.T) {
-	th := defaultTheme()
+	th := GetTheme("Dracula")
 
 	if got := th.StatusColor("  failed "); got != th.StatusColors["failed"] {
 		t.Fatalf("StatusColor = %q, want %q", got, th.StatusColors["failed"])
@@ -85,8 +85,8 @@ func TestGetTheme(t *testing.T) {
 }
 
 func TestDefaultThemeIsDracula(t *testing.T) {
-	th := defaultTheme()
+	th := GetTheme("nonexistent")
 	if th.Name != "Dracula" {
-		t.Fatalf("defaultTheme().Name = %q, want Dracula", th.Name)
+		t.Fatalf("GetTheme(nonexistent).Name = %q, want Dracula (fallback)", th.Name)
 	}
 }

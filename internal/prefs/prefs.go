@@ -3,9 +3,7 @@
 package prefs
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,38 +26,29 @@ func DefaultPath() string {
 	return defaultPrefsPath
 }
 
-// Load reads preferences from the given path, falling back to defaults if missing.
-func Load(path string) (Prefs, error) {
-	resolved, err := resolvePath(path)
-	if err != nil {
-		return Prefs{Theme: defaultTheme}, nil
-	}
-
+// Load reads preferences from the given path, falling back to defaults if missing or invalid.
+func Load(path string) Prefs {
 	prefs := Prefs{Theme: defaultTheme}
 
-	file, err := os.Open(resolved)
+	resolved, err := resolvePath(path)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return prefs, nil
-		}
-		return prefs, nil // Graceful degradation
+		return prefs
 	}
-	defer func() { _ = file.Close() }()
 
-	bytes, err := io.ReadAll(file)
+	bytes, err := os.ReadFile(resolved)
 	if err != nil {
-		return prefs, nil // Graceful degradation
+		return prefs
 	}
 
 	if err := toml.Unmarshal(bytes, &prefs); err != nil {
-		return Prefs{Theme: defaultTheme}, nil // Graceful degradation
+		return Prefs{Theme: defaultTheme}
 	}
 
 	if strings.TrimSpace(prefs.Theme) == "" {
 		prefs.Theme = defaultTheme
 	}
 
-	return prefs, nil
+	return prefs
 }
 
 // Save writes preferences to the given path, creating directories as needed.
@@ -87,23 +76,16 @@ func Save(path string, p Prefs) error {
 }
 
 func resolvePath(path string) (string, error) {
-	if strings.TrimSpace(path) == "" {
-		return expandPath(defaultPrefsPath)
+	p := strings.TrimSpace(path)
+	if p == "" {
+		p = defaultPrefsPath
 	}
-	return expandPath(path)
-}
-
-func expandPath(path string) (string, error) {
-	trimmed := strings.TrimSpace(path)
-	if trimmed == "" {
-		return "", fmt.Errorf("path is empty")
-	}
-	if strings.HasPrefix(trimmed, "~") {
+	if strings.HasPrefix(p, "~") {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("resolve home dir: %w", err)
 		}
-		trimmed = filepath.Join(home, strings.TrimPrefix(trimmed, "~"))
+		p = filepath.Join(home, strings.TrimPrefix(p, "~"))
 	}
-	return filepath.Abs(trimmed)
+	return filepath.Abs(p)
 }
