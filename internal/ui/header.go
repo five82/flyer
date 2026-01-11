@@ -173,6 +173,14 @@ func (m Model) buildStatusContent(styles Styles, bg BgStyle) string {
 		)
 	}
 
+	// Transient error display (log/problems fetch failures)
+	if m.errorMsg != "" {
+		parts = append(parts,
+			bg.Render("!", styles.WarningText.Bold(true))+bg.Space()+
+				bg.Render(m.errorMsg, styles.WarningText),
+		)
+	}
+
 	return bg.Join(parts, "  ")
 }
 

@@ -129,7 +129,7 @@ func (m Model) renderQueue() string {
 		tableBg = m.theme.FocusBg
 	}
 	tableContent := m.renderQueueTable(tableWidth-2, tableBg) // -2 for borders
-	tablePane := m.renderTitledBox(tableTitle, tableContent, tableWidth, contentHeight, tableFocused)
+	tablePane := m.renderBox(tableTitle, tableContent, tableWidth, contentHeight, tableFocused)
 
 	// === Detail Pane ===
 	detailTitle := "Details"
@@ -147,7 +147,7 @@ func (m Model) renderQueue() string {
 			Background(lipgloss.Color(detailBg)).
 			Render("Select an item")
 	}
-	detailPane := m.renderTitledBox(detailTitle, detailContent, detailWidth, contentHeight, detailFocused)
+	detailPane := m.renderBox(detailTitle, detailContent, detailWidth, contentHeight, detailFocused)
 
 	// Join side-by-side
 	return lipgloss.JoinHorizontal(lipgloss.Top, tablePane, detailPane)
@@ -246,65 +246,70 @@ func (m Model) colorForStatus(status string) string {
 	return m.theme.Text
 }
 
-// renderTitledBox renders content in a box with the title embedded in the top border.
-// Matches tview's frame style: ┌─── Title ───┐
-// When focused is true, uses BorderFocus color and FocusBg background (matching tview's focus behavior).
-func (m Model) renderTitledBox(title, content string, width, height int, focused bool) string {
-	// Use focus colors when focused (matching tview applyFocusStyles)
-	var borderColorStr, bgColorStr string
+// renderBox renders content in a titled box with the title embedded in the top border.
+// Example: ╭─── Title ─────────────────────────────╮
+// When focused is true, uses BorderFocus color and FocusBg background.
+func (m Model) renderBox(title, content string, width, height int, focused bool) string {
+	var borderColor, bgColor string
 	if focused {
-		borderColorStr = m.theme.BorderFocus
-		bgColorStr = m.theme.FocusBg
+		borderColor = m.theme.BorderFocus
+		bgColor = m.theme.FocusBg
 	} else {
-		borderColorStr = m.theme.Border
-		bgColorStr = m.theme.SurfaceAlt
+		borderColor = m.theme.Border
+		bgColor = m.theme.SurfaceAlt
 	}
-	bg := NewBgStyle(bgColorStr)
-	borderColor := lipgloss.Color(borderColorStr)
-	bgColor := lipgloss.Color(bgColorStr)
-	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Text))
 
-	// Build the top border with embedded title
-	innerWidth := width - 2 // Account for left and right border chars
-	titleLen := len(title)
-	leftPad := (innerWidth - titleLen - 2) / 2 // -2 for spaces around title
-	rightPad := innerWidth - titleLen - 2 - leftPad
+	borderStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(borderColor)).
+		Background(lipgloss.Color(bgColor))
 
-	topBorder := bg.Render("┌", borderStyle) +
-		bg.Render(strings.Repeat("─", leftPad), borderStyle) +
-		bg.Render(" "+title+" ", titleStyle) +
-		bg.Render(strings.Repeat("─", rightPad), borderStyle) +
-		bg.Render("┐", borderStyle)
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(m.theme.Text)).
+		Background(lipgloss.Color(bgColor))
 
-	// Build the bottom border
-	bottomBorder := bg.Render("└", borderStyle) +
-		bg.Render(strings.Repeat("─", innerWidth), borderStyle) +
-		bg.Render("┘", borderStyle)
+	contentBgStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(bgColor))
 
-	// Style for side borders and content background
-	contentStyle := lipgloss.NewStyle().Width(innerWidth).Background(bgColor)
+	// Build top border: ╭─── Title ─────────────────────────────╮
+	titleText := " " + title + " "
+	innerWidth := width - 2 // minus corners
+	titleLen := lipgloss.Width(titleText)
+	leftDashes := 3
+	rightDashes := max(innerWidth-leftDashes-titleLen, 0)
 
-	// Split content into lines and pad to fill the box
+	topLine := borderStyle.Render("╭"+strings.Repeat("─", leftDashes)) +
+		titleStyle.Render(titleText) +
+		borderStyle.Render(strings.Repeat("─", rightDashes)+"╮")
+
+	// Build content lines with side borders
+	// Available height for content: total height - 2 (top/bottom border)
+	contentHeight := height - 2
+	contentWidth := width - 2 // minus side borders
+
 	contentLines := strings.Split(content, "\n")
-	boxHeight := height - 2 // -2 for top and bottom borders
+	var middleLines []string
 
-	// Pad or truncate content lines
-	var paddedLines []string
-	for i := 0; i < boxHeight; i++ {
+	for i := range contentHeight {
 		var line string
 		if i < len(contentLines) {
 			line = contentLines[i]
 		}
-		// Ensure line is exactly innerWidth chars with background color
-		paddedLines = append(paddedLines,
-			bg.Render("│", borderStyle)+
-				contentStyle.Render(line)+
-				bg.Render("│", borderStyle))
+
+		// Pad line to fill width, accounting for ANSI sequences
+		lineWidth := lipgloss.Width(line)
+		if lineWidth < contentWidth {
+			line += contentBgStyle.Render(strings.Repeat(" ", contentWidth-lineWidth))
+		}
+
+		middleLine := borderStyle.Render("│") + line + borderStyle.Render("│")
+		middleLines = append(middleLines, middleLine)
 	}
 
-	// Join all parts
-	return topBorder + "\n" + strings.Join(paddedLines, "\n") + "\n" + bottomBorder
+	// Build bottom border: ╰─────────────────────────────────────╯
+	bottomLine := borderStyle.Render("╰" + strings.Repeat("─", innerWidth) + "╯")
+
+	return topLine + "\n" + strings.Join(middleLines, "\n") + "\n" + bottomLine
 }
 
 // statusRank returns the priority rank for a status (lower = higher priority).

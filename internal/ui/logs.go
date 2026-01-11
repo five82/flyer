@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -54,6 +55,10 @@ type logState struct {
 	searchInput    textinput.Model
 	searchMatches  []int // Line indices that match
 	searchMatchIdx int   // Current match index
+
+	// Content caching - skip re-render when unchanged
+	contentVersion uint64
+	lastRendered   uint64
 }
 
 // initLogState initializes the log state.
@@ -90,9 +95,15 @@ func (m *Model) updateLogViewport() {
 	// Ensure viewport has focus background
 	m.logViewport.Style = lipgloss.NewStyle().Background(lipgloss.Color(m.theme.FocusBg))
 
-	// Render log content
-	content := m.renderLogContent()
-	m.logViewport.SetContent(content)
+	// Only re-render content if it changed (version mismatch or first render)
+	if m.logState.lastRendered == 0 || m.logState.contentVersion != m.logState.lastRendered {
+		content := m.renderLogContent()
+		m.logViewport.SetContent(content)
+		m.logState.lastRendered = m.logState.contentVersion
+		if m.logState.lastRendered == 0 {
+			m.logState.lastRendered = 1 // Mark as rendered at least once
+		}
+	}
 
 	// Auto-scroll if following
 	if m.logState.follow {
@@ -114,7 +125,7 @@ func (m Model) renderLogs() string {
 	content := m.logViewport.View()
 
 	// Logs view is always focused when shown
-	box := m.renderTitledBox(title, content, m.width, contentHeight, true)
+	box := m.renderBox(title, content, m.width, contentHeight, true)
 
 	// Status bar below the box
 	status := m.renderLogStatus(styles, bg)
@@ -393,9 +404,8 @@ func (m *Model) handleLogsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleLogSearchInput(msg)
 	}
 
-	switch msg.String() {
-	case " ":
-		// Toggle follow mode (Space key like tview)
+	switch {
+	case key.Matches(msg, m.keys.ToggleFollow):
 		m.logState.follow = !m.logState.follow
 		if m.logState.follow {
 			m.logViewport.GotoBottom()
@@ -403,8 +413,7 @@ func (m *Model) handleLogsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.updateLogViewport()
 		return m, nil
 
-	case "i":
-		// Toggle item/daemon log source
+	case key.Matches(msg, m.keys.ToggleLogSource):
 		if m.logState.mode == logSourceDaemon {
 			m.logState.mode = logSourceItem
 		} else {
@@ -416,29 +425,25 @@ func (m *Model) handleLogsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.clearLogSearch()
 		return m, nil
 
-	case "/":
-		// Enter search mode
+	case key.Matches(msg, m.keys.Search):
 		m.logState.searchActive = true
 		m.logState.searchInput.Focus()
 		m.logState.searchInput.SetValue("")
 		return m, nil
 
-	case "F":
-		// Open log filters modal (daemon logs only)
+	case key.Matches(msg, m.keys.LogFilters):
 		m.openLogFilters()
 		return m, nil
 
-	case "n":
-		// Next search match
+	case key.Matches(msg, m.keys.NextMatch):
 		m.nextSearchMatch()
 		return m, nil
 
-	case "N":
-		// Previous search match
+	case key.Matches(msg, m.keys.PrevMatch):
 		m.previousSearchMatch()
 		return m, nil
 
-	case "esc":
+	case key.Matches(msg, m.keys.Escape):
 		// Clear search if active
 		if m.logState.searchRegex != nil {
 			m.clearLogSearch()
@@ -446,44 +451,42 @@ func (m *Model) handleLogsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-	case "g":
-		// Go to top
+	case key.Matches(msg, m.keys.Top):
 		m.logViewport.GotoTop()
 		m.logState.follow = false
 		return m, nil
 
-	case "G":
-		// Go to bottom and enable follow
+	case key.Matches(msg, m.keys.Bottom):
 		m.logViewport.GotoBottom()
 		m.logState.follow = true
 		return m, nil
 
-	case "j", "down":
+	case key.Matches(msg, m.keys.Down):
 		m.logViewport.ScrollDown(1)
 		m.logState.follow = false
 		return m, nil
 
-	case "k", "up":
+	case key.Matches(msg, m.keys.Up):
 		m.logViewport.ScrollUp(1)
 		m.logState.follow = false
 		return m, nil
 
-	case "ctrl+d":
+	case key.Matches(msg, m.keys.HalfPageDown):
 		m.logViewport.HalfPageDown()
 		m.logState.follow = false
 		return m, nil
 
-	case "ctrl+u":
+	case key.Matches(msg, m.keys.HalfPageUp):
 		m.logViewport.HalfPageUp()
 		m.logState.follow = false
 		return m, nil
 
-	case "pgdown":
+	case key.Matches(msg, m.keys.PageDown):
 		m.logViewport.PageDown()
 		m.logState.follow = false
 		return m, nil
 
-	case "pgup":
+	case key.Matches(msg, m.keys.PageUp):
 		m.logViewport.PageUp()
 		m.logState.follow = false
 		return m, nil
@@ -494,8 +497,8 @@ func (m *Model) handleLogsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleLogSearchInput handles keyboard input during log search.
 func (m *Model) handleLogSearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "enter":
+	switch {
+	case key.Matches(msg, m.keys.Confirm):
 		// Apply search
 		query := m.logState.searchInput.Value()
 		if query == "" {
@@ -527,7 +530,7 @@ func (m *Model) handleLogSearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.updateLogViewport()
 		return m, nil
 
-	case "esc":
+	case key.Matches(msg, m.keys.Escape):
 		// Cancel search input
 		m.logState.searchActive = false
 		m.logState.searchInput.Blur()
@@ -547,6 +550,7 @@ func (m *Model) clearLogSearch() {
 	m.logState.searchQuery = ""
 	m.logState.searchMatches = nil
 	m.logState.searchMatchIdx = 0
+	m.logState.contentVersion++ // Search highlighting changed
 }
 
 // findSearchMatches finds all lines matching the current search regex.
@@ -561,6 +565,7 @@ func (m *Model) findSearchMatches() {
 			m.logState.searchMatches = append(m.logState.searchMatches, i)
 		}
 	}
+	m.logState.contentVersion++ // Search highlighting changed
 }
 
 // nextSearchMatch moves to the next search match.
@@ -570,6 +575,7 @@ func (m *Model) nextSearchMatch() {
 	}
 
 	m.logState.searchMatchIdx = (m.logState.searchMatchIdx + 1) % len(m.logState.searchMatches)
+	m.logState.contentVersion++ // Active match changed
 	m.scrollToSearchMatch()
 	m.updateLogViewport()
 }
@@ -581,6 +587,7 @@ func (m *Model) previousSearchMatch() {
 	}
 
 	m.logState.searchMatchIdx = (m.logState.searchMatchIdx - 1 + len(m.logState.searchMatches)) % len(m.logState.searchMatches)
+	m.logState.contentVersion++ // Active match changed
 	m.scrollToSearchMatch()
 	m.updateLogViewport()
 }
@@ -710,6 +717,7 @@ func (m *Model) handleLogBatch(msg logBatchMsg) {
 	if len(newLines) > 0 {
 		m.logState.rawLines = append(m.logState.rawLines, newLines...)
 		m.logState.rawLines = trimLogBuffer(m.logState.rawLines, logBufferLimit)
+		m.logState.contentVersion++ // Mark content changed
 		m.updateLogViewport()
 	}
 }
@@ -731,6 +739,7 @@ func (m *Model) handleLogTail(msg logTailMsg) {
 	if len(msg.lines) > 0 {
 		m.logState.rawLines = append(m.logState.rawLines, msg.lines...)
 		m.logState.rawLines = trimLogBuffer(m.logState.rawLines, logBufferLimit)
+		m.logState.contentVersion++ // Mark content changed
 		m.updateLogViewport()
 	}
 }
@@ -852,34 +861,34 @@ func (m *Model) openLogFilters() {
 
 // handleLogFiltersKey handles keyboard input for the log filters modal.
 func (m Model) handleLogFiltersKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
+	switch {
+	case key.Matches(msg, m.keys.Escape):
 		// Cancel and close modal
 		m.showLogFilters = false
 		return m, nil
 
-	case "enter":
+	case key.Matches(msg, m.keys.Confirm):
 		// Apply filters and close
 		m.applyLogFilters()
 		m.showLogFilters = false
 		return m, nil
 
-	case "tab", "down":
+	case key.Matches(msg, m.keys.Tab), key.Matches(msg, m.keys.Down):
 		// Move to next field
 		m.logFilterInputs[m.logFilterFocusIdx].Blur()
 		m.logFilterFocusIdx = (m.logFilterFocusIdx + 1) % len(m.logFilterInputs)
 		m.logFilterInputs[m.logFilterFocusIdx].Focus()
 		return m, nil
 
-	case "shift+tab", "up":
+	case key.Matches(msg, m.keys.ShiftTab), key.Matches(msg, m.keys.Up):
 		// Move to previous field
 		m.logFilterInputs[m.logFilterFocusIdx].Blur()
 		m.logFilterFocusIdx = (m.logFilterFocusIdx - 1 + len(m.logFilterInputs)) % len(m.logFilterInputs)
 		m.logFilterInputs[m.logFilterFocusIdx].Focus()
 		return m, nil
 
-	case "ctrl+c":
-		// Clear all filters
+	case msg.String() == "ctrl+c":
+		// Clear all filters (modal-specific, doesn't quit)
 		m.logFilterInputs[0].SetValue("")
 		m.logFilterInputs[1].SetValue("")
 		m.logFilterInputs[2].SetValue("")

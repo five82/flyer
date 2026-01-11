@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -27,6 +28,10 @@ type problemsState struct {
 	logCursor   map[string]uint64
 	lastItemID  int64
 	lastRefresh time.Time
+
+	// Content caching - skip re-render when unchanged
+	contentVersion uint64
+	lastRendered   uint64
 }
 
 // initProblemsViewport initializes the problems viewport.
@@ -51,9 +56,15 @@ func (m *Model) updateProblemsViewport() {
 	// Ensure viewport has focus background (problems view is always focused when shown)
 	m.problemsViewport.Style = lipgloss.NewStyle().Background(lipgloss.Color(m.theme.FocusBg))
 
-	// Render problems content
-	content := m.renderProblemsContent()
-	m.problemsViewport.SetContent(content)
+	// Only re-render content if it changed (version mismatch or first render)
+	if m.problemsState.lastRendered == 0 || m.problemsState.contentVersion != m.problemsState.lastRendered {
+		content := m.renderProblemsContent()
+		m.problemsViewport.SetContent(content)
+		m.problemsState.lastRendered = m.problemsState.contentVersion
+		if m.problemsState.lastRendered == 0 {
+			m.problemsState.lastRendered = 1 // Mark as rendered at least once
+		}
+	}
 }
 
 // renderProblems renders the problems view.
@@ -67,7 +78,7 @@ func (m Model) renderProblems() string {
 	title := m.getProblemsTitle()
 
 	// Problems view is always focused when shown
-	return m.renderTitledBox(title, content, m.width, contentHeight, true)
+	return m.renderBox(title, content, m.width, contentHeight, true)
 }
 
 // getProblemsTitle returns the title for the problems view.
@@ -257,36 +268,37 @@ func (m *Model) renderProblemSection(b *strings.Builder, title string, titleStyl
 
 // handleProblemsKey processes keyboard input for problems view.
 func (m Model) handleProblemsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "g":
+	switch {
+	case key.Matches(msg, m.keys.Top):
 		m.problemsViewport.GotoTop()
 		return m, nil
 
-	case "G":
+	case key.Matches(msg, m.keys.Bottom):
 		m.problemsViewport.GotoBottom()
 		return m, nil
 
-	case "j", "down":
+	case key.Matches(msg, m.keys.Down):
 		m.problemsViewport.ScrollDown(1)
 		return m, nil
 
-	case "k", "up":
+	case key.Matches(msg, m.keys.Up):
 		m.problemsViewport.ScrollUp(1)
 		return m, nil
 
-	case "ctrl+d":
+	case key.Matches(msg, m.keys.HalfPageDown):
 		m.problemsViewport.HalfPageDown()
 		return m, nil
 
-	case "ctrl+u":
+	case key.Matches(msg, m.keys.HalfPageUp):
 		m.problemsViewport.HalfPageUp()
 		return m, nil
 
-	case "pgdown", " ":
+	case key.Matches(msg, m.keys.PageDown), key.Matches(msg, m.keys.ToggleFollow):
+		// Space also does page down in problems view
 		m.problemsViewport.PageDown()
 		return m, nil
 
-	case "pgup":
+	case key.Matches(msg, m.keys.PageUp):
 		m.problemsViewport.PageUp()
 		return m, nil
 	}
@@ -378,6 +390,7 @@ func (m *Model) handleProblemsLogBatch(msg problemsLogBatchMsg) {
 	if len(newLines) > 0 {
 		m.problemsState.logLines = append(m.problemsState.logLines, newLines...)
 		m.problemsState.logLines = trimLogBuffer(m.problemsState.logLines, problemsBufferLimit)
+		m.problemsState.contentVersion++ // Mark content changed
 		m.updateProblemsViewport()
 	}
 }

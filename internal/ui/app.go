@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -62,6 +63,9 @@ type Model struct {
 	prefsPath string
 	pollTick  time.Duration
 
+	// Key bindings
+	keys keyMap
+
 	// UI state
 	theme       Theme
 	currentView View
@@ -90,13 +94,17 @@ type Model struct {
 	problemsViewport viewport.Model
 	problemsState    problemsState
 
-	// Help overlay
-	showHelp bool
+	// Modal overlay (help, log filters, etc.)
+	activeModal Modal
 
-	// Log filters modal
+	// Log filters modal state (separate from Modal interface for simplicity)
 	showLogFilters    bool
 	logFilterInputs   [3]textinput.Model // component, lane, request
 	logFilterFocusIdx int
+
+	// Transient error display
+	errorMsg    string
+	errorExpiry time.Time
 }
 
 // New creates a new Bubble Tea model.
@@ -128,6 +136,7 @@ func New(opts Options) Model {
 		config:      opts.Config,
 		prefsPath:   prefsPath,
 		pollTick:    pollTick,
+		keys:        DefaultKeyMap(),
 		theme:       GetTheme(themeName),
 		currentView: ViewQueue,
 		detailState: detailState{
@@ -193,7 +202,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case logErrorMsg:
-		// Log errors are handled silently for now
+		m.errorMsg = "Log fetch failed"
+		m.errorExpiry = time.Now().Add(5 * time.Second)
 		return m, nil
 
 	case problemsLogBatchMsg:
@@ -201,7 +211,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case problemsLogErrorMsg:
-		// Problems log errors are handled silently for now
+		m.errorMsg = "Problems fetch failed"
+		m.errorExpiry = time.Now().Add(5 * time.Second)
 		return m, nil
 	}
 
@@ -214,9 +225,9 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
-	// Show help overlay if active
-	if m.showHelp {
-		return m.renderHelp()
+	// Show modal overlay if active
+	if m.activeModal != nil {
+		return m.activeModal.View(m.theme, m.width, m.height)
 	}
 
 	// Show log filters modal if active
@@ -227,13 +238,17 @@ func (m Model) View() string {
 	return m.renderMain()
 }
 
-// handleKey processes keyboard input (matching tview bindings).
+// handleKey processes keyboard input.
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle help overlay
-	if m.showHelp {
-		// Any key closes help
-		m.showHelp = false
-		return m, nil
+	// Handle active modal
+	if m.activeModal != nil {
+		modal, cmd, closed := m.activeModal.Update(msg, m.keys)
+		if closed {
+			m.activeModal = nil
+		} else {
+			m.activeModal = modal
+		}
+		return m, cmd
 	}
 
 	// Handle log filters modal
@@ -241,81 +256,70 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleLogFiltersKey(msg)
 	}
 
-	// Global keys (matching tview)
-	switch msg.String() {
-	case "ctrl+c", "e":
-		// e = exit (matching tview)
+	// Global keys
+	switch {
+	case key.Matches(msg, m.keys.Quit):
 		return m, tea.Quit
 
-	case "h", "?":
-		m.showHelp = true
+	case key.Matches(msg, m.keys.Help):
+		m.activeModal = NewHelpModal()
 		return m, nil
 
-	case "T":
-		// Cycle theme
+	case key.Matches(msg, m.keys.CycleTheme):
 		m.theme = GetTheme(NextTheme(m.theme.Name))
 		if m.prefsPath != "" {
 			_ = prefs.Save(m.prefsPath, prefs.Prefs{Theme: m.theme.Name})
 		}
-		// Refresh viewports to apply new theme colors
 		m.updateDetailViewport()
 		m.updateLogViewport()
 		m.updateProblemsViewport()
 		return m, nil
 
-	case "tab":
-		// Toggle focus between table and detail pane (matching tview)
+	case key.Matches(msg, m.keys.Tab):
 		m.toggleFocus()
 		if m.currentView == ViewLogs {
-			return m, m.refreshLogs() // Fetch immediately when entering logs
+			return m, m.refreshLogs()
 		}
 		return m, nil
 
-	case "shift+tab":
-		// Toggle focus reverse
+	case key.Matches(msg, m.keys.ShiftTab):
 		m.toggleFocusReverse()
 		if m.currentView == ViewLogs {
-			return m, m.refreshLogs() // Fetch immediately when entering logs
+			return m, m.refreshLogs()
 		}
 		return m, nil
 
-	case "q":
-		// Go to queue view (matching tview)
+	case key.Matches(msg, m.keys.ViewQueue):
 		m.currentView = ViewQueue
 		return m, nil
 
-	case "l":
-		// Daemon logs
+	case key.Matches(msg, m.keys.ViewDaemonLogs):
 		m.logState.mode = logSourceDaemon
 		m.currentView = ViewLogs
-		return m, m.refreshLogs() // Fetch immediately
+		return m, m.refreshLogs()
 
-	case "i":
-		// Item logs
+	case key.Matches(msg, m.keys.ViewItemLogs):
 		m.logState.mode = logSourceItem
 		m.currentView = ViewLogs
-		return m, m.refreshLogs() // Fetch immediately
+		return m, m.refreshLogs()
 
-	case "p":
+	case key.Matches(msg, m.keys.ViewProblems):
 		m.currentView = ViewProblems
 		return m, nil
 
-	case "t":
-		// Toggle episodes collapsed (for current item)
+	case key.Matches(msg, m.keys.ToggleEpisodes):
 		m.toggleEpisodesCollapsed()
 		return m, nil
 
-	case "P":
-		// Toggle path detail (for current item)
+	case key.Matches(msg, m.keys.TogglePaths):
 		m.togglePathExpanded()
 		return m, nil
 
-	case "f":
-		// Cycle queue filter
+	case key.Matches(msg, m.keys.CycleFilter):
 		m.cycleFilter()
 		return m, nil
 
-	case "esc":
+	case key.Matches(msg, m.keys.Escape):
 		m.currentView = ViewQueue
 		return m, nil
 	}
@@ -437,18 +441,18 @@ func (m Model) handleQueueKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	switch msg.String() {
-	case "j", "down":
+	switch {
+	case key.Matches(msg, m.keys.Down):
 		if m.selectedRow < itemCount-1 {
 			m.selectedRow++
 		}
-	case "k", "up":
+	case key.Matches(msg, m.keys.Up):
 		if m.selectedRow > 0 {
 			m.selectedRow--
 		}
-	case "g", "home":
+	case key.Matches(msg, m.keys.Top):
 		m.selectedRow = 0
-	case "G", "end":
+	case key.Matches(msg, m.keys.Bottom):
 		m.selectedRow = itemCount - 1
 	}
 
@@ -458,6 +462,12 @@ func (m Model) handleQueueKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleTick processes the polling tick.
 func (m Model) handleTick() (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+
+	// Clear expired errors
+	if m.errorMsg != "" && !m.errorExpiry.IsZero() && time.Now().After(m.errorExpiry) {
+		m.errorMsg = ""
+		m.errorExpiry = time.Time{}
+	}
 
 	// Fetch latest snapshot
 	if m.store != nil {

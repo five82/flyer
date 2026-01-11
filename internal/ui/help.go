@@ -3,12 +3,29 @@ package ui
 import (
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
-// renderHelp renders the help overlay.
-func (m Model) renderHelp() string {
-	styles := m.theme.Styles()
+// HelpModal displays keyboard shortcuts.
+type HelpModal struct{}
+
+// NewHelpModal creates a new help modal.
+func NewHelpModal() *HelpModal {
+	return &HelpModal{}
+}
+
+// Update handles input for the help modal. Any key closes it.
+func (h *HelpModal) Update(msg tea.Msg, keys keyMap) (Modal, tea.Cmd, bool) {
+	if _, ok := msg.(tea.KeyMsg); ok {
+		return h, nil, true // Any key closes help
+	}
+	return h, nil, false
+}
+
+// View renders the help modal.
+func (h *HelpModal) View(theme Theme, width, height int) string {
+	styles := theme.Styles()
 
 	// Help content
 	sections := []helpSection{
@@ -69,7 +86,7 @@ func (m Model) renderHelp() string {
 		for _, item := range section.items {
 			// Key
 			keyStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color(m.theme.Warning)).
+				Foreground(lipgloss.Color(theme.Warning)).
 				Width(12)
 			b.WriteString(keyStyle.Render(item.key))
 			// Description
@@ -91,7 +108,7 @@ func (m Model) renderHelp() string {
 	// Modal style
 	modal := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(m.theme.Accent)).
+		BorderForeground(lipgloss.Color(theme.Accent)).
 		Padding(1, 2).
 		Width(modalWidth)
 
@@ -100,13 +117,13 @@ func (m Model) renderHelp() string {
 
 	// Create overlay
 	return lipgloss.Place(
-		m.width,
-		m.height,
+		width,
+		height,
 		lipgloss.Center,
 		lipgloss.Center,
 		modalContent,
 		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color(m.theme.Background)),
+		lipgloss.WithWhitespaceForeground(lipgloss.Color(theme.Background)),
 	)
 }
 
