@@ -102,6 +102,7 @@ func (t Theme) Styles() Styles {
 		// Status badge style generator
 		statusColors: t.StatusColors,
 		background:   t.Background,
+		muted:        t.Muted,
 	}
 }
 
@@ -131,13 +132,14 @@ type Styles struct {
 	// For dynamic status colors
 	statusColors map[string]string
 	background   string
+	muted        string
 }
 
 // StatusStyle returns a style for the given status.
 func (s Styles) StatusStyle(status string) lipgloss.Style {
 	color := s.statusColors[status]
 	if color == "" {
-		color = "#6272A4" // Default muted
+		color = s.muted // Fallback to theme's muted color
 	}
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color(s.background)).
@@ -181,18 +183,19 @@ func (s Styles) WithBackground(bgColor string) Styles {
 // Theme definitions
 
 var themes = map[string]Theme{
-	"Dracula": draculaTheme(),
-	"Slate":   slateTheme(),
+	"Nightfox": nightfoxTheme(),
+	"Kanagawa": kanagawaTheme(),
+	"Slate":    slateTheme(),
 }
 
-var themeOrder = []string{"Dracula", "Slate"}
+var themeOrder = []string{"Nightfox", "Kanagawa", "Slate"}
 
 // GetTheme returns a theme by name.
 func GetTheme(name string) Theme {
 	if t, ok := themes[name]; ok {
 		return t
 	}
-	return draculaTheme()
+	return nightfoxTheme()
 }
 
 // NextTheme returns the next theme name in the cycle.
@@ -210,53 +213,102 @@ func ThemeNames() []string {
 	return themeOrder
 }
 
-func draculaTheme() Theme {
-	// Official Dracula palette: https://draculatheme.com/spec
-	// UI hierarchy from dracula/visual-studio-code canonical implementation
+func nightfoxTheme() Theme {
+	// Nightfox palette: https://github.com/EdenEast/nightfox.nvim
 	return Theme{
-		Name: "Dracula",
+		Name: "Nightfox",
 
 		// Base colors
-		Background: "#191A21", // BGDarker (outermost, darkest)
-		Surface:    "#282A36", // Background (main content panels)
-		SurfaceAlt: "#21222C", // BGDark (secondary surfaces)
-		FocusBg:    "#343746", // BGLight (focus/active states)
+		Background: "#131a24", // bg0
+		Surface:    "#192330", // bg1
+		SurfaceAlt: "#212e3f", // bg2
+		FocusBg:    "#29394f", // bg3
 
-		// Table colors (matching tview Table palette exactly)
-		SelectionBg:   "#44475A", // Selection
-		SelectionText: "#F8F8F2", // Foreground
+		// Table colors
+		SelectionBg:   "#2b3b51", // sel0
+		SelectionText: "#cdcecf", // fg1
 
-		// Border colors (matching tview Border palette)
-		Border:      "#44475A", // Selection
-		BorderMuted: "#21222C", // BGDark
-		BorderFocus: "#BD93F9", // Purple
+		// Border colors
+		Border:      "#39506d", // bg4
+		BorderMuted: "#212e3f", // bg2
+		BorderFocus: "#719cd6", // blue
 
 		// Text colors
-		Text:    "#F8F8F2", // Foreground
-		Muted:   "#6272A4", // Comment
-		Faint:   "#44475A", // Selection (dimmest readable)
-		Accent:  "#BD93F9", // Purple
-		Success: "#50FA7B", // Green
-		Warning: "#FFB86C", // Orange
-		Danger:  "#FF5555", // Red
-		Info:    "#8BE9FD", // Cyan
+		Text:    "#cdcecf", // fg1 (cool gray)
+		Muted:   "#738091", // comment (3.3:1 contrast)
+		Faint:   "#71839b", // fg3 (3.1:1 contrast)
+		Accent:  "#719cd6", // blue
+		Success: "#81b29a", // green
+		Warning: "#dbc074", // yellow
+		Danger:  "#c94f6d", // red
+		Info:    "#63cdcf", // cyan
 
 		StatusColors: map[string]string{
-			"pending":             "#6272A4", // Comment (muted)
-			"identifying":         "#8BE9FD", // Cyan (active)
-			"identified":          "#6272A4", // Comment (completed)
-			"ripping":             "#BD93F9", // Purple (active)
-			"ripped":              "#6272A4", // Comment (completed)
-			"episode_identifying": "#8BE9FD", // Cyan
-			"episode_identified":  "#6272A4", // Comment
-			"encoding":            "#FF79C6", // Pink (active)
-			"encoded":             "#50FA7B", // Green (success)
-			"subtitling":          "#8BE9FD", // Cyan (active)
-			"subtitled":           "#50FA7B", // Green (success)
-			"organizing":          "#FFB86C", // Orange
-			"completed":           "#50FA7B", // Green (success)
-			"failed":              "#FF5555", // Red (error)
-			"review":              "#FFB86C", // Orange (attention)
+			"pending":             "#738091", // comment
+			"identifying":         "#63cdcf", // cyan
+			"identified":          "#71839b", // fg3
+			"ripping":             "#719cd6", // blue
+			"ripped":              "#71839b", // fg3
+			"episode_identifying": "#63cdcf", // cyan
+			"episode_identified":  "#71839b", // fg3
+			"encoding":            "#9d79d6", // magenta
+			"encoded":             "#81b29a", // green
+			"subtitling":          "#63cdcf", // cyan
+			"subtitled":           "#81b29a", // green
+			"organizing":          "#f4a261", // orange
+			"completed":           "#81b29a", // green
+			"failed":              "#c94f6d", // red
+			"review":              "#dbc074", // yellow
+		},
+	}
+}
+
+func kanagawaTheme() Theme {
+	// Kanagawa palette: https://github.com/rebelot/kanagawa.nvim
+	return Theme{
+		Name: "Kanagawa",
+
+		// Base colors
+		Background: "#16161D", // sumiInk0
+		Surface:    "#1F1F28", // sumiInk3
+		SurfaceAlt: "#2A2A37", // sumiInk4
+		FocusBg:    "#2A2A37", // sumiInk4
+
+		// Table colors
+		SelectionBg:   "#2D4F67", // waveBlue1
+		SelectionText: "#DCD7BA", // fujiWhite
+
+		// Border colors
+		Border:      "#54546D", // sumiInk6
+		BorderMuted: "#2A2A37", // sumiInk4
+		BorderFocus: "#7E9CD8", // crystalBlue
+
+		// Text colors
+		Text:    "#DCD7BA", // fujiWhite (warm parchment)
+		Muted:   "#C8C093", // oldWhite (7.6:1 contrast)
+		Faint:   "#727169", // fujiGray (2.8:1 contrast)
+		Accent:  "#7E9CD8", // crystalBlue
+		Success: "#98BB6C", // springGreen
+		Warning: "#E6C384", // carpYellow
+		Danger:  "#E46876", // waveRed
+		Info:    "#7FB4CA", // springBlue
+
+		StatusColors: map[string]string{
+			"pending":             "#727169", // fujiGray
+			"identifying":         "#7FB4CA", // springBlue
+			"identified":          "#727169", // fujiGray
+			"ripping":             "#7E9CD8", // crystalBlue
+			"ripped":              "#727169", // fujiGray
+			"episode_identifying": "#7FB4CA", // springBlue
+			"episode_identified":  "#727169", // fujiGray
+			"encoding":            "#957FB8", // oniViolet
+			"encoded":             "#98BB6C", // springGreen
+			"subtitling":          "#7FB4CA", // springBlue
+			"subtitled":           "#98BB6C", // springGreen
+			"organizing":          "#E6C384", // carpYellow
+			"completed":           "#98BB6C", // springGreen
+			"failed":              "#E46876", // waveRed
+			"review":              "#E6C384", // carpYellow
 		},
 	}
 }
@@ -296,18 +348,18 @@ func slateTheme() Theme {
 			"pending":             "#64748b", // slate-500 (muted)
 			"identifying":         "#38bdf8", // sky-400 (active)
 			"identified":          "#0284c7", // sky-600 (completed)
-			"ripping":             "#8b5cf6", // violet-500 (active)
-			"ripped":              "#6366f1", // indigo-500 (completed)
-			"episode_identifying": "#a78bfa", // violet-400
-			"episode_identified":  "#8b5cf6", // violet-500
-			"encoding":            "#ec4899", // pink-500 (active)
+			"ripping":             "#0ea5e9", // sky-500 (active)
+			"ripped":              "#0369a1", // sky-700 (completed)
+			"episode_identifying": "#7dd3fc", // sky-300
+			"episode_identified":  "#0ea5e9", // sky-500
+			"encoding":            "#06b6d4", // cyan-500 (active)
 			"encoded":             "#22c55e", // green-500 (success)
-			"subtitling":          "#06b6d4", // cyan-500 (active)
+			"subtitling":          "#22d3ee", // cyan-400 (active)
 			"subtitled":           "#14b8a6", // teal-500 (success)
 			"organizing":          "#f59e0b", // amber-500
 			"completed":           "#16a34a", // green-600 (success)
 			"failed":              "#dc2626", // red-600 (error)
-			"review":              "#ea580c", // orange-600 (attention)
+			"review":              "#f59e0b", // amber-500 (attention)
 		},
 	}
 }

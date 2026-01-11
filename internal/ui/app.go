@@ -257,6 +257,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.prefsPath != "" {
 			_ = prefs.Save(m.prefsPath, prefs.Prefs{Theme: m.theme.Name})
 		}
+		// Refresh viewports to apply new theme colors
+		m.updateDetailViewport()
+		m.updateLogViewport()
+		m.updateProblemsViewport()
 		return m, nil
 
 	case "tab":

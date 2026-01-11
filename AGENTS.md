@@ -49,26 +49,40 @@ Flyer supports multiple color themes defined in `internal/ui/theme.go`. When mod
 2. **Follow established UI hierarchies**—reference canonical implementations for how colors map to UI surfaces
 3. **Maintain proper contrast**—backgrounds should be dark enough for text readability
 
-### Dracula Theme
-- **Spec**: https://draculatheme.com/spec
-- **UI hierarchy**: https://github.com/dracula/visual-studio-code (canonical implementation)
+### Nightfox Theme
+- **Spec**: https://github.com/EdenEast/nightfox.nvim
 
 | Role | Color | Hex | Usage |
 |------|-------|-----|-------|
-| BGDarker | — | `#191A21` | Outermost background, status bar |
-| BGDark | — | `#21222C` | Secondary surfaces, sidebar |
-| Background | — | `#282A36` | Main content panels |
-| BGLight | — | `#343746` | Focus/active states |
-| Selection | — | `#44475A` | Row selection, borders |
-| Foreground | — | `#F8F8F2` | Primary text |
-| Comment | — | `#6272A4` | Muted text |
-| Accents | Cyan | `#8BE9FD` | Info |
-| | Green | `#50FA7B` | Success |
-| | Orange | `#FFB86C` | Warning |
-| | Pink | `#FF79C6` | Accent |
-| | Purple | `#BD93F9` | Focus borders |
-| | Red | `#FF5555` | Error/danger |
-| | Yellow | `#F1FA8C` | Highlights |
+| bg0 | — | `#131a24` | Outermost background |
+| bg1 | — | `#192330` | Main content panels |
+| bg2 | — | `#212e3f` | Secondary surfaces |
+| bg3 | — | `#29394f` | Focus/active states |
+| fg1 | — | `#cdcecf` | Primary text (cool gray) |
+| comment | — | `#738091` | Muted text (3.3:1 contrast) |
+| fg3 | — | `#71839b` | Dimmest text (3.1:1 contrast) |
+| Accents | blue | `#719cd6` | Focus borders, accent |
+| | cyan | `#63cdcf` | Info |
+| | green | `#81b29a` | Success |
+| | yellow | `#dbc074` | Warning |
+| | red | `#c94f6d` | Error/danger |
+
+### Kanagawa Theme
+- **Spec**: https://github.com/rebelot/kanagawa.nvim
+
+| Role | Color | Hex | Usage |
+|------|-------|-----|-------|
+| sumiInk0 | — | `#16161D` | Outermost background |
+| sumiInk3 | — | `#1F1F28` | Main content panels |
+| sumiInk4 | — | `#2A2A37` | Focus/active states, secondary surfaces |
+| fujiWhite | — | `#DCD7BA` | Primary text (warm parchment) |
+| oldWhite | — | `#C8C093` | Muted text (7.6:1 contrast) |
+| fujiGray | — | `#727169` | Dimmest text (2.8:1 contrast) |
+| Accents | crystalBlue | `#7E9CD8` | Focus borders, accent |
+| | springBlue | `#7FB4CA` | Info |
+| | springGreen | `#98BB6C` | Success |
+| | carpYellow | `#E6C384` | Warning |
+| | waveRed | `#E46876` | Error/danger |
 
 ### Slate Theme
 - **Palette**: https://tailwindcss.com/docs/colors
