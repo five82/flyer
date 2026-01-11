@@ -12,8 +12,6 @@ Do not run `git commit` or `git push` unless explicitly instructed.
 - Run `./check-ci.sh` before and after changes; keep it aligned with `.github/workflows/ci.yml`.
 - Tests must not read the real home directory or Spindle config; use `t.TempDir()` plus `t.Setenv("HOME", ...)` and/or pass explicit config paths.
 - Prefer unit tests for pure helpers/formatters; avoid event-loop/terminal integration tests unless explicitly requested.
-- Do not `git commit` or `git push` unless explicitly instructed to.
-- `CLAUDE.md` and `GEMINI.md` are symlinks to this file; update `AGENTS.md` only.
 
 ## Related Repos (Local Dev Layout)
 
