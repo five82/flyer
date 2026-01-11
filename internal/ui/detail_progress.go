@@ -31,10 +31,7 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 	episodes, totals := item.EpisodeSnapshot()
 
 	// Determine active stage from progress or status
-	activeStage := normalizeEpisodeStage(item.Progress.Stage)
-	if activeStage == "" {
-		activeStage = normalizeEpisodeStage(item.Status)
-	}
+	activeStage := itemCurrentStage(item)
 	if activeStage == "" {
 		activeStage = "planned"
 	}
@@ -133,6 +130,15 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 	}
 }
 
+// itemCurrentStage returns the normalized current stage for an item,
+// preferring Progress.Stage over Status.
+func itemCurrentStage(item spindle.QueueItem) string {
+	if stage := normalizeEpisodeStage(item.Progress.Stage); stage != "" {
+		return stage
+	}
+	return normalizeEpisodeStage(item.Status)
+}
+
 // normalizeEpisodeStage normalizes various stage names to a canonical form.
 func normalizeEpisodeStage(stage string) string {
 	stage = strings.ToLower(strings.TrimSpace(stage))
@@ -224,10 +230,7 @@ func singleItemPipelineCount(stageID string, item spindle.QueueItem, activeStage
 
 // renderActiveProgress renders the enhanced progress bar with stage icons and labels.
 func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	stage := normalizeEpisodeStage(item.Progress.Stage)
-	if stage == "" {
-		stage = normalizeEpisodeStage(item.Status)
-	}
+	stage := itemCurrentStage(item)
 
 	percent := clampPercent(item.Progress.Percent)
 	var label, icon string
@@ -316,10 +319,7 @@ func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem,
 
 // estimateETA estimates the remaining time for an operation.
 func (m *Model) estimateETA(item spindle.QueueItem) string {
-	stage := normalizeEpisodeStage(item.Progress.Stage)
-	if stage == "" {
-		stage = normalizeEpisodeStage(item.Status)
-	}
+	stage := itemCurrentStage(item)
 	// Check encoding ETA first
 	if enc := item.Encoding; enc != nil && (stage == "encoding" || stage == "encoded" || stage == "final") {
 		if eta := enc.ETADuration(); eta > 0 {
@@ -346,17 +346,11 @@ func (m *Model) estimateETA(item spindle.QueueItem) string {
 	return "ETA " + formatDuration(remaining)
 }
 
-// renderProgressBar renders a text-based progress bar.
+// renderProgressBar renders a text-based progress bar without percentage text.
+// Callers are responsible for adding percentage display as needed.
 func (m *Model) renderProgressBar(percent float64, width int, styles Styles, bg BgStyle) string {
-	if percent > 100 {
-		percent = 100
-	}
-	if percent < 0 {
-		percent = 0
-	}
-
+	percent = clampPercent(percent)
 	filled := min(int(float64(width)*percent/100), width)
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
-	return bg.Render(bar, styles.AccentText) + bg.Space() +
-		bg.Render(fmt.Sprintf("%.0f%%", percent), styles.Text)
+	return bg.Render(bar, styles.AccentText)
 }

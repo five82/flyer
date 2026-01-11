@@ -222,10 +222,7 @@ func (m *Model) activeEpisodeIndex(item spindle.QueueItem, episodes []spindle.Ep
 	}
 
 	// Get current stage
-	stage := normalizeEpisodeStage(item.Progress.Stage)
-	if stage == "" {
-		stage = normalizeEpisodeStage(item.Status)
-	}
+	stage := itemCurrentStage(item)
 
 	// 1. Precise Match: File path matching
 	checkMatch := func(target, candidate string) bool {

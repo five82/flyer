@@ -143,10 +143,11 @@ func (m *Model) renderStatusChips(item spindle.QueueItem, bg BgStyle) string {
 	var chips []string
 
 	// Status chip
-	statusColor := lipgloss.Color(m.theme.StatusColors[strings.ToLower(item.Status)])
-	if statusColor == "" {
-		statusColor = lipgloss.Color(m.theme.Muted)
+	colorHex := m.theme.StatusColors[strings.ToLower(item.Status)]
+	if colorHex == "" {
+		colorHex = m.theme.Muted
 	}
+	statusColor := lipgloss.Color(colorHex)
 	statusChip := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.Background)).
 		Background(statusColor).
@@ -305,10 +306,7 @@ func (m *Model) renderActiveDetail(b *strings.Builder, item spindle.QueueItem, s
 	m.renderCropInfo(b, item, styles, bg)
 
 	// Current stage
-	currentStage := normalizeEpisodeStage(item.Progress.Stage)
-	if currentStage == "" {
-		currentStage = normalizeEpisodeStage(item.Status)
-	}
+	currentStage := itemCurrentStage(item)
 
 	// Current episode (TV shows) or current selection (movies)
 	if len(episodes) > 0 && mediaType != "movie" {
@@ -449,10 +447,7 @@ func (m *Model) renderFailedDetail(b *strings.Builder, item spindle.QueueItem, s
 
 	// Last progress section
 	m.writeSection(b, "Last Progress", styles, bg)
-	stage := normalizeEpisodeStage(item.Progress.Stage)
-	if stage == "" {
-		stage = normalizeEpisodeStage(item.Status)
-	}
+	stage := itemCurrentStage(item)
 	if stage != "" && stage != "failed" {
 		// Capitalize first letter
 		stageDisplay := stage

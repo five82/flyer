@@ -127,7 +127,7 @@ func (m *Model) renderProblemsContent() string {
 func (m *Model) renderStructuredProblems(b *strings.Builder, item *spindle.QueueItem, styles Styles, bg BgStyle) {
 	// Review reason
 	if item.NeedsReview && strings.TrimSpace(item.ReviewReason) != "" {
-		m.renderProblemSection(b, "Review Reason", styles.WarningText, styles, bg)
+		m.renderProblemSection(b, "Review Reason", styles.WarningText, bg)
 		b.WriteString(bg.Spaces(2))
 		b.WriteString(bg.Render(item.ReviewReason, styles.Text))
 		b.WriteString("\n\n")
@@ -135,7 +135,7 @@ func (m *Model) renderStructuredProblems(b *strings.Builder, item *spindle.Queue
 
 	// Error message
 	if msg := strings.TrimSpace(item.ErrorMessage); msg != "" {
-		m.renderProblemSection(b, "Error", styles.DangerText, styles, bg)
+		m.renderProblemSection(b, "Error", styles.DangerText, bg)
 		b.WriteString(bg.Spaces(2))
 		b.WriteString(bg.Render(msg, styles.Text))
 		b.WriteString("\n\n")
@@ -144,7 +144,7 @@ func (m *Model) renderStructuredProblems(b *strings.Builder, item *spindle.Queue
 	// Per-episode errors
 	failedEpisodes := spindle.FilterFailed(item.Episodes)
 	if len(failedEpisodes) > 0 {
-		m.renderProblemSection(b, "Failed Episodes", styles.DangerText, styles, bg)
+		m.renderProblemSection(b, "Failed Episodes", styles.DangerText, bg)
 		for _, ep := range failedEpisodes {
 			epLabel := ep.Key
 			if ep.Title != "" {
@@ -168,7 +168,7 @@ func (m *Model) renderStructuredProblems(b *strings.Builder, item *spindle.Queue
 	if item.Encoding != nil && item.Encoding.Error != nil {
 		err := item.Encoding.Error
 		if strings.TrimSpace(err.Title) != "" || strings.TrimSpace(err.Message) != "" {
-			m.renderProblemSection(b, "Encoding Error", styles.DangerText, styles, bg)
+			m.renderProblemSection(b, "Encoding Error", styles.DangerText, bg)
 			if err.Title != "" {
 				b.WriteString(bg.Spaces(2))
 				b.WriteString(bg.Render(err.Title, styles.Text))
@@ -197,7 +197,7 @@ func (m *Model) renderStructuredProblems(b *strings.Builder, item *spindle.Queue
 
 	// Encoding warning
 	if item.Encoding != nil && strings.TrimSpace(item.Encoding.Warning) != "" {
-		m.renderProblemSection(b, "Warning", styles.WarningText, styles, bg)
+		m.renderProblemSection(b, "Warning", styles.WarningText, bg)
 		b.WriteString(bg.Spaces(2))
 		b.WriteString(bg.Render(item.Encoding.Warning, styles.Text))
 		b.WriteString("\n\n")
@@ -250,7 +250,7 @@ func (m *Model) renderStructuredProblems(b *strings.Builder, item *spindle.Queue
 }
 
 // renderProblemSection renders a section header for problems.
-func (m *Model) renderProblemSection(b *strings.Builder, title string, titleStyle lipgloss.Style, _ Styles, bg BgStyle) {
+func (m *Model) renderProblemSection(b *strings.Builder, title string, titleStyle lipgloss.Style, bg BgStyle) {
 	b.WriteString(bg.Render(title, titleStyle.Bold(true)))
 	b.WriteString("\n")
 }
