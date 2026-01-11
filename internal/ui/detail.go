@@ -389,9 +389,11 @@ func (m *Model) renderCompletedDetail(b *strings.Builder, item spindle.QueueItem
 	// Validation: ✓ Passed (N/N checks)
 	m.renderValidationSummary(b, item, styles, bg)
 
-	// Subtitle summary (TV shows with multiple episodes) - inline in results
+	// Subtitle info - show source for movies, counts for TV shows
 	if len(episodes) > 1 && mediaType != "movie" {
 		m.renderSubtitleSummary(b, item, styles, bg)
+	} else {
+		m.renderSubtitleInfo(b, item, styles, bg)
 	}
 
 	// Episode list for TV content

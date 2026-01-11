@@ -214,6 +214,33 @@ func (m *Model) renderSubtitleSummary(b *strings.Builder, item spindle.QueueItem
 	b.WriteString("\n")
 }
 
+// renderSubtitleInfo renders subtitle source for movies and single items.
+func (m *Model) renderSubtitleInfo(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
+	sg := item.SubtitleGeneration
+	if sg == nil {
+		return
+	}
+
+	// Determine the source used
+	var source string
+	if sg.OpenSubtitles > 0 {
+		source = "OpenSubtitles"
+	} else if sg.WhisperX > 0 {
+		source = "WhisperX"
+		if sg.FallbackUsed {
+			source += " (fallback)"
+		}
+	}
+
+	if source == "" {
+		return
+	}
+
+	b.WriteString(bg.Render("Subs:      ", styles.MutedText))
+	b.WriteString(bg.Render(source, styles.AccentText))
+	b.WriteString("\n")
+}
+
 // renderValidationDetails renders detailed validation step results for failed items.
 func (m *Model) renderValidationDetails(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
 	if item.Encoding == nil || item.Encoding.Validation == nil {
