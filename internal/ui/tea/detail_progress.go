@@ -1,0 +1,362 @@
+package tea
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/five82/flyer/internal/spindle"
+)
+
+// renderPipelineStatus renders the pipeline progress visualization.
+// Matches tview's stage names and logic exactly, including episode counts for TV shows.
+func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
+	// Stage names match tview exactly
+	stages := []struct {
+		id    string
+		label string
+	}{
+		{"planned", "Planned"},
+		{"identifying", "Identifying"},
+		{"ripped", "Ripped"},
+		{"encoded", "Encoded"},
+		{"subtitled", "Subtitled"},
+		{"organizing", "Organizing"},
+		{"final", "Final"},
+	}
+
+	// Get episode data for counts
+	episodes, totals := item.EpisodeSnapshot()
+
+	// Determine active stage from progress or status
+	activeStage := normalizeEpisodeStage(item.Progress.Stage)
+	if activeStage == "" {
+		activeStage = normalizeEpisodeStage(item.Status)
+	}
+	if activeStage == "" {
+		activeStage = "planned"
+	}
+	activePipelineStage := pipelineStageForStatus(activeStage)
+
+	// Determine planned count (at least 1 for movies)
+	plannedCount := totals.Planned
+	if plannedCount <= 0 {
+		plannedCount = 1
+	}
+
+	// For TV episodes, derive counts by inspecting episode stages
+	identifyingCount := 0
+	subtitledCount := 0
+	organizingCount := 0
+	if totals.Planned > 0 {
+		for _, ep := range episodes {
+			epStage := normalizeEpisodeStage(ep.Stage)
+			// Identifying is complete if we've moved past it
+			switch epStage {
+			case "identified", "ripping", "ripped", "encoding", "encoded", "subtitling", "subtitled", "organizing", "final":
+				identifyingCount++
+			}
+			// Subtitled includes both subtitled and final
+			if epStage == "subtitled" || epStage == "final" {
+				subtitledCount++
+			}
+			// Organizing is complete only when final
+			if epStage == "final" {
+				organizingCount++
+			}
+		}
+	}
+
+	for i, stage := range stages {
+		if i > 0 {
+			b.WriteString(bg.Render(" → ", styles.FaintText))
+		}
+
+		// Calculate count for this stage
+		count := plannedCount
+		if totals.Planned > 0 {
+			switch stage.id {
+			case "planned":
+				count = totals.Planned
+			case "identifying":
+				count = identifyingCount
+			case "ripped":
+				count = totals.Ripped
+			case "encoded":
+				count = totals.Encoded
+			case "subtitled":
+				count = subtitledCount
+			case "organizing":
+				count = organizingCount
+			case "final":
+				count = totals.Final
+			}
+		} else {
+			count = singleItemPipelineCount(stage.id, item, activeStage, plannedCount)
+		}
+
+		isComplete := count >= plannedCount
+		isCurrent := !isComplete && stage.id == activePipelineStage
+
+		// Determine icon and style
+		icon := "○"
+		style := styles.MutedText
+		labelStyle := styles.MutedText
+
+		switch {
+		case isComplete:
+			icon = "✓"
+			style = styles.SuccessText
+			labelStyle = styles.Text.Bold(true)
+		case isCurrent:
+			icon = "◉"
+			style = styles.AccentText
+			labelStyle = styles.AccentText.Bold(true)
+		case count > 0:
+			// Partial progress indicator
+			icon = "◐"
+			style = styles.WarningText
+		}
+
+		// Render with or without counts
+		if plannedCount > 1 {
+			b.WriteString(bg.Render(icon, style))
+			b.WriteString(bg.Space())
+			b.WriteString(bg.Render(stage.label, labelStyle))
+			b.WriteString(bg.Space())
+			b.WriteString(bg.Render(fmt.Sprintf("%d/%d", count, plannedCount), styles.MutedText))
+		} else {
+			b.WriteString(bg.Render(icon+" "+stage.label, style))
+		}
+	}
+}
+
+// normalizeEpisodeStage normalizes various stage names to a canonical form.
+func normalizeEpisodeStage(stage string) string {
+	stage = strings.ToLower(strings.TrimSpace(stage))
+	switch stage {
+	case "episode_identifying", "identifying":
+		return "identifying"
+	case "episode_identified", "identified":
+		return "identified"
+	case "ripping":
+		return "ripping"
+	case "ripped":
+		return "ripped"
+	case "encoding":
+		return "encoding"
+	case "encoded":
+		return "encoded"
+	case "subtitling":
+		return "subtitling"
+	case "subtitled":
+		return "subtitled"
+	case "organizing":
+		return "organizing"
+	case "final", "completed":
+		return "final"
+	case "failed":
+		return "failed"
+	case "pending", "planned":
+		return "planned"
+	default:
+		return stage
+	}
+}
+
+// pipelineStageForStatus maps a status to a pipeline stage ID.
+func pipelineStageForStatus(status string) string {
+	switch normalizeEpisodeStage(status) {
+	case "planned", "pending":
+		return "planned"
+	case "identifying", "identified":
+		return "identifying"
+	case "ripping", "ripped":
+		return "ripped"
+	case "encoding", "encoded":
+		return "encoded"
+	case "subtitling", "subtitled":
+		return "subtitled"
+	case "organizing":
+		return "organizing"
+	case "final", "completed":
+		return "final"
+	default:
+		return "planned"
+	}
+}
+
+// singleItemPipelineCount returns the count for a single-item (movie) pipeline stage.
+func singleItemPipelineCount(stageID string, item spindle.QueueItem, activeStage string, plannedCount int) int {
+	activeNorm := normalizeEpisodeStage(activeStage)
+
+	// Define stage order
+	stageOrder := map[string]int{
+		"planned":     0,
+		"identifying": 1,
+		"ripped":      2,
+		"encoded":     3,
+		"subtitled":   4,
+		"organizing":  5,
+		"final":       6,
+	}
+
+	activeIdx, activeOK := stageOrder[activeNorm]
+	stageIdx, stageOK := stageOrder[stageID]
+
+	if !activeOK || !stageOK {
+		return 0
+	}
+
+	// Completed stages have full count
+	if stageIdx < activeIdx {
+		return plannedCount
+	}
+	// Current stage has full count if we're in it
+	if stageIdx == activeIdx {
+		return plannedCount
+	}
+
+	return 0
+}
+
+// renderActiveProgress renders the enhanced progress bar with stage icons and labels.
+func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
+	stage := normalizeEpisodeStage(item.Progress.Stage)
+	if stage == "" {
+		stage = normalizeEpisodeStage(item.Status)
+	}
+
+	percent := clampPercent(item.Progress.Percent)
+	var label, icon string
+	var color lipgloss.Style
+
+	switch stage {
+	case "identifying", "identified":
+		label = "IDENTIFYING"
+		icon = "🔍"
+		color = styles.InfoText
+	case "ripping", "ripped":
+		label = "RIPPING"
+		icon = "⏵"
+		color = styles.AccentText
+	case "encoding", "encoded":
+		label = "ENCODING"
+		icon = "⚙"
+		color = styles.WarningText
+		// Check for encoding substage from Drapto
+		if enc := item.Encoding; enc != nil {
+			substage := strings.ToLower(strings.TrimSpace(enc.Stage))
+			switch {
+			case strings.Contains(substage, "analysis") || strings.Contains(substage, "crop"):
+				label = "ANALYZING"
+				icon = "🔍"
+			case strings.Contains(substage, "valid"):
+				label = "VALIDATING"
+				icon = "✓"
+			}
+			// Use specific encoding percent if valid
+			if enc.TotalFrames > 0 && enc.CurrentFrame > 0 {
+				p := (float64(enc.CurrentFrame) / float64(enc.TotalFrames)) * 100
+				if p > 0 {
+					percent = p
+				}
+			}
+		}
+	case "subtitling", "subtitled":
+		label = "SUBTITLING"
+		icon = "💬"
+		color = styles.InfoText
+	case "organizing":
+		label = "ORGANIZING"
+		icon = "📁"
+		color = styles.SuccessText
+	default:
+		return // No active progress bar for other stages
+	}
+
+	// Progress bar
+	bar := m.renderProgressBar(percent, 30, styles, bg)
+	b.WriteString(bg.Render(icon+" "+label, color.Bold(true)))
+	b.WriteString(bg.Spaces(2))
+	b.WriteString(bar)
+	b.WriteString(bg.Space())
+	b.WriteString(bg.Render(fmt.Sprintf("%3.0f%%", percent), styles.Text))
+
+	// Add byte progress for organizing stage
+	if stage == "organizing" && item.Progress.TotalBytes > 0 {
+		b.WriteString(bg.Spaces(2))
+		b.WriteString(bg.Render(fmt.Sprintf("%s / %s",
+			formatBytes(item.Progress.BytesCopied),
+			formatBytes(item.Progress.TotalBytes)), styles.MutedText))
+	}
+	b.WriteString("\n")
+
+	// Sub-line with message and ETA
+	if msg := strings.TrimSpace(item.Progress.Message); msg != "" {
+		switch stage {
+		case "encoding", "encoded":
+			// Append fps to the message line
+			if item.Encoding != nil && item.Encoding.FPS > 0 {
+				msg += fmt.Sprintf(" • %.0f fps", item.Encoding.FPS)
+			}
+		case "ripping", "ripped":
+			// Append ETA
+			if eta := m.estimateETA(item); eta != "" {
+				msg += " • " + eta
+			}
+		}
+		b.WriteString(bg.Render("└─ ", styles.FaintText))
+		b.WriteString(bg.Render(msg, styles.MutedText))
+		b.WriteString("\n")
+	}
+}
+
+// estimateETA estimates the remaining time for an operation.
+func (m *Model) estimateETA(item spindle.QueueItem) string {
+	stage := normalizeEpisodeStage(item.Progress.Stage)
+	if stage == "" {
+		stage = normalizeEpisodeStage(item.Status)
+	}
+	// Check encoding ETA first
+	if enc := item.Encoding; enc != nil && (stage == "encoding" || stage == "encoded" || stage == "final") {
+		if eta := enc.ETADuration(); eta > 0 {
+			return "ETA " + formatDuration(eta)
+		}
+	}
+	// Estimate from percent
+	percent := clampPercent(item.Progress.Percent)
+	if percent <= 1 || percent >= 100 {
+		return ""
+	}
+	start := item.ParsedCreatedAt()
+	if start.IsZero() {
+		return ""
+	}
+	elapsed := time.Since(start)
+	if elapsed <= 0 {
+		return ""
+	}
+	remaining := time.Duration(float64(elapsed) * (100 - percent) / percent)
+	if remaining <= 0 {
+		return ""
+	}
+	return "ETA " + formatDuration(remaining)
+}
+
+// renderProgressBar renders a text-based progress bar.
+func (m *Model) renderProgressBar(percent float64, width int, styles Styles, bg BgStyle) string {
+	if percent > 100 {
+		percent = 100
+	}
+	if percent < 0 {
+		percent = 0
+	}
+
+	filled := min(int(float64(width)*percent/100), width)
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
+	return bg.Render(bar, styles.AccentText) + bg.Space() +
+		bg.Render(fmt.Sprintf("%.0f%%", percent), styles.Text)
+}

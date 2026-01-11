@@ -23,7 +23,9 @@ func run() int {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	opts := app.Options{ConfigPath: *configPath}
+	opts := app.Options{
+		ConfigPath: *configPath,
+	}
 	if poll := *pollSeconds; poll > 0 {
 		opts.PollEvery = poll
 	}

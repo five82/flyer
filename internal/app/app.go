@@ -9,7 +9,7 @@ import (
 	"github.com/five82/flyer/internal/prefs"
 	"github.com/five82/flyer/internal/spindle"
 	"github.com/five82/flyer/internal/state"
-	"github.com/five82/flyer/internal/ui"
+	"github.com/five82/flyer/internal/ui/tea"
 )
 
 // Options configure the Flyer application.
@@ -44,20 +44,22 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
+	// Start background poller
 	StartPoller(ctx, store, client, interval)
 
-	uiOpts := ui.Options{
-		Store:         store,
-		Client:        client,
-		Context:       ctx,
-		DaemonLogPath: cfg.DaemonLogPath(),
-		Config:        cfg,
-		Prefs:         userPrefs,
-		PrefsPath:     opts.PrefsPath,
-		RefreshEvery:  interval,
-	}
+	// Do initial refresh to populate store before UI starts
+	refresh(ctx, store, client)
 
-	return ui.Run(ctx, uiOpts)
+	teaOpts := tea.Options{
+		Context:   ctx,
+		Client:    client,
+		Store:     store,
+		Config:    &cfg,
+		PollTick:  interval,
+		ThemeName: userPrefs.Theme,
+		PrefsPath: opts.PrefsPath,
+	}
+	return tea.Run(teaOpts)
 }
 
 const initialConnectTimeout = 3 * time.Second
