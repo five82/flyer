@@ -9,7 +9,7 @@ import (
 	"github.com/five82/flyer/internal/prefs"
 	"github.com/five82/flyer/internal/spindle"
 	"github.com/five82/flyer/internal/state"
-	"github.com/five82/flyer/internal/ui/tea"
+	"github.com/five82/flyer/internal/ui"
 )
 
 // Options configure the Flyer application.
@@ -50,7 +50,7 @@ func Run(ctx context.Context, opts Options) error {
 	// Do initial refresh to populate store before UI starts
 	refresh(ctx, store, client)
 
-	teaOpts := tea.Options{
+	uiOpts := ui.Options{
 		Context:   ctx,
 		Client:    client,
 		Store:     store,
@@ -59,7 +59,7 @@ func Run(ctx context.Context, opts Options) error {
 		ThemeName: userPrefs.Theme,
 		PrefsPath: opts.PrefsPath,
 	}
-	return tea.Run(teaOpts)
+	return ui.Run(uiOpts)
 }
 
 const initialConnectTimeout = 3 * time.Second

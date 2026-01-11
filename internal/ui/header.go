@@ -1,4 +1,4 @@
-package tea
+package ui
 
 import (
 	"fmt"

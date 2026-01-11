@@ -1,5 +1,5 @@
 // Package tea provides a Bubble Tea-based TUI for Flyer.
-package tea
+package ui
 
 import (
 	"context"
