@@ -1,6 +1,10 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance when working with code in this repository.
+
+CLAUDE.md and GEMINI.md are symlinks to this file so all agent guidance stays in one place.
+
+Do not run `git commit` or `git push` unless explicitly instructed.
 
 # Repository Guidelines
 
