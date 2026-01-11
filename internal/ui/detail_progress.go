@@ -13,18 +13,18 @@ import (
 // renderPipelineStatus renders the pipeline progress visualization.
 // Matches tview's stage names and logic exactly, including episode counts for TV shows.
 func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	// Stage names match tview exactly
+	// Stage names use progressive form (-ing)
 	stages := []struct {
 		id    string
 		label string
 	}{
-		{"planned", "Planned"},
+		{"planned", "Planning"},
 		{"identifying", "Identifying"},
-		{"ripped", "Ripped"},
-		{"encoded", "Encoded"},
-		{"subtitled", "Subtitled"},
+		{"ripped", "Ripping"},
+		{"encoded", "Encoding"},
+		{"subtitled", "Subtitling"},
 		{"organizing", "Organizing"},
-		{"final", "Final"},
+		{"final", "Finalizing"},
 	}
 
 	// Get episode data for counts
@@ -91,7 +91,7 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 				count = totals.Final
 			}
 		} else {
-			count = singleItemPipelineCount(stage.id, item, activeStage, plannedCount)
+			count = singleItemPipelineCount(stage.id, item, activePipelineStage, plannedCount)
 		}
 
 		isComplete := count >= plannedCount
@@ -216,15 +216,11 @@ func singleItemPipelineCount(stageID string, item spindle.QueueItem, activeStage
 		return 0
 	}
 
-	// Completed stages have full count
+	// Only completed stages (before current) have full count
 	if stageIdx < activeIdx {
 		return plannedCount
 	}
-	// Current stage has full count if we're in it
-	if stageIdx == activeIdx {
-		return plannedCount
-	}
-
+	// Current and future stages return 0 so isCurrent logic works
 	return 0
 }
 
