@@ -24,7 +24,7 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 		{"encoded", "Encoding"},
 		{"subtitled", "Subtitling"},
 		{"organizing", "Organizing"},
-		{"final", "Finalizing"},
+		{"final", "Completed"},
 	}
 
 	// Get episode data for counts
@@ -210,6 +210,11 @@ func pipelineStageForStatus(status string) string {
 // singleItemPipelineCount returns the count for a single-item (movie) pipeline stage.
 func singleItemPipelineCount(stageID string, item spindle.QueueItem, activeStage string, plannedCount int) int {
 	activeNorm := normalizeEpisodeStage(activeStage)
+
+	// If completed/final, all stages are complete
+	if activeNorm == "final" {
+		return plannedCount
+	}
 
 	// Define stage order
 	stageOrder := map[string]int{
