@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Repository Guidelines
 
 ## Notes For LLM Coding Agents
@@ -29,7 +33,36 @@ GitHub:
 5. **Format** – Finish every session with `gofmt -w $(git ls-files '*.go')` (or run on touched files) plus `goimports -w <files>` if you have it installed.
 
 ## Project Structure & Module Organization
-Flyer is a small Go 1.25 project. Keep the entrypoint in `cmd/flyer/main.go`, with orchestration in `internal/app`. Config and Spindle discovery helpers live in `internal/config`, HTTP polling clients in `internal/spindle`, and UI components in `internal/ui`. Log helpers sit in `internal/logtail`. Tests reside next to their packages (for example, `internal/ui/table_test.go`).
+Flyer is a small Go 1.25 project. Keep the entrypoint in `cmd/flyer/main.go`, with orchestration in `internal/app`. Config and Spindle discovery helpers live in `internal/config`, HTTP polling clients in `internal/spindle`, and UI components in `internal/ui`. Log helpers sit in `internal/logtail`. User preferences (theme selection) live in `internal/prefs`. Tests reside next to their packages (for example, `internal/ui/table_test.go`).
+
+## Architecture Overview
+
+Flyer follows a simple polling architecture with clear separation between data fetching and UI rendering:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  cmd/flyer/main.go                                              │
+│    └─> app.Run()                                                │
+│          ├─> config.Load()      Load Spindle config (TOML)      │
+│          ├─> prefs.Load()       Load Flyer preferences          │
+│          ├─> spindle.NewClient() Create HTTP client             │
+│          ├─> state.Store{}      Shared state container          │
+│          ├─> StartPoller()      Background polling goroutine    │
+│          └─> ui.Run()           Start TUI (blocks)              │
+└─────────────────────────────────────────────────────────────────┘
+
+Background Poller (2s interval):       UI Loop (1s refresh):
+┌──────────────────────────────┐      ┌──────────────────────────┐
+│ spindle.FetchStatus()        │      │ store.Snapshot()         │
+│ spindle.FetchQueue()         │      │ logtail.Read()           │
+│ store.Update() ─────────────────────│ render TUI               │
+└──────────────────────────────┘      └──────────────────────────┘
+```
+
+Key design decisions:
+- **state.Store**: Thread-safe container using `sync.RWMutex` for producer-consumer pattern
+- **Snapshot isolation**: UI receives immutable copies, preventing concurrent modification
+- **Graceful degradation**: On poll failures, old data is retained with error displayed
 
 ## Development Workflow & Commands
 - Baseline local CI: `./check-ci.sh` (mirrors GitHub Actions).
