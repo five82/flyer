@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/five82/flyer/internal/spindle"
 )
 
 // processingStatuses defines which statuses are considered "processing".
@@ -115,13 +117,27 @@ func (m Model) buildStatusContent(styles Styles, bg BgStyle) string {
 			bg.Render(fmt.Sprintf("%d", len(m.snapshot.Queue)), styles.Text),
 	)
 
-	// Active count (only if non-zero)
-	if processing > 0 {
+	// Active encoding display or active count
+	if encodingItem := m.activeEncodingItem(); encodingItem != nil {
+		// Show detailed encoding progress for the active item
+		encodingMini := m.formatEncodingMini(encodingItem, compact, styles, bg)
+		parts = append(parts, encodingMini)
+	} else if processing > 0 {
+		// Fall back to simple active count when not encoding
 		color := lipgloss.Color(m.theme.StatusColors["encoding"])
 		activeStyle := lipgloss.NewStyle().Foreground(color)
 		parts = append(parts,
 			bg.Render("Active:", styles.MutedText)+bg.Space()+
 				bg.Render(fmt.Sprintf("%d", processing), activeStyle),
+		)
+	}
+
+	// Queue ETA (only show if there's work remaining)
+	if eta := m.estimateQueueETA(); eta > 0 {
+		etaStr := formatQueueETA(eta)
+		parts = append(parts,
+			bg.Render("ETA:", styles.MutedText)+bg.Space()+
+				bg.Render(etaStr, styles.InfoText),
 		)
 	}
 
@@ -372,4 +388,129 @@ func truncateMiddle(s string, max int) string {
 	endLen := (max - 3) * 2 / 3
 	startLen := max - 3 - endLen
 	return s[:startLen] + "..." + s[len(s)-endLen:]
+}
+
+// estimateQueueETA calculates the total estimated time remaining for the queue.
+// Returns 0 if no reliable estimate is available.
+func (m Model) estimateQueueETA() time.Duration {
+	var total time.Duration
+	hasEstimate := false
+
+	for _, item := range m.snapshot.Queue {
+		status := strings.ToLower(strings.TrimSpace(item.Status))
+		if status == "completed" || status == "failed" {
+			continue
+		}
+
+		// Use encoding ETA if available (most accurate)
+		if enc := item.Encoding; enc != nil {
+			if eta := enc.ETADuration(); eta > 0 {
+				total += eta
+				hasEstimate = true
+				continue
+			}
+		}
+
+		// For items with progress, estimate from elapsed time
+		if item.Progress.Percent > 0 && item.Progress.Percent < 100 {
+			created := item.ParsedCreatedAt()
+			if !created.IsZero() {
+				elapsed := time.Since(created)
+				if elapsed > 0 {
+					remaining := time.Duration(float64(elapsed) * (100 - item.Progress.Percent) / item.Progress.Percent)
+					if remaining > 0 {
+						total += remaining
+						hasEstimate = true
+					}
+				}
+			}
+		}
+	}
+
+	if !hasEstimate {
+		return 0
+	}
+	return total
+}
+
+// formatQueueETA formats the queue ETA for display in the header.
+func formatQueueETA(d time.Duration) string {
+	if d <= 0 {
+		return "--"
+	}
+
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+
+	if hours >= 24 {
+		days := hours / 24
+		hours %= 24
+		return fmt.Sprintf("~%dd %dh", days, hours)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("~%dh %dm", hours, minutes)
+	}
+	return fmt.Sprintf("~%dm", minutes)
+}
+
+// activeEncodingItem returns the first item that is actively encoding.
+func (m Model) activeEncodingItem() *spindle.QueueItem {
+	for i := range m.snapshot.Queue {
+		item := &m.snapshot.Queue[i]
+		if strings.EqualFold(item.Status, "encoding") && item.Encoding != nil {
+			return item
+		}
+	}
+	return nil
+}
+
+// formatEncodingMini formats a compact encoding progress display for the header.
+func (m Model) formatEncodingMini(item *spindle.QueueItem, compact bool, styles Styles, bg BgStyle) string {
+	if item == nil || item.Encoding == nil {
+		return ""
+	}
+
+	enc := item.Encoding
+	title := composeTitle(*item)
+
+	// Truncate title based on available space
+	maxTitle := 20
+	if compact {
+		maxTitle = 12
+	}
+	title = truncate(title, maxTitle)
+
+	// Get percentage
+	percent := enc.Percent
+	if percent <= 0 && enc.TotalFrames > 0 && enc.CurrentFrame > 0 {
+		percent = (float64(enc.CurrentFrame) / float64(enc.TotalFrames)) * 100
+	}
+
+	// Build display parts
+	encodingColor := lipgloss.Color(m.theme.StatusColors["encoding"])
+	iconStyle := lipgloss.NewStyle().Foreground(encodingColor)
+
+	var parts []string
+	parts = append(parts, bg.Render("⚙", iconStyle))
+	parts = append(parts, bg.Render(title, styles.Text))
+	parts = append(parts, bg.Render(fmt.Sprintf("%.0f%%", percent), styles.AccentText))
+
+	// Add speed if available and not compact
+	if !compact && enc.Speed > 0 {
+		speedStyle := styles.MutedText
+		if enc.Speed < 1.0 {
+			speedStyle = styles.WarningText
+		}
+		parts = append(parts, bg.Render(fmt.Sprintf("%.1fx", enc.Speed), speedStyle))
+	}
+
+	// Add ETA if available
+	if eta := enc.ETADuration(); eta > 0 {
+		etaStr := formatQueueETA(eta)
+		if !compact {
+			parts = append(parts, bg.Render("ETA:"+etaStr, styles.MutedText))
+		}
+	}
+
+	return strings.Join(parts, bg.Space())
 }

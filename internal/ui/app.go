@@ -99,7 +99,7 @@ type Model struct {
 
 	// Log filters modal state (separate from Modal interface for simplicity)
 	showLogFilters    bool
-	logFilterInputs   [3]textinput.Model // component, lane, request
+	logFilterInputs   [4]textinput.Model // level, component, lane, request
 	logFilterFocusIdx int
 
 	// Transient error display
@@ -195,10 +195,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case logBatchMsg:
 		m.handleLogBatch(msg)
-		return m, nil
-
-	case logTailMsg:
-		m.handleLogTail(msg)
 		return m, nil
 
 	case logErrorMsg:
