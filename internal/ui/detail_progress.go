@@ -130,13 +130,26 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 	}
 }
 
-// itemCurrentStage returns the normalized current stage for an item,
-// preferring Progress.Stage over Status.
+// itemCurrentStage returns the normalized current stage for an item.
+// Uses Progress.Stage if it maps to a known pipeline stage, otherwise falls back to Status.
 func itemCurrentStage(item spindle.QueueItem) string {
 	if stage := normalizeEpisodeStage(item.Progress.Stage); stage != "" {
-		return stage
+		// Only use Progress.Stage if it maps to a known pipeline stage
+		if isKnownPipelineStage(stage) {
+			return stage
+		}
 	}
 	return normalizeEpisodeStage(item.Status)
+}
+
+// isKnownPipelineStage returns true if the stage maps to a pipeline stage.
+func isKnownPipelineStage(stage string) bool {
+	switch stage {
+	case "planned", "pending", "identifying", "identified", "ripping", "ripped",
+		"encoding", "encoded", "subtitling", "subtitled", "organizing", "final", "completed", "failed":
+		return true
+	}
+	return false
 }
 
 // normalizeEpisodeStage normalizes various stage names to a canonical form.
