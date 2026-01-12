@@ -156,29 +156,13 @@ func isKnownPipelineStage(stage string) bool {
 func normalizeEpisodeStage(stage string) string {
 	stage = strings.ToLower(strings.TrimSpace(stage))
 	switch stage {
-	case "episode_identifying", "identifying":
+	case "episode_identifying":
 		return "identifying"
-	case "episode_identified", "identified":
+	case "episode_identified":
 		return "identified"
-	case "ripping":
-		return "ripping"
-	case "ripped":
-		return "ripped"
-	case "encoding":
-		return "encoding"
-	case "encoded":
-		return "encoded"
-	case "subtitling":
-		return "subtitling"
-	case "subtitled":
-		return "subtitled"
-	case "organizing":
-		return "organizing"
-	case "final", "completed":
+	case "completed":
 		return "final"
-	case "failed":
-		return "failed"
-	case "pending", "planned":
+	case "pending":
 		return "planned"
 	default:
 		return stage

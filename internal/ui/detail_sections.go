@@ -138,11 +138,10 @@ func (m *Model) renderValidationSummary(b *strings.Builder, item spindle.QueueIt
 	b.WriteString(bg.Render("Validation:", styles.MutedText) + bg.Space())
 	if v.Passed {
 		b.WriteString(bg.Render("✓ Passed", styles.SuccessText))
-		b.WriteString(bg.Render(fmt.Sprintf(" (%d/%d checks)", passed, total), styles.FaintText))
 	} else {
 		b.WriteString(bg.Render("✗ Failed", styles.DangerText))
-		b.WriteString(bg.Render(fmt.Sprintf(" (%d/%d checks)", passed, total), styles.FaintText))
 	}
+	b.WriteString(bg.Render(fmt.Sprintf(" (%d/%d checks)", passed, total), styles.FaintText))
 	b.WriteString("\n")
 }
 
@@ -247,31 +246,16 @@ func (m *Model) renderValidationDetails(b *strings.Builder, item spindle.QueueIt
 		return
 	}
 	v := item.Encoding.Validation
-	if len(v.Steps) == 0 {
-		return
-	}
-	// Only show details if validation failed or if there are any failed steps
-	hasFailures := !v.Passed
-	if !hasFailures {
-		for _, step := range v.Steps {
-			if !step.Passed {
-				hasFailures = true
-				break
-			}
-		}
-	}
-	if !hasFailures {
+	if len(v.Steps) == 0 || v.Passed {
 		return
 	}
 
 	m.writeSection(b, "Validation", styles, bg)
 
 	for _, step := range v.Steps {
-		icon := "✓"
-		iconStyle := styles.SuccessText
+		icon, iconStyle := "✓", styles.SuccessText
 		if !step.Passed {
-			icon = "✗"
-			iconStyle = styles.DangerText
+			icon, iconStyle = "✗", styles.DangerText
 		}
 		name := strings.TrimSpace(step.Name)
 		if name == "" {

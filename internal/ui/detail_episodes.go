@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -161,17 +160,7 @@ func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, ep spindle.EpisodeS
 
 // describeEpisodeWithExtras returns title and extra info (runtime, language, source).
 func (m *Model) describeEpisodeWithExtras(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) (string, []string, *spindle.RipSpecTitleInfo) {
-	title := strings.TrimSpace(ep.Title)
-	if title == "" {
-		title = strings.TrimSpace(ep.OutputBasename)
-	}
-	if title == "" {
-		title = strings.TrimSpace(ep.SourceTitle)
-	}
-	if title == "" {
-		title = "Unlabeled"
-	}
-
+	title := episodeDisplayTitle(ep)
 	extras := []string{}
 
 	// Runtime
@@ -221,31 +210,9 @@ func (m *Model) activeEpisodeIndex(item spindle.QueueItem, episodes []spindle.Ep
 		}
 	}
 
-	// Get current stage
 	stage := itemCurrentStage(item)
 
 	// 1. Precise Match: File path matching
-	checkMatch := func(target, candidate string) bool {
-		target = strings.TrimSpace(target)
-		candidate = strings.TrimSpace(candidate)
-		if target == "" || candidate == "" {
-			return false
-		}
-		if target == candidate || strings.EqualFold(target, candidate) {
-			return true
-		}
-		if strings.HasSuffix(strings.ToLower(candidate), strings.ToLower(target)) ||
-			strings.HasSuffix(strings.ToLower(target), strings.ToLower(candidate)) {
-			return true
-		}
-		targetBase := filepath.Base(target)
-		candidateBase := filepath.Base(candidate)
-		if targetBase != "." && candidateBase != "." && strings.EqualFold(targetBase, candidateBase) {
-			return true
-		}
-		return false
-	}
-
 	if stage == "ripping" && item.RippedFile != "" {
 		for i, ep := range episodes {
 			if checkMatch(item.RippedFile, ep.RippedPath) || checkMatch(item.RippedFile, ep.OutputBasename) {
@@ -334,12 +301,11 @@ func formatEpisodeLabel(ep spindle.EpisodeStatus) string {
 }
 
 // renderEpisodeFocusLine renders the focused episode line with stage chip.
-func (m *Model) renderEpisodeFocusLine(b *strings.Builder, ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int, stageName string, styles Styles, bg BgStyle) {
+func (m *Model) renderEpisodeFocusLine(b *strings.Builder, ep spindle.EpisodeStatus, stageName string, styles Styles, bg BgStyle) {
 	chip := m.episodeStageChip(stageName, ep.IsFailed(), styles, bg)
-	title := m.describeEpisodeTitle(ep, titles, keyLookup)
 	b.WriteString(chip)
 	b.WriteString(bg.Space())
-	b.WriteString(bg.Render(title, styles.Text.Bold(true)))
+	b.WriteString(bg.Render(episodeDisplayTitle(ep), styles.Text.Bold(true)))
 }
 
 // episodeStageChip returns a styled chip for an episode stage.
@@ -390,19 +356,18 @@ func (m *Model) episodeStageChip(stage string, failed bool, styles Styles, bg Bg
 		Render(label)
 }
 
-// describeEpisodeTitle returns the display title for an episode.
-func (m *Model) describeEpisodeTitle(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) string {
-	title := strings.TrimSpace(ep.Title)
-	if title == "" {
-		title = strings.TrimSpace(ep.OutputBasename)
+// episodeDisplayTitle extracts the display title for an episode.
+func episodeDisplayTitle(ep spindle.EpisodeStatus) string {
+	if title := strings.TrimSpace(ep.Title); title != "" {
+		return title
 	}
-	if title == "" {
-		title = strings.TrimSpace(ep.SourceTitle)
+	if title := strings.TrimSpace(ep.OutputBasename); title != "" {
+		return title
 	}
-	if title == "" {
-		title = "Unlabeled"
+	if title := strings.TrimSpace(ep.SourceTitle); title != "" {
+		return title
 	}
-	return title
+	return "Unlabeled"
 }
 
 // describeEpisodeTrackInfo returns track info for an episode.

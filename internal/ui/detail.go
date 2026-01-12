@@ -275,23 +275,8 @@ func (m *Model) renderPendingDetail(b *strings.Builder, item spindle.QueueItem, 
 
 // renderActiveDetail renders detail for active/processing items.
 func (m *Model) renderActiveDetail(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	// Pre-calculate data
 	summary, _ := item.ParseRipSpec()
-	titleLookup := make(map[int]*spindle.RipSpecTitleInfo)
-	episodeTitleIndex := make(map[string]int)
-	for i := range summary.Titles {
-		t := summary.Titles[i]
-		titleLookup[t.ID] = &t
-	}
-	for _, ep := range summary.Episodes {
-		if ep.TitleID <= 0 {
-			continue
-		}
-		key := strings.ToLower(strings.TrimSpace(ep.Key))
-		if key != "" {
-			episodeTitleIndex[key] = ep.TitleID
-		}
-	}
+	titleLookup, episodeTitleIndex := buildTitleLookups(summary)
 	episodes, totals := item.EpisodeSnapshot()
 	mediaType := detectMediaType(item.Metadata)
 
@@ -315,7 +300,7 @@ func (m *Model) renderActiveDetail(b *strings.Builder, item spindle.QueueItem, s
 			ep := episodes[activeIdx]
 			m.writeSection(b, "Current Episode", styles, bg)
 			stage := m.episodeStage(ep, currentStage, true)
-			m.renderEpisodeFocusLine(b, ep, titleLookup, episodeTitleIndex, stage, styles, bg)
+			m.renderEpisodeFocusLine(b, ep, stage, styles, bg)
 			b.WriteString("\n")
 			if track := m.describeEpisodeTrackInfo(&ep, titleLookup, episodeTitleIndex); track != "" {
 				b.WriteString(bg.Render("Track:   ", styles.MutedText))
@@ -347,25 +332,9 @@ func (m *Model) renderActiveDetail(b *strings.Builder, item spindle.QueueItem, s
 }
 
 // renderCompletedDetail renders detail for completed items.
-// Matches tview's compact results format exactly.
 func (m *Model) renderCompletedDetail(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	// Pre-calculate data
 	summary, _ := item.ParseRipSpec()
-	titleLookup := make(map[int]*spindle.RipSpecTitleInfo)
-	episodeTitleIndex := make(map[string]int)
-	for i := range summary.Titles {
-		t := summary.Titles[i]
-		titleLookup[t.ID] = &t
-	}
-	for _, ep := range summary.Episodes {
-		if ep.TitleID <= 0 {
-			continue
-		}
-		key := strings.ToLower(strings.TrimSpace(ep.Key))
-		if key != "" {
-			episodeTitleIndex[key] = ep.TitleID
-		}
-	}
+	titleLookup, episodeTitleIndex := buildTitleLookups(summary)
 	episodes, totals := item.EpisodeSnapshot()
 	mediaType := detectMediaType(item.Metadata)
 

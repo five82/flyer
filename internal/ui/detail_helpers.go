@@ -5,12 +5,53 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/five82/flyer/internal/spindle"
 )
 
 // metadataRow represents a single metadata key-value pair.
 type metadataRow struct {
 	key   string
 	value string
+}
+
+// checkMatch checks if two file paths refer to the same file.
+// Compares exact paths, case-insensitive paths, and basenames.
+func checkMatch(target, candidate string) bool {
+	target = strings.TrimSpace(target)
+	candidate = strings.TrimSpace(candidate)
+	if target == "" || candidate == "" {
+		return false
+	}
+	if strings.EqualFold(target, candidate) {
+		return true
+	}
+	// Check if either is a suffix of the other (handles relative vs absolute paths)
+	targetLower := strings.ToLower(target)
+	candidateLower := strings.ToLower(candidate)
+	if strings.HasSuffix(candidateLower, targetLower) || strings.HasSuffix(targetLower, candidateLower) {
+		return true
+	}
+	return false
+}
+
+// buildTitleLookups creates lookup maps from a RipSpec summary for efficient title info access.
+func buildTitleLookups(summary spindle.RipSpecSummary) (map[int]*spindle.RipSpecTitleInfo, map[string]int) {
+	titleLookup := make(map[int]*spindle.RipSpecTitleInfo, len(summary.Titles))
+	for i := range summary.Titles {
+		t := summary.Titles[i]
+		titleLookup[t.ID] = &t
+	}
+
+	episodeTitleIndex := make(map[string]int, len(summary.Episodes))
+	for _, ep := range summary.Episodes {
+		if ep.TitleID > 0 {
+			if key := strings.ToLower(strings.TrimSpace(ep.Key)); key != "" {
+				episodeTitleIndex[key] = ep.TitleID
+			}
+		}
+	}
+	return titleLookup, episodeTitleIndex
 }
 
 // parseTimestamp parses an RFC3339 timestamp string.
