@@ -178,7 +178,7 @@ func (m *Model) renderLogStatus(styles Styles, bg BgStyle) string {
 	case logSourceItem:
 		src = "Item"
 		if item := m.getSelectedItem(); item != nil {
-			apiPath = fmt.Sprintf("api tail item #%d", item.ID)
+			apiPath = fmt.Sprintf("api logs item=%d", item.ID)
 		}
 	default:
 		src = "Daemon"
