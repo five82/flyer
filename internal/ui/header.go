@@ -116,7 +116,12 @@ func (m Model) buildProcessingPart(compact bool, processing int, styles Styles, 
 }
 
 // buildProblemCountsPart builds the failed/review counts display.
+// Returns empty string when both counts are zero.
 func (m Model) buildProblemCountsPart(compact bool, failed, review int, styles Styles, bg BgStyle) string {
+	if failed == 0 && review == 0 {
+		return ""
+	}
+
 	sep := bg.Spaces(2)
 
 	failedStyle := styles.MutedText
@@ -200,8 +205,10 @@ func (m Model) buildStatusContent(styles Styles, bg BgStyle) string {
 		}
 	}
 
-	// Failed and review counts
-	parts = append(parts, m.buildProblemCountsPart(compact, failed, review, styles, bg))
+	// Failed and review counts (only shown when non-zero)
+	if problemsPart := m.buildProblemCountsPart(compact, failed, review, styles, bg); problemsPart != "" {
+		parts = append(parts, problemsPart)
+	}
 
 	// Timestamp
 	if timeStr := m.formatTimestamp(); timeStr != "" {
@@ -233,23 +240,29 @@ func (m Model) countProblemCounts() (failed, review int) {
 }
 
 // formatTimestamp formats the last update time with relative indicator.
+// Uses compact format (HH:MM) when data is fresh, adds relative time when stale.
 func (m Model) formatTimestamp() string {
 	if m.lastUpdated.IsZero() {
 		return ""
 	}
 
 	timeSince := time.Since(m.lastUpdated)
-	timeStr := m.lastUpdated.Format("15:04:05")
 
+	// Fresh data: just show HH:MM
 	if timeSince < time.Minute {
-		timeStr += " (now)"
-	} else if timeSince < time.Hour {
-		timeStr += fmt.Sprintf(" (%dm ago)", int(timeSince.Minutes()))
-	} else if timeSince < 24*time.Hour {
-		timeStr += fmt.Sprintf(" (%dh ago)", int(timeSince.Hours()))
+		return m.lastUpdated.Format("15:04")
 	}
 
-	return timeStr
+	// Stale data: show relative time
+	if timeSince < time.Hour {
+		return fmt.Sprintf("%s (%dm)", m.lastUpdated.Format("15:04"), int(timeSince.Minutes()))
+	}
+	if timeSince < 24*time.Hour {
+		return fmt.Sprintf("%s (%dh)", m.lastUpdated.Format("15:04"), int(timeSince.Hours()))
+	}
+
+	// Very stale: full timestamp
+	return m.lastUpdated.Format("15:04:05")
 }
 
 // formatHealthWarning formats health warnings if any.
@@ -523,20 +536,10 @@ func (m Model) formatEncodingMini(item *spindle.QueueItem, compact bool, styles 
 	parts = append(parts, bg.Render(title, styles.Text))
 	parts = append(parts, bg.Render(fmt.Sprintf("%.0f%%", percent), styles.AccentText))
 
-	// Add speed if available and not compact
-	if !compact && enc.Speed > 0 {
-		speedStyle := styles.MutedText
-		if enc.Speed < 1.0 {
-			speedStyle = styles.WarningText
-		}
-		parts = append(parts, bg.Render(fmt.Sprintf("%.1fx", enc.Speed), speedStyle))
-	}
-
 	// Add ETA if available
 	if eta := enc.ETADuration(); eta > 0 {
-		etaStr := formatQueueETA(eta)
 		if !compact {
-			parts = append(parts, bg.Render("ETA:"+etaStr, styles.MutedText))
+			parts = append(parts, bg.Render(formatQueueETA(eta), styles.MutedText))
 		}
 	}
 
