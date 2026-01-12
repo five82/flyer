@@ -118,15 +118,11 @@ func (m Model) buildStatusContent(styles Styles, bg BgStyle) string {
 	)
 
 	// Active encoding display or active count
-	showedEncodingETA := false
+	var showedEncodingETA bool
 	if encodingItem := m.activeEncodingItem(); encodingItem != nil {
-		// Show detailed encoding progress for the active item
 		encodingMini := m.formatEncodingMini(encodingItem, compact, styles, bg)
 		parts = append(parts, encodingMini)
-		// Track if we showed ETA in the encoding mini (non-compact mode with valid ETA)
-		if !compact && encodingItem.Encoding != nil && encodingItem.Encoding.ETADuration() > 0 {
-			showedEncodingETA = true
-		}
+		showedEncodingETA = !compact && encodingItem.Encoding != nil && encodingItem.Encoding.ETADuration() > 0
 	} else if processing > 0 {
 		// Fall back to simple active count when not encoding
 		color := lipgloss.Color(m.theme.StatusColors["encoding"])
