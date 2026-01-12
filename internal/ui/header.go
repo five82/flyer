@@ -10,7 +10,12 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
+// compactWidthThreshold is the terminal width below which the UI uses compact mode.
+const compactWidthThreshold = 100
+
 // processingStatuses defines which statuses are considered "processing".
+// Past-tense statuses like "episode_identified" and "subtitled" are included
+// because they represent transitional states where work is still pending.
 var processingStatuses = map[string]struct{}{
 	"identifying":         {},
 	"ripping":             {},
@@ -83,28 +88,90 @@ func (m Model) renderConnectingHeader(styles Styles, bg BgStyle) string {
 	)
 }
 
-// buildStatusContent builds the status bar content string.
-func (m Model) buildStatusContent(styles Styles, bg BgStyle) string {
-	compact := m.width < 100
+// countProcessingItems returns the number of items in processing statuses.
+func (m Model) countProcessingItems() int {
+	stats := m.snapshot.Status.Workflow.QueueStats
+	count := 0
+	for status := range processingStatuses {
+		count += stats[status]
+	}
+	return count
+}
+
+// buildProcessingPart builds the active encoding or processing count display.
+// Returns the rendered part and whether an encoding ETA was shown.
+func (m Model) buildProcessingPart(compact bool, processing int, styles Styles, bg BgStyle) (string, bool) {
+	if encodingItem := m.activeEncodingItem(); encodingItem != nil {
+		encodingMini := m.formatEncodingMini(encodingItem, compact, styles, bg)
+		showedETA := !compact && encodingItem.Encoding != nil && encodingItem.Encoding.ETADuration() > 0
+		return encodingMini, showedETA
+	}
+	if processing > 0 {
+		color := lipgloss.Color(m.theme.StatusColors["encoding"])
+		activeStyle := lipgloss.NewStyle().Foreground(color)
+		return bg.Render("Active:", styles.MutedText) + bg.Space() +
+			bg.Render(fmt.Sprintf("%d", processing), activeStyle), false
+	}
+	return "", false
+}
+
+// buildProblemCountsPart builds the failed/review counts display.
+func (m Model) buildProblemCountsPart(compact bool, failed, review int, styles Styles, bg BgStyle) string {
 	sep := bg.Spaces(2)
 
-	// Count processing items
-	stats := m.snapshot.Status.Workflow.QueueStats
-	processing := 0
-	for status := range processingStatuses {
-		processing += stats[status]
+	failedStyle := styles.MutedText
+	if failed > 0 {
+		failedStyle = styles.DangerText
+	}
+	reviewStyle := styles.MutedText
+	if review > 0 {
+		reviewStyle = styles.WarningText
 	}
 
-	// Count failed and review items
-	failed, review := m.countProblemCounts()
+	failedLabel := "Failed:"
+	reviewLabel := "Review:"
+	if compact {
+		failedLabel = "F:"
+		reviewLabel = "R:"
+	}
 
-	// Build parts
+	return bg.Render(failedLabel, styles.MutedText) + bg.Space() + bg.Render(fmt.Sprintf("%d", failed), failedStyle) +
+		sep + bg.Render("•", styles.FaintText) + sep +
+		bg.Render(reviewLabel, styles.MutedText) + bg.Space() + bg.Render(fmt.Sprintf("%d", review), reviewStyle)
+}
+
+// buildErrorParts builds error indicator parts for the header.
+func (m Model) buildErrorParts(compact bool, styles Styles, bg BgStyle) []string {
 	var parts []string
 
-	// Logo
-	parts = append(parts, bg.Render("flyer", styles.Logo))
+	if m.snapshot.LastError != nil {
+		errText := truncate(fmt.Sprintf("%v", m.snapshot.LastError), maxLen(compact, 80, 40))
+		parts = append(parts,
+			bg.Render("ERROR", styles.DangerText.Bold(true))+bg.Space()+
+				bg.Render(errText, styles.DangerText),
+		)
+	}
 
-	// Daemon status indicator
+	if m.errorMsg != "" {
+		parts = append(parts,
+			bg.Render("!", styles.WarningText.Bold(true))+bg.Space()+
+				bg.Render(m.errorMsg, styles.WarningText),
+		)
+	}
+
+	return parts
+}
+
+// buildStatusContent builds the status bar content string.
+func (m Model) buildStatusContent(styles Styles, bg BgStyle) string {
+	compact := m.width < compactWidthThreshold
+	processing := m.countProcessingItems()
+	failed, review := m.countProblemCounts()
+
+	var parts []string
+
+	// Logo and daemon status
+	parts = append(parts, bg.Render("flyer", styles.Logo))
 	if m.snapshot.Status.Running {
 		parts = append(parts, bg.Render("● ON", styles.SuccessText))
 	} else {
@@ -117,60 +184,27 @@ func (m Model) buildStatusContent(styles Styles, bg BgStyle) string {
 			bg.Render(fmt.Sprintf("%d", len(m.snapshot.Queue)), styles.Text),
 	)
 
-	// Active encoding display or active count
-	var showedEncodingETA bool
-	if encodingItem := m.activeEncodingItem(); encodingItem != nil {
-		encodingMini := m.formatEncodingMini(encodingItem, compact, styles, bg)
-		parts = append(parts, encodingMini)
-		showedEncodingETA = !compact && encodingItem.Encoding != nil && encodingItem.Encoding.ETADuration() > 0
-	} else if processing > 0 {
-		// Fall back to simple active count when not encoding
-		color := lipgloss.Color(m.theme.StatusColors["encoding"])
-		activeStyle := lipgloss.NewStyle().Foreground(color)
-		parts = append(parts,
-			bg.Render("Active:", styles.MutedText)+bg.Space()+
-				bg.Render(fmt.Sprintf("%d", processing), activeStyle),
-		)
+	// Active encoding or processing count
+	processingPart, showedEncodingETA := m.buildProcessingPart(compact, processing, styles, bg)
+	if processingPart != "" {
+		parts = append(parts, processingPart)
 	}
 
-	// Queue ETA (only show if there's work remaining and we didn't already show encoding ETA)
+	// Queue ETA (only show if we didn't already show encoding ETA)
 	if !showedEncodingETA {
 		if eta := m.estimateQueueETA(); eta > 0 {
-			etaStr := formatQueueETA(eta)
 			parts = append(parts,
 				bg.Render("ETA:", styles.MutedText)+bg.Space()+
-					bg.Render(etaStr, styles.InfoText),
+					bg.Render(formatQueueETA(eta), styles.InfoText),
 			)
 		}
 	}
 
-	// Failed and Review counts
-	failedStyle := styles.MutedText
-	if failed > 0 {
-		failedStyle = styles.DangerText
-	}
-	reviewStyle := styles.MutedText
-	if review > 0 {
-		reviewStyle = styles.WarningText
-	}
+	// Failed and review counts
+	parts = append(parts, m.buildProblemCountsPart(compact, failed, review, styles, bg))
 
-	if compact {
-		parts = append(parts,
-			bg.Render("F:", styles.MutedText)+bg.Space()+bg.Render(fmt.Sprintf("%d", failed), failedStyle)+
-				sep+bg.Render("•", styles.FaintText)+sep+
-				bg.Render("R:", styles.MutedText)+bg.Space()+bg.Render(fmt.Sprintf("%d", review), reviewStyle),
-		)
-	} else {
-		parts = append(parts,
-			bg.Render("Failed:", styles.MutedText)+bg.Space()+bg.Render(fmt.Sprintf("%d", failed), failedStyle)+
-				sep+bg.Render("•", styles.FaintText)+sep+
-				bg.Render("Review:", styles.MutedText)+bg.Space()+bg.Render(fmt.Sprintf("%d", review), reviewStyle),
-		)
-	}
-
-	// Timestamp with relative time
-	timeStr := m.formatTimestamp()
-	if timeStr != "" {
+	// Timestamp
+	if timeStr := m.formatTimestamp(); timeStr != "" {
 		parts = append(parts, bg.Render(timeStr, styles.MutedText))
 	}
 
@@ -179,26 +213,8 @@ func (m Model) buildStatusContent(styles Styles, bg BgStyle) string {
 		parts = append(parts, healthWarning)
 	}
 
-	// Error indicator
-	if m.snapshot.LastError != nil {
-		maxErr := 80
-		if compact {
-			maxErr = 40
-		}
-		errText := truncate(fmt.Sprintf("%v", m.snapshot.LastError), maxErr)
-		parts = append(parts,
-			bg.Render("ERROR", styles.DangerText.Bold(true))+bg.Space()+
-				bg.Render(errText, styles.DangerText),
-		)
-	}
-
-	// Transient error display (log/problems fetch failures)
-	if m.errorMsg != "" {
-		parts = append(parts,
-			bg.Render("!", styles.WarningText.Bold(true))+bg.Space()+
-				bg.Render(m.errorMsg, styles.WarningText),
-		)
-	}
+	// Error indicators
+	parts = append(parts, m.buildErrorParts(compact, styles, bg)...)
 
 	return bg.Join(parts, "  ")
 }
@@ -262,12 +278,7 @@ func (m Model) formatHealthWarning(compact bool, styles Styles, bg BgStyle) stri
 	if len(unhealthy) > 1 {
 		detail = fmt.Sprintf("%s +%d more", detail, len(unhealthy)-1)
 	}
-
-	max := 80
-	if compact {
-		max = 40
-	}
-	detail = truncate(detail, max)
+	detail = truncate(detail, maxLen(compact, 80, 40))
 
 	return bg.Render("HEALTH", styles.DangerText.Bold(true)) + bg.Space() +
 		bg.Render(detail, styles.DangerText)
@@ -362,6 +373,14 @@ func (m Model) renderCommandBar() string {
 	return styles.Header.Width(m.width).Render(strings.Join(segments, sep))
 }
 
+// maxLen returns compactLen if compact is true, otherwise normalLen.
+func maxLen(compact bool, normalLen, compactLen int) int {
+	if compact {
+		return compactLen
+	}
+	return normalLen
+}
+
 // truncate truncates a string to max length with ellipsis.
 func truncate(s string, max int) string {
 	if max <= 0 {
@@ -393,15 +412,36 @@ func truncateMiddle(s string, max int) string {
 	return s[:startLen] + "..." + s[len(s)-endLen:]
 }
 
+// estimateRemainingFromProgress estimates remaining time based on elapsed time and progress.
+// Returns 0 if no reliable estimate can be made.
+func estimateRemainingFromProgress(item *spindle.QueueItem) time.Duration {
+	if item.Progress.Percent <= 0 || item.Progress.Percent >= 100 {
+		return 0
+	}
+	created := item.ParsedCreatedAt()
+	if created.IsZero() {
+		return 0
+	}
+	elapsed := time.Since(created)
+	if elapsed <= 0 {
+		return 0
+	}
+	remaining := time.Duration(float64(elapsed) * (100 - item.Progress.Percent) / item.Progress.Percent)
+	if remaining <= 0 {
+		return 0
+	}
+	return remaining
+}
+
 // estimateQueueETA calculates the total estimated time remaining for the queue.
 // Returns 0 if no reliable estimate is available.
 func (m Model) estimateQueueETA() time.Duration {
 	var total time.Duration
 	hasEstimate := false
 
-	for _, item := range m.snapshot.Queue {
-		status := strings.ToLower(strings.TrimSpace(item.Status))
-		if status == "completed" || status == "failed" {
+	for i := range m.snapshot.Queue {
+		item := &m.snapshot.Queue[i]
+		if strings.EqualFold(item.Status, "completed") || strings.EqualFold(item.Status, "failed") {
 			continue
 		}
 
@@ -414,19 +454,10 @@ func (m Model) estimateQueueETA() time.Duration {
 			}
 		}
 
-		// For items with progress, estimate from elapsed time
-		if item.Progress.Percent > 0 && item.Progress.Percent < 100 {
-			created := item.ParsedCreatedAt()
-			if !created.IsZero() {
-				elapsed := time.Since(created)
-				if elapsed > 0 {
-					remaining := time.Duration(float64(elapsed) * (100 - item.Progress.Percent) / item.Progress.Percent)
-					if remaining > 0 {
-						total += remaining
-						hasEstimate = true
-					}
-				}
-			}
+		// Fall back to progress-based estimation
+		if remaining := estimateRemainingFromProgress(item); remaining > 0 {
+			total += remaining
+			hasEstimate = true
 		}
 	}
 
@@ -468,20 +499,14 @@ func (m Model) activeEncodingItem() *spindle.QueueItem {
 }
 
 // formatEncodingMini formats a compact encoding progress display for the header.
+// Callers must ensure item is non-nil.
 func (m Model) formatEncodingMini(item *spindle.QueueItem, compact bool, styles Styles, bg BgStyle) string {
-	if item == nil || item.Encoding == nil {
+	if item.Encoding == nil {
 		return ""
 	}
 
 	enc := item.Encoding
-	title := composeTitle(*item)
-
-	// Truncate title based on available space
-	maxTitle := 20
-	if compact {
-		maxTitle = 12
-	}
-	title = truncate(title, maxTitle)
+	title := truncate(composeTitle(*item), maxLen(compact, 20, 12))
 
 	// Get percentage
 	percent := enc.Percent
