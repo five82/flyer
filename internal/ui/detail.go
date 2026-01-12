@@ -289,6 +289,7 @@ func (m *Model) renderActiveDetail(b *strings.Builder, item spindle.QueueItem, s
 	m.renderAudioInfo(b, item, styles, bg)
 	m.renderEncodingConfig(b, item, styles, bg)
 	m.renderCropInfo(b, item, styles, bg)
+	m.renderEstimatedSize(b, item, styles, bg)
 
 	// Current stage
 	currentStage := itemCurrentStage(item)

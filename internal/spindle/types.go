@@ -90,27 +90,29 @@ type QueueProgress struct {
 }
 
 type EncodingStatus struct {
-	JobLabel     string              `json:"jobLabel,omitempty"`
-	EpisodeKey   string              `json:"episodeKey,omitempty"`
-	EpisodeIndex int                 `json:"episodeIndex,omitempty"`
-	EpisodeCount int                 `json:"episodeCount,omitempty"`
-	Stage        string              `json:"stage,omitempty"`
-	Message      string              `json:"message,omitempty"`
-	Percent      float64             `json:"percent,omitempty"`
-	ETASeconds   float64             `json:"etaSeconds,omitempty"`
-	Speed        float64             `json:"speed,omitempty"`
-	FPS          float64             `json:"fps,omitempty"`
-	Bitrate      string              `json:"bitrate,omitempty"`
-	TotalFrames  int64               `json:"totalFrames,omitempty"`
-	CurrentFrame int64               `json:"currentFrame,omitempty"`
-	Hardware     *EncodingHardware   `json:"hardware,omitempty"`
-	Video        *EncodingVideo      `json:"video,omitempty"`
-	Crop         *EncodingCrop       `json:"crop,omitempty"`
-	Config       *EncodingConfig     `json:"config,omitempty"`
-	Validation   *EncodingValidation `json:"validation,omitempty"`
-	Warning      string              `json:"warning,omitempty"`
-	Error        *EncodingIssue      `json:"error,omitempty"`
-	Result       *EncodingResult     `json:"result,omitempty"`
+	JobLabel            string              `json:"jobLabel,omitempty"`
+	EpisodeKey          string              `json:"episodeKey,omitempty"`
+	EpisodeIndex        int                 `json:"episodeIndex,omitempty"`
+	EpisodeCount        int                 `json:"episodeCount,omitempty"`
+	Stage               string              `json:"stage,omitempty"`
+	Message             string              `json:"message,omitempty"`
+	Percent             float64             `json:"percent,omitempty"`
+	ETASeconds          float64             `json:"etaSeconds,omitempty"`
+	Speed               float64             `json:"speed,omitempty"`
+	FPS                 float64             `json:"fps,omitempty"`
+	Bitrate             string              `json:"bitrate,omitempty"`
+	TotalFrames         int64               `json:"totalFrames,omitempty"`
+	CurrentFrame        int64               `json:"currentFrame,omitempty"`
+	CurrentOutputBytes  int64               `json:"currentOutputBytes,omitempty"`
+	EstimatedTotalBytes int64               `json:"estimatedTotalBytes,omitempty"`
+	Hardware            *EncodingHardware   `json:"hardware,omitempty"`
+	Video               *EncodingVideo      `json:"video,omitempty"`
+	Crop                *EncodingCrop       `json:"crop,omitempty"`
+	Config              *EncodingConfig     `json:"config,omitempty"`
+	Validation          *EncodingValidation `json:"validation,omitempty"`
+	Warning             string              `json:"warning,omitempty"`
+	Error               *EncodingIssue      `json:"error,omitempty"`
+	Result              *EncodingResult     `json:"result,omitempty"`
 }
 
 type EncodingHardware struct {

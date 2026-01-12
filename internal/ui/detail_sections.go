@@ -8,6 +8,29 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
+// renderEstimatedSize renders the estimated output size during encoding.
+// Only displays when progress >= 10% for estimate accuracy.
+func (m *Model) renderEstimatedSize(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
+	enc := item.Encoding
+	if enc == nil {
+		return
+	}
+	// Only show after 10% progress for accuracy
+	if enc.Percent < 10 {
+		return
+	}
+	if enc.EstimatedTotalBytes <= 0 {
+		return
+	}
+
+	b.WriteString(bg.Render("Est. size: ", styles.MutedText))
+	b.WriteString(bg.Render("~"+formatBytes(enc.EstimatedTotalBytes), styles.AccentText))
+	if enc.CurrentOutputBytes > 0 {
+		b.WriteString(bg.Render(fmt.Sprintf(" (%s written)", formatBytes(enc.CurrentOutputBytes)), styles.FaintText))
+	}
+	b.WriteString("\n")
+}
+
 // renderSizeResult renders the file size comparison (input → output with reduction %).
 func (m *Model) renderSizeResult(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
 	enc := item.Encoding
