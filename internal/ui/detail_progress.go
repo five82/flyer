@@ -146,7 +146,8 @@ func itemCurrentStage(item spindle.QueueItem) string {
 func isKnownPipelineStage(stage string) bool {
 	switch stage {
 	case "planned", "pending", "identifying", "identified", "ripping", "ripped",
-		"encoding", "encoded", "subtitling", "subtitled", "organizing", "final", "completed", "failed":
+		"detecting commentary", "encoding", "encoded", "subtitling", "subtitled",
+		"organizing", "final", "completed", "failed":
 		return true
 	}
 	return false
@@ -176,7 +177,7 @@ func pipelineStageForStatus(status string) string {
 		return "planned"
 	case "identifying", "identified":
 		return "identifying"
-	case "ripping", "ripped":
+	case "ripping", "ripped", "detecting commentary":
 		return "ripped"
 	case "encoding", "encoded":
 		return "encoded"
@@ -243,6 +244,10 @@ func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem,
 		label = "RIPPING"
 		icon = "⏵"
 		color = styles.AccentText
+	case "detecting commentary":
+		label = "DETECTING COMMENTARY"
+		icon = "🎙"
+		color = styles.InfoText
 	case "encoding", "encoded":
 		label = "ENCODING"
 		icon = "⚙"
