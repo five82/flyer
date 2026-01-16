@@ -28,6 +28,10 @@ GitHub:
 - spindle - https://github.com/five82/spindle
 - drapto - https://github.com/five82/drapto
 
+## MCP
+
+Always use Context7 MCP when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.
+
 ## Agent Quick Start
 1. **Toolchain** – Use Go 1.25.x (see `go.mod` + `.github/workflows/ci.yml`). If you use asdf, pick a Go 1.25 patch and pin it locally (example: `asdf install golang 1.25.5 && asdf local golang 1.25.5`).
 2. **Sync deps** – After `git pull origin main`, run `go mod tidy` to align `go.sum`.
