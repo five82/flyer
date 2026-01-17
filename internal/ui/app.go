@@ -470,17 +470,20 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 		cmds = append(cmds, fetchSnapshotCmd(m.store))
 	}
 
-	// Refresh logs if in log view and following
-	if m.currentView == ViewLogs && m.logState.follow {
-		if cmd := m.refreshLogs(); cmd != nil {
-			cmds = append(cmds, cmd)
+	// Skip log fetching when API is offline to reduce error noise
+	if !m.snapshot.IsOffline() {
+		// Refresh logs if in log view and following
+		if m.currentView == ViewLogs && m.logState.follow {
+			if cmd := m.refreshLogs(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
-	}
 
-	// Refresh problems logs if in problems view
-	if m.currentView == ViewProblems {
-		if cmd := m.refreshProblemsLogs(); cmd != nil {
-			cmds = append(cmds, cmd)
+		// Refresh problems logs if in problems view
+		if m.currentView == ViewProblems {
+			if cmd := m.refreshProblemsLogs(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
 	}
 

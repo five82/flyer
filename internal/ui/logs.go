@@ -617,6 +617,11 @@ func (m *Model) refreshLogs() tea.Cmd {
 		return nil
 	}
 
+	// Skip when API is offline to reduce error noise
+	if m.snapshot.IsOffline() {
+		return nil
+	}
+
 	// Don't refresh too frequently
 	if time.Since(m.logState.lastRefresh) < logRefreshInterval {
 		return nil

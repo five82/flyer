@@ -67,3 +67,56 @@ func TestStore_UpdateErrorKeepsPreviousData(t *testing.T) {
 		t.Fatalf("Snapshot should clone error instance")
 	}
 }
+
+func TestStore_ConsecutiveFailures(t *testing.T) {
+	var s Store
+
+	// Initially zero failures
+	snap := s.Snapshot()
+	if snap.ConsecutiveFailures != 0 {
+		t.Fatalf("ConsecutiveFailures = %d, want 0", snap.ConsecutiveFailures)
+	}
+	if snap.IsOffline() {
+		t.Fatal("IsOffline() = true, want false with 0 failures")
+	}
+
+	// First failure
+	s.Update(nil, nil, errors.New("fail 1"))
+	snap = s.Snapshot()
+	if snap.ConsecutiveFailures != 1 {
+		t.Fatalf("ConsecutiveFailures = %d, want 1", snap.ConsecutiveFailures)
+	}
+	if snap.IsOffline() {
+		t.Fatal("IsOffline() = true, want false with 1 failure")
+	}
+
+	// Second failure - now offline
+	s.Update(nil, nil, errors.New("fail 2"))
+	snap = s.Snapshot()
+	if snap.ConsecutiveFailures != 2 {
+		t.Fatalf("ConsecutiveFailures = %d, want 2", snap.ConsecutiveFailures)
+	}
+	if !snap.IsOffline() {
+		t.Fatal("IsOffline() = false, want true with 2 failures")
+	}
+
+	// Third failure - still offline
+	s.Update(nil, nil, errors.New("fail 3"))
+	snap = s.Snapshot()
+	if snap.ConsecutiveFailures != 3 {
+		t.Fatalf("ConsecutiveFailures = %d, want 3", snap.ConsecutiveFailures)
+	}
+	if !snap.IsOffline() {
+		t.Fatal("IsOffline() = false, want true with 3 failures")
+	}
+
+	// Success resets counter
+	s.Update(&spindle.StatusResponse{Running: true}, nil, nil)
+	snap = s.Snapshot()
+	if snap.ConsecutiveFailures != 0 {
+		t.Fatalf("ConsecutiveFailures = %d, want 0 after success", snap.ConsecutiveFailures)
+	}
+	if snap.IsOffline() {
+		t.Fatal("IsOffline() = true, want false after success")
+	}
+}

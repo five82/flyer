@@ -10,11 +10,17 @@ import (
 
 // Snapshot represents the latest data available to the UI.
 type Snapshot struct {
-	Status      spindle.StatusResponse
-	HasStatus   bool
-	Queue       []spindle.QueueItem
-	LastUpdated time.Time
-	LastError   error
+	Status              spindle.StatusResponse
+	HasStatus           bool
+	Queue               []spindle.QueueItem
+	LastUpdated         time.Time
+	LastError           error
+	ConsecutiveFailures int // Number of consecutive poll failures
+}
+
+// IsOffline returns true when the API has been unreachable for multiple polls.
+func (s Snapshot) IsOffline() bool {
+	return s.ConsecutiveFailures >= 2
 }
 
 // Store coordinates concurrent updates to the snapshot.
@@ -32,6 +38,7 @@ func (s *Store) Update(status *spindle.StatusResponse, queue []spindle.QueueItem
 	if err != nil {
 		s.snapshot.LastError = err
 		s.snapshot.LastUpdated = time.Now()
+		s.snapshot.ConsecutiveFailures++
 		return
 	}
 
@@ -44,6 +51,7 @@ func (s *Store) Update(status *spindle.StatusResponse, queue []spindle.QueueItem
 	}
 	s.snapshot.LastError = nil
 	s.snapshot.LastUpdated = time.Now()
+	s.snapshot.ConsecutiveFailures = 0
 }
 
 // Snapshot returns a copy of the current snapshot.

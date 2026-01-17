@@ -314,6 +314,11 @@ func (m *Model) refreshProblemsLogs() tea.Cmd {
 		return nil
 	}
 
+	// Skip when API is offline to reduce error noise
+	if m.snapshot.IsOffline() {
+		return nil
+	}
+
 	item := m.getSelectedItem()
 	if item == nil {
 		return nil

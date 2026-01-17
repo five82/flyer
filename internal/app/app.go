@@ -48,7 +48,7 @@ func Run(ctx context.Context, opts Options) error {
 	StartPoller(ctx, store, client, interval)
 
 	// Do initial refresh to populate store before UI starts
-	refresh(ctx, store, client)
+	_ = refresh(ctx, store, client)
 
 	uiOpts := ui.Options{
 		Context:   ctx,
