@@ -40,10 +40,6 @@ func Run(ctx context.Context, opts Options) error {
 		interval = time.Duration(opts.PollEvery) * time.Second
 	}
 
-	if err := ensureSpindleAvailable(ctx, client); err != nil {
-		return err
-	}
-
 	// Start background poller
 	StartPoller(ctx, store, client, interval)
 
@@ -60,22 +56,4 @@ func Run(ctx context.Context, opts Options) error {
 		PrefsPath: opts.PrefsPath,
 	}
 	return ui.Run(uiOpts)
-}
-
-const initialConnectTimeout = 3 * time.Second
-
-func ensureSpindleAvailable(ctx context.Context, client *spindle.Client) error {
-	if client == nil {
-		return fmt.Errorf("spindle daemon unavailable: no client")
-	}
-	checkCtx := ctx
-	var cancel context.CancelFunc
-	if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) > initialConnectTimeout {
-		checkCtx, cancel = context.WithTimeout(ctx, initialConnectTimeout)
-		defer cancel()
-	}
-	if _, err := client.FetchStatus(checkCtx); err != nil {
-		return fmt.Errorf("spindle daemon unavailable: %w", err)
-	}
-	return nil
 }

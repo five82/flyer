@@ -1,7 +1,7 @@
 package state
 
 import (
-	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -62,7 +62,7 @@ func (s *Store) Snapshot() Snapshot {
 	copy := s.snapshot
 	copy.Queue = cloneQueue(s.snapshot.Queue)
 	if s.snapshot.LastError != nil {
-		copy.LastError = errors.New(s.snapshot.LastError.Error())
+		copy.LastError = fmt.Errorf("%w", s.snapshot.LastError)
 	}
 	return copy
 }

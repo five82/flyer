@@ -2,7 +2,7 @@ package state
 
 import (
 	"errors"
-	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -63,8 +63,13 @@ func TestStore_UpdateErrorKeepsPreviousData(t *testing.T) {
 	if snap.LastError == nil || snap.LastError.Error() != "boom" {
 		t.Fatalf("LastError = %v, want boom", snap.LastError)
 	}
-	if reflect.ValueOf(snap.LastError).Pointer() == reflect.ValueOf(origErr).Pointer() {
-		t.Fatalf("Snapshot should clone error instance")
+	// Verify error chain is preserved (can use errors.Is)
+	if !errors.Is(snap.LastError, origErr) {
+		t.Fatalf("Snapshot should preserve error chain; errors.Is failed")
+	}
+	// But instances should be different
+	if snap.LastError == origErr {
+		t.Fatalf("Snapshot should wrap error, not return same instance")
 	}
 }
 
@@ -119,4 +124,44 @@ func TestStore_ConsecutiveFailures(t *testing.T) {
 	if snap.IsOffline() {
 		t.Fatal("IsOffline() = true, want false after success")
 	}
+}
+
+func TestStore_ConcurrentAccess(t *testing.T) {
+	var s Store
+	var wg sync.WaitGroup
+
+	// Run concurrent updates and snapshots
+	for i := range 10 {
+		wg.Add(2)
+
+		// Writer goroutine
+		go func(id int) {
+			defer wg.Done()
+			for j := range 100 {
+				if j%2 == 0 {
+					s.Update(&spindle.StatusResponse{PID: id},
+						[]spindle.QueueItem{{ID: int64(j)}}, nil)
+				} else {
+					s.Update(nil, nil, errors.New("test error"))
+				}
+			}
+		}(i)
+
+		// Reader goroutine
+		go func() {
+			defer wg.Done()
+			for range 100 {
+				snap := s.Snapshot()
+				// Access fields to ensure no race on read
+				_ = snap.HasStatus
+				_ = snap.IsOffline()
+				_ = len(snap.Queue)
+				if snap.LastError != nil {
+					_ = snap.LastError.Error()
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
 }
