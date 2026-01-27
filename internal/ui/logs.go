@@ -643,12 +643,13 @@ func (m *Model) fetchDaemonLogs() tea.Cmd {
 		defer cancel()
 
 		query := spindle.LogQuery{
-			Since:     m.logState.streamCursor,
-			Limit:     logFetchLimit,
-			Level:     m.logState.filterLevel,
-			Component: m.logState.filterComponent,
-			Lane:      m.logState.filterLane,
-			Request:   m.logState.filterRequest,
+			Since:      m.logState.streamCursor,
+			Limit:      logFetchLimit,
+			Level:      m.logState.filterLevel,
+			Component:  m.logState.filterComponent,
+			Lane:       m.logState.filterLane,
+			DaemonOnly: true, // Only logs without item association
+			Request:    m.logState.filterRequest,
 		}
 		if m.logState.streamCursor == 0 {
 			query.Tail = true

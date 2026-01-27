@@ -77,15 +77,16 @@ func (c *Client) FetchQueue(ctx context.Context) ([]QueueItem, error) {
 
 // LogQuery configures /api/logs requests.
 type LogQuery struct {
-	Since     uint64
-	Limit     int
-	Follow    bool
-	Tail      bool
-	ItemID    int64
-	Level     string
-	Component string
-	Lane      string
-	Request   string
+	Since      uint64
+	Limit      int
+	Follow     bool
+	Tail       bool
+	ItemID     int64
+	Level      string
+	Component  string
+	Lane       string
+	DaemonOnly bool // Only logs without item association (ItemID == 0)
+	Request    string
 }
 
 // FetchLogs retrieves log events using the daemon's streaming API.
@@ -117,6 +118,9 @@ func (c *Client) FetchLogs(ctx context.Context, query LogQuery) (LogBatch, error
 	}
 	if lane := strings.TrimSpace(query.Lane); lane != "" {
 		values.Set("lane", lane)
+	}
+	if query.DaemonOnly {
+		values.Set("daemon_only", "1")
 	}
 	if req := strings.TrimSpace(query.Request); req != "" {
 		values.Set("request", req)

@@ -93,6 +93,23 @@ Flyer reads Spindle's config from `~/.config/spindle/config.toml`. Relevant keys
 
 Override with `--config /path/to/config.toml` or inject paths in tests.
 
+## Log Views
+
+Flyer has two distinct log views with different purposes:
+
+| View | API Filter | Shows |
+|------|------------|-------|
+| Daemon logs (`2` key) | `daemon_only=1` | Daemon startup, workflow status, API events - logs without item association |
+| Item logs (`3` key) | `item=N` | Encoding progress, subtitles, organizing - logs for selected queue item |
+
+**Important:** These views are intentionally separate. Daemon logs show system-level activity (ItemID=0). Item logs show per-item work (ItemID=N). Do not mix them.
+
+The Spindle API defaults to foreground-only logs without filters. Flyer explicitly requests:
+- `daemon_only=1` for daemon view (excludes all item-associated logs)
+- `item=N` for item view (includes all lanes for that item)
+
+See Spindle's AGENTS.md "Log Streaming Architecture" section for the full API contract.
+
 ## Scope Constraints
 
 Flyer is intentionally limited:
