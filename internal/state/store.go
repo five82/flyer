@@ -59,12 +59,12 @@ func (s *Store) Snapshot() Snapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	copy := s.snapshot
-	copy.Queue = cloneQueue(s.snapshot.Queue)
+	snap := s.snapshot
+	snap.Queue = cloneQueue(s.snapshot.Queue)
 	if s.snapshot.LastError != nil {
-		copy.LastError = fmt.Errorf("%w", s.snapshot.LastError)
+		snap.LastError = fmt.Errorf("%w", s.snapshot.LastError)
 	}
-	return copy
+	return snap
 }
 
 func cloneQueue(items []spindle.QueueItem) []spindle.QueueItem {
