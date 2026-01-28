@@ -73,19 +73,14 @@ func (m *Model) renderVideoSpecs(b *strings.Builder, item spindle.QueueItem, sty
 	}
 }
 
-// renderAudioInfo renders the source audio format and commentary count.
+// renderAudioInfo renders the source audio format.
 func (m *Model) renderAudioInfo(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
 	if item.PrimaryAudioDescription == "" {
 		return
 	}
 
-	audio := item.PrimaryAudioDescription
-	if item.CommentaryCount > 0 {
-		audio = fmt.Sprintf("%s + %d commentary", audio, item.CommentaryCount)
-	}
-
 	b.WriteString(bg.Render("Audio:     ", styles.MutedText))
-	b.WriteString(bg.Render(audio, styles.Text))
+	b.WriteString(bg.Render(item.PrimaryAudioDescription, styles.Text))
 	b.WriteString("\n")
 }
 

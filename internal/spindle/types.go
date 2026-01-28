@@ -77,7 +77,6 @@ type QueueItem struct {
 	EpisodesSynced          bool                      `json:"episodesSynchronized"`
 	SubtitleGeneration      *SubtitleGenerationStatus `json:"subtitleGeneration"`
 	PrimaryAudioDescription string                    `json:"primaryAudioDescription"`
-	CommentaryCount         int                       `json:"commentaryCount"`
 }
 
 // QueueProgress tracks stage progress for an item.
