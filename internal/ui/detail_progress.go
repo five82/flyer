@@ -54,7 +54,7 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 			epStage := normalizeEpisodeStage(ep.Stage)
 			// Identifying is complete if we've moved past it
 			switch epStage {
-			case "identified", "ripping", "ripped", "audio_analyzing", "audio_analyzed", "encoding", "encoded", "subtitling", "subtitled", "organizing", "final":
+			case "identified", "ripping", "ripped", "episode_identifying", "episode_identified", "encoding", "encoded", "audio_analyzing", "audio_analyzed", "subtitling", "subtitled", "organizing", "final":
 				identifyingCount++
 			}
 			// Audio analysis is complete if we've moved past it
@@ -313,7 +313,7 @@ func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem,
 	}
 	b.WriteString("\n")
 
-	// Sub-line with message and ETA
+	// Progress message line - rendered prominently after the progress bar
 	if msg := strings.TrimSpace(item.Progress.Message); msg != "" {
 		switch stage {
 		case "encoding", "encoded":
@@ -327,8 +327,8 @@ func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem,
 				msg += " • " + eta
 			}
 		}
-		b.WriteString(bg.Render("└─ ", styles.FaintText))
-		b.WriteString(bg.Render(msg, styles.MutedText))
+		b.WriteString(bg.Render("   ", styles.Text)) // Indent to align with progress bar
+		b.WriteString(bg.Render(msg, styles.Text))
 		b.WriteString("\n")
 	}
 }

@@ -173,13 +173,16 @@ func (m Model) renderQueueTable(width int, bgColor string) string {
 }
 
 // formatQueueRowContent formats a queue item row with inline colors.
-// Format: "#ID Title · Status Progress%"
+// Format: "Icon #ID Title · Status Progress% (message)"
 // When selected is true, uses SelectionText color for all text to ensure contrast.
 func (m Model) formatQueueRowContent(item spindle.QueueItem, width int, bgColor string, selected bool) string {
 	bg := NewBgStyle(bgColor)
 
 	title := composeTitle(item)
 	status := titleCase(effectiveQueueStage(item))
+
+	// Get stage icon
+	icon := stageIcon(item.Status)
 
 	// Build status parts like tview
 	statusParts := []string{status}
@@ -194,34 +197,95 @@ func (m Model) formatQueueRowContent(item spindle.QueueItem, width int, bgColor 
 	}
 	statusStr := strings.Join(statusParts, " ")
 
-	// Calculate available title width
+	// Add truncated progress message for processing items
+	progressMsg := ""
+	if isProcessingStatus(item.Status) {
+		if msg := strings.TrimSpace(item.Progress.Message); msg != "" {
+			progressMsg = " (" + msg + ")"
+		}
+	}
+
+	// Calculate available title width (account for icon + space)
 	idStr := fmt.Sprintf("#%d", item.ID)
+	iconLen := 2      // icon + space
 	separatorLen := 3 // " · "
-	titleWidth := max(width-len(idStr)-len(statusStr)-separatorLen-2, 10)
+	// Reserve space for status and a truncated progress message
+	maxProgressLen := 20
+	if len(progressMsg) > maxProgressLen {
+		progressMsg = progressMsg[:maxProgressLen-1] + ")"
+	}
+	fixedLen := iconLen + len(idStr) + separatorLen + len(statusStr) + len(progressMsg) + 2
+	titleWidth := max(width-fixedLen, 10)
 
 	// For selected rows, use SelectionText for all parts to ensure contrast
 	// For non-selected rows, use themed colors
-	var idStyle, titleStyle, sepStyle, statusStyle lipgloss.Style
+	var idStyle, titleStyle, sepStyle, statusStyle, msgStyle lipgloss.Style
 	if selected {
 		selText := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.SelectionText))
 		idStyle = selText
 		titleStyle = selText
 		sepStyle = selText
 		statusStyle = selText
+		msgStyle = selText
 	} else {
 		styles := m.theme.Styles()
 		idStyle = styles.MutedText
 		titleStyle = styles.Text
 		sepStyle = styles.FaintText
 		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(m.colorForStatus(item.Status)))
+		msgStyle = styles.MutedText
 	}
 
+	iconPart := bg.Render(icon, statusStyle)
 	idPart := bg.Render(idStr, idStyle)
 	titlePart := bg.Render(truncate(title, titleWidth), titleStyle)
 	sepPart := bg.Render(" · ", sepStyle)
 	statusPart := bg.Render(statusStr, statusStyle)
+	msgPart := ""
+	if progressMsg != "" {
+		msgPart = bg.Render(progressMsg, msgStyle)
+	}
 
-	return idPart + bg.Space() + titlePart + sepPart + statusPart
+	return iconPart + bg.Space() + idPart + bg.Space() + titlePart + sepPart + statusPart + msgPart
+}
+
+// stageIcon returns a Unicode icon for the given status.
+func stageIcon(status string) string {
+	status = strings.ToLower(strings.TrimSpace(status))
+	switch status {
+	case "pending":
+		return "~"
+	case "identifying", "episode_identifying":
+		return "*"
+	case "identified", "episode_identified":
+		return "*"
+	case "ripping":
+		return ">"
+	case "ripped":
+		return ">"
+	case "encoding":
+		return "%"
+	case "encoded":
+		return "%"
+	case "audio_analyzing":
+		return "#"
+	case "audio_analyzed":
+		return "#"
+	case "subtitling":
+		return "@"
+	case "subtitled":
+		return "@"
+	case "organizing":
+		return "+"
+	case "completed":
+		return "+"
+	case "failed":
+		return "!"
+	case "review":
+		return "?"
+	default:
+		return "-"
+	}
 }
 
 // colorForStatus returns the theme color for a given status.
