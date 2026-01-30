@@ -249,43 +249,33 @@ func (m Model) formatQueueRowContent(item spindle.QueueItem, width int, bgColor 
 	return iconPart + bg.Space() + idPart + bg.Space() + titlePart + sepPart + statusPart + msgPart
 }
 
-// stageIcon returns a Unicode icon for the given status.
+// stageIcons maps status to display icon.
+var stageIcons = map[string]string{
+	"pending":             "~",
+	"identifying":         "*",
+	"episode_identifying": "*",
+	"identified":          "*",
+	"episode_identified":  "*",
+	"ripping":             ">",
+	"ripped":              ">",
+	"encoding":            "%",
+	"encoded":             "%",
+	"audio_analyzing":     "#",
+	"audio_analyzed":      "#",
+	"subtitling":          "@",
+	"subtitled":           "@",
+	"organizing":          "+",
+	"completed":           "+",
+	"failed":              "!",
+	"review":              "?",
+}
+
+// stageIcon returns a display icon for the given status.
 func stageIcon(status string) string {
-	status = strings.ToLower(strings.TrimSpace(status))
-	switch status {
-	case "pending":
-		return "~"
-	case "identifying", "episode_identifying":
-		return "*"
-	case "identified", "episode_identified":
-		return "*"
-	case "ripping":
-		return ">"
-	case "ripped":
-		return ">"
-	case "encoding":
-		return "%"
-	case "encoded":
-		return "%"
-	case "audio_analyzing":
-		return "#"
-	case "audio_analyzed":
-		return "#"
-	case "subtitling":
-		return "@"
-	case "subtitled":
-		return "@"
-	case "organizing":
-		return "+"
-	case "completed":
-		return "+"
-	case "failed":
-		return "!"
-	case "review":
-		return "?"
-	default:
-		return "-"
+	if icon, ok := stageIcons[strings.ToLower(strings.TrimSpace(status))]; ok {
+		return icon
 	}
+	return "-"
 }
 
 // colorForStatus returns the theme color for a given status.
