@@ -21,6 +21,7 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 		{"planned", "Planning"},
 		{"identifying", "Identifying"},
 		{"ripped", "Ripping"},
+		{"audio_analyzed", "Analyzing"},
 		{"encoded", "Encoding"},
 		{"subtitled", "Subtitling"},
 		{"organizing", "Organizing"},
@@ -45,6 +46,7 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 
 	// For TV episodes, derive counts by inspecting episode stages
 	identifyingCount := 0
+	audioAnalyzedCount := 0
 	subtitledCount := 0
 	organizingCount := 0
 	if totals.Planned > 0 {
@@ -52,8 +54,13 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 			epStage := normalizeEpisodeStage(ep.Stage)
 			// Identifying is complete if we've moved past it
 			switch epStage {
-			case "identified", "ripping", "ripped", "encoding", "encoded", "subtitling", "subtitled", "organizing", "final":
+			case "identified", "ripping", "ripped", "audio_analyzing", "audio_analyzed", "encoding", "encoded", "subtitling", "subtitled", "organizing", "final":
 				identifyingCount++
+			}
+			// Audio analysis is complete if we've moved past it
+			switch epStage {
+			case "audio_analyzed", "encoding", "encoded", "subtitling", "subtitled", "organizing", "final":
+				audioAnalyzedCount++
 			}
 			// Subtitled includes both subtitled and final
 			if epStage == "subtitled" || epStage == "final" {
@@ -81,6 +88,8 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 				count = identifyingCount
 			case "ripped":
 				count = totals.Ripped
+			case "audio_analyzed":
+				count = audioAnalyzedCount
 			case "encoded":
 				count = totals.Encoded
 			case "subtitled":
@@ -180,6 +189,8 @@ func pipelineStageForStatus(status string) string {
 		return "identifying"
 	case "ripping", "ripped":
 		return "ripped"
+	case "audio_analyzing", "audio_analyzed":
+		return "audio_analyzed"
 	case "encoding", "encoded":
 		return "encoded"
 	case "subtitling", "subtitled":
@@ -204,13 +215,14 @@ func singleItemPipelineCount(stageID string, item spindle.QueueItem, activeStage
 
 	// Define stage order
 	stageOrder := map[string]int{
-		"planned":     0,
-		"identifying": 1,
-		"ripped":      2,
-		"encoded":     3,
-		"subtitled":   4,
-		"organizing":  5,
-		"final":       6,
+		"planned":        0,
+		"identifying":    1,
+		"ripped":         2,
+		"audio_analyzed": 3,
+		"encoded":        4,
+		"subtitled":      5,
+		"organizing":     6,
+		"final":          7,
 	}
 
 	activeIdx, activeOK := stageOrder[activeNorm]
@@ -245,6 +257,10 @@ func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem,
 		label = "RIPPING"
 		icon = "⏵"
 		color = styles.AccentText
+	case "audio_analyzing", "audio_analyzed":
+		label = "ANALYZING"
+		icon = "🔊"
+		color = styles.InfoText
 	case "encoding", "encoded":
 		label = "ENCODING"
 		icon = "⚙"
