@@ -146,6 +146,7 @@ func itemCurrentStage(item spindle.QueueItem) string {
 func isKnownPipelineStage(stage string) bool {
 	switch stage {
 	case "planned", "pending", "identifying", "identified", "ripping", "ripped",
+		"audio_analyzing", "audio_analyzed",
 		"encoding", "encoded", "subtitling", "subtitled",
 		"organizing", "final", "completed", "failed":
 		return true

@@ -249,6 +249,8 @@ func nightfoxTheme() Theme {
 			"identified":          "#71839b", // fg3
 			"ripping":             "#719cd6", // blue
 			"ripped":              "#71839b", // fg3
+			"audio_analyzing":     "#63cdcf", // cyan
+			"audio_analyzed":      "#71839b", // fg3
 			"episode_identifying": "#63cdcf", // cyan
 			"episode_identified":  "#71839b", // fg3
 			"encoding":            "#9d79d6", // magenta
@@ -299,6 +301,8 @@ func kanagawaTheme() Theme {
 			"identified":          "#727169", // fujiGray
 			"ripping":             "#7E9CD8", // crystalBlue
 			"ripped":              "#727169", // fujiGray
+			"audio_analyzing":     "#7FB4CA", // springBlue
+			"audio_analyzed":      "#727169", // fujiGray
 			"episode_identifying": "#7FB4CA", // springBlue
 			"episode_identified":  "#727169", // fujiGray
 			"encoding":            "#957FB8", // oniViolet
@@ -350,6 +354,8 @@ func slateTheme() Theme {
 			"identified":          "#0284c7", // sky-600 (completed)
 			"ripping":             "#0ea5e9", // sky-500 (active)
 			"ripped":              "#0369a1", // sky-700 (completed)
+			"audio_analyzing":     "#38bdf8", // sky-400 (active)
+			"audio_analyzed":      "#0369a1", // sky-700 (completed)
 			"episode_identifying": "#7dd3fc", // sky-300
 			"episode_identified":  "#0ea5e9", // sky-500
 			"encoding":            "#06b6d4", // cyan-500 (active)

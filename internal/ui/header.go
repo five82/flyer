@@ -19,6 +19,7 @@ const compactWidthThreshold = 100
 var processingStatuses = map[string]struct{}{
 	"identifying":         {},
 	"ripping":             {},
+	"audio_analyzing":     {},
 	"episode_identifying": {},
 	"episode_identified":  {},
 	"encoding":            {},
