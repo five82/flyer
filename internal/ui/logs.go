@@ -42,6 +42,7 @@ type logState struct {
 	// Cursors for incremental fetching
 	streamCursor uint64
 	itemCursor   uint64 // Changed to uint64 for /api/logs cursor
+	lastItemID   int64  // Track which item the cursor belongs to
 
 	// Filters (apply to both daemon and item logs via /api/logs)
 	filterLevel     string
@@ -679,12 +680,24 @@ func (m *Model) fetchItemLogs() tea.Cmd {
 	}
 	itemID := item.ID
 
+	// Reset cursor and buffer when switching to a different item
+	if itemID != m.logState.lastItemID {
+		m.logState.itemCursor = 0
+		m.logState.rawLines = nil
+		m.logState.lastItemID = itemID
+		m.clearLogSearch()
+		m.logState.contentVersion++
+	}
+
+	// Capture cursor for the closure
+	cursor := m.logState.itemCursor
+
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), logFetchTimeout)
 		defer cancel()
 
 		query := spindle.LogQuery{
-			Since:     m.logState.itemCursor,
+			Since:     cursor,
 			Limit:     logFetchLimit,
 			ItemID:    itemID,
 			Level:     m.logState.filterLevel,
@@ -692,7 +705,7 @@ func (m *Model) fetchItemLogs() tea.Cmd {
 			Lane:      m.logState.filterLane,
 			Request:   m.logState.filterRequest,
 		}
-		if m.logState.itemCursor == 0 {
+		if cursor == 0 {
 			query.Tail = true
 		}
 

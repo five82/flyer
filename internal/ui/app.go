@@ -290,12 +290,25 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.ViewDaemonLogs):
-		m.logState.mode = logSourceDaemon
+		if m.logState.mode != logSourceDaemon {
+			m.logState.mode = logSourceDaemon
+			m.logState.rawLines = nil
+			m.logState.streamCursor = 0
+			m.clearLogSearch()
+			m.logState.contentVersion++
+		}
 		m.currentView = ViewLogs
 		return m, m.refreshLogs()
 
 	case key.Matches(msg, m.keys.ViewItemLogs):
-		m.logState.mode = logSourceItem
+		if m.logState.mode != logSourceItem {
+			m.logState.mode = logSourceItem
+			m.logState.rawLines = nil
+			m.logState.itemCursor = 0
+			m.logState.lastItemID = 0 // Force item detection in fetchItemLogs
+			m.clearLogSearch()
+			m.logState.contentVersion++
+		}
 		m.currentView = ViewLogs
 		return m, m.refreshLogs()
 
