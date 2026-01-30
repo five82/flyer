@@ -173,80 +173,39 @@ func (m Model) renderQueueTable(width int, bgColor string) string {
 }
 
 // formatQueueRowContent formats a queue item row with inline colors.
-// Format: "Icon #ID Title · Status Progress% (message)"
+// Format: "Icon #ID Title" - status and progress details are shown in the Details pane.
 // When selected is true, uses SelectionText color for all text to ensure contrast.
 func (m Model) formatQueueRowContent(item spindle.QueueItem, width int, bgColor string, selected bool) string {
 	bg := NewBgStyle(bgColor)
 
 	title := composeTitle(item)
-	status := titleCase(effectiveQueueStage(item))
-
-	// Get stage icon
-	icon := stageIcon(item.Status)
-
-	// Build status parts like tview
-	statusParts := []string{status}
-	if isProcessingStatus(item.Status) && item.Progress.Percent > 0 {
-		statusParts = append(statusParts, fmt.Sprintf("%.0f%%", min(item.Progress.Percent, 100)))
-	}
-	if strings.TrimSpace(item.ErrorMessage) != "" {
-		statusParts = append(statusParts, "!")
-	}
-	if item.NeedsReview {
-		statusParts = append(statusParts, "R")
-	}
-	statusStr := strings.Join(statusParts, " ")
-
-	// Add truncated progress message for processing items
-	progressMsg := ""
-	if isProcessingStatus(item.Status) {
-		if msg := strings.TrimSpace(item.Progress.Message); msg != "" {
-			progressMsg = " (" + msg + ")"
-		}
-	}
-
-	// Calculate available title width (account for icon + space)
+	icon := stageIcon(effectiveQueueStage(item))
 	idStr := fmt.Sprintf("#%d", item.ID)
-	iconLen := 2      // icon + space
-	separatorLen := 3 // " · "
-	// Reserve space for status and a truncated progress message
-	maxProgressLen := 20
-	if len(progressMsg) > maxProgressLen {
-		progressMsg = progressMsg[:maxProgressLen-1] + ")"
-	}
-	fixedLen := iconLen + len(idStr) + separatorLen + len(statusStr) + len(progressMsg) + 2
+
+	// Calculate available title width: total - icon - space - id - space
+	fixedLen := 1 + 1 + len(idStr) + 1 // icon + space + id + space
 	titleWidth := max(width-fixedLen, 10)
 
 	// For selected rows, use SelectionText for all parts to ensure contrast
 	// For non-selected rows, use themed colors
-	var idStyle, titleStyle, sepStyle, statusStyle, msgStyle lipgloss.Style
+	var iconStyle, idStyle, titleStyle lipgloss.Style
 	if selected {
 		selText := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.SelectionText))
+		iconStyle = selText
 		idStyle = selText
 		titleStyle = selText
-		sepStyle = selText
-		statusStyle = selText
-		msgStyle = selText
 	} else {
 		styles := m.theme.Styles()
+		iconStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(m.colorForStatus(effectiveQueueStage(item))))
 		idStyle = styles.MutedText
 		titleStyle = styles.Text
-		sepStyle = styles.FaintText
-		statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(m.colorForStatus(item.Status)))
-		msgStyle = styles.MutedText
 	}
 
-	iconPart := bg.Render(icon, statusStyle)
+	iconPart := bg.Render(icon, iconStyle)
 	idPart := bg.Render(idStr, idStyle)
 	titlePart := bg.Render(truncate(title, titleWidth), titleStyle)
-	sepPart := bg.Render(" · ", sepStyle)
-	statusPart := bg.Render(statusStr, statusStyle)
-	msgPart := ""
-	if progressMsg != "" {
-		msgPart = bg.Render(progressMsg, msgStyle)
-	}
 
-	return iconPart + bg.Space() + idPart + bg.Space() + titlePart + sepPart + statusPart + msgPart
+	return iconPart + bg.Space() + idPart + bg.Space() + titlePart
 }
 
 // stageIcons maps status to display icon.
