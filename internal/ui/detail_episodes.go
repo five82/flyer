@@ -335,6 +335,9 @@ func (m *Model) episodeStageChip(stage string, failed bool, styles Styles, bg Bg
 	case "encoded":
 		color = m.theme.StatusColors["encoded"]
 		label = "ENCD"
+	case "audio_analyzed":
+		color = m.theme.StatusColors["audio_analyzed"]
+		label = "ANLZ"
 	case "ripped":
 		color = m.theme.StatusColors["ripped"]
 		label = "RIPD"

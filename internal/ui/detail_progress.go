@@ -21,8 +21,8 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 		{"planned", "Planning"},
 		{"identifying", "Identifying"},
 		{"ripped", "Ripping"},
-		{"audio_analyzed", "Analyzing"},
 		{"encoded", "Encoding"},
+		{"audio_analyzed", "Analyzing"},
 		{"subtitled", "Subtitling"},
 		{"organizing", "Organizing"},
 		{"final", "Completed"},
@@ -59,7 +59,7 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 			}
 			// Audio analysis is complete if we've moved past it
 			switch epStage {
-			case "audio_analyzed", "encoding", "encoded", "subtitling", "subtitled", "organizing", "final":
+			case "audio_analyzed", "subtitling", "subtitled", "organizing", "final":
 				audioAnalyzedCount++
 			}
 			// Subtitled includes both subtitled and final
@@ -218,8 +218,8 @@ func singleItemPipelineCount(stageID string, item spindle.QueueItem, activeStage
 		"planned":        0,
 		"identifying":    1,
 		"ripped":         2,
-		"audio_analyzed": 3,
-		"encoded":        4,
+		"encoded":        3,
+		"audio_analyzed": 4,
 		"subtitled":      5,
 		"organizing":     6,
 		"final":          7,
