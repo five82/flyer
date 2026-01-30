@@ -217,6 +217,7 @@ type EpisodeStatus struct {
 	OutputBasename            string         `json:"outputBasename"`
 	RippedPath                string         `json:"rippedPath"`
 	EncodedPath               string         `json:"encodedPath"`
+	SubtitledPath             string         `json:"subtitledPath,omitempty"`
 	FinalPath                 string         `json:"finalPath"`
 	SubtitleSource            string         `json:"subtitleSource"`
 	SubtitleLanguage          string         `json:"subtitleLanguage"`
@@ -259,15 +260,17 @@ type SubtitleGenerationStatus struct {
 
 // LogEvent represents a single log entry from /api/logs.
 type LogEvent struct {
-	Sequence  uint64            `json:"seq"`
-	Timestamp string            `json:"ts"`
-	Level     string            `json:"level"`
-	Message   string            `json:"msg"`
-	Component string            `json:"component"`
-	Stage     string            `json:"stage"`
-	ItemID    int64             `json:"item_id"`
-	Fields    map[string]string `json:"fields"`
-	Details   []DetailField     `json:"details"`
+	Sequence      uint64            `json:"seq"`
+	Timestamp     string            `json:"ts"`
+	Level         string            `json:"level"`
+	Message       string            `json:"msg"`
+	Component     string            `json:"component"`
+	Stage         string            `json:"stage"`
+	ItemID        int64             `json:"item_id"`
+	Lane          string            `json:"lane"`
+	CorrelationID string            `json:"correlation_id"`
+	Fields        map[string]string `json:"fields"`
+	Details       []DetailField     `json:"details"`
 }
 
 // ParsedTime returns the timestamp as time.Time when possible.
