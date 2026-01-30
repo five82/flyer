@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -72,26 +71,14 @@ func (m *Model) getSortedItems() []spindle.QueueItem {
 		if items[i].NeedsReview != items[j].NeedsReview {
 			return items[i].NeedsReview
 		}
-		// Then by status rank
+		// Then by status rank (active items bubble up)
 		pi := statusRank(items[i].Status)
 		pj := statusRank(items[j].Status)
 		if pi != pj {
 			return pi < pj
 		}
-		// Then by most recent timestamp
-		ti := mostRecentTimestamp(items[i])
-		tj := mostRecentTimestamp(items[j])
-		if ti.IsZero() && !tj.IsZero() {
-			return false
-		}
-		if tj.IsZero() && !ti.IsZero() {
-			return true
-		}
-		if !ti.Equal(tj) {
-			return ti.After(tj)
-		}
-		// Finally by ID (higher IDs are newer)
-		return items[i].ID > items[j].ID
+		// Then by ID ascending (matches Spindle's processing order)
+		return items[i].ID < items[j].ID
 	})
 
 	return items
@@ -393,22 +380,4 @@ func (m Model) getQueueTitle() string {
 
 	// Show "Queue (visible/total) - FilterName"
 	return fmt.Sprintf("Queue (%d/%d) %s", visible, total, m.filterLabel())
-}
-
-// mostRecentTimestamp returns the most recent timestamp for an item.
-func mostRecentTimestamp(item spindle.QueueItem) time.Time {
-	var latest time.Time
-
-	if t, err := time.Parse(time.RFC3339, item.UpdatedAt); err == nil {
-		if t.After(latest) {
-			latest = t
-		}
-	}
-	if t, err := time.Parse(time.RFC3339, item.CreatedAt); err == nil {
-		if t.After(latest) {
-			latest = t
-		}
-	}
-
-	return latest
 }
