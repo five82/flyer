@@ -69,8 +69,10 @@ func (m *Model) initLogState() {
 	ti.CharLimit = 100
 
 	m.logState = logState{
-		mode:   logSourceDaemon,
-		follow: true,
+		mode:           logSourceDaemon,
+		follow:         true,
+		contentVersion: 1,      // Start at 1 so first increment (to 2) differs from initial render (lastRendered=1)
+		filterLevel:    "info", // Default to INFO to hide DEBUG noise
 	}
 	m.logState.searchInput = ti
 }
