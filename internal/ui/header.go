@@ -34,7 +34,7 @@ func (m Model) renderHeader() string {
 	styles := m.theme.Styles().WithBackground(m.theme.Surface)
 	bg := NewBgStyle(m.theme.Surface)
 
-	if !m.snapshot.HasStatus {
+	if !m.snapshot.HasStatus || m.snapshot.IsOffline() {
 		return m.renderConnectingHeader(styles, bg)
 	}
 
