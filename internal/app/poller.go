@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/five82/flyer/internal/spindle"
@@ -45,16 +44,7 @@ func StartPoller(ctx context.Context, store *state.Store, client *spindle.Client
 			err := refresh(ctx, store, client)
 			if err != nil {
 				consecutiveFailures++
-				if consecutiveFailures == 1 {
-					log.Printf("poll failed: %v", err)
-				} else {
-					nextBackoff := calculateBackoff(consecutiveFailures, interval)
-					log.Printf("poll failed (%d consecutive, retry in %v): %v", consecutiveFailures, nextBackoff.Round(time.Second), err)
-				}
 			} else {
-				if consecutiveFailures > 0 {
-					log.Printf("poll recovered after %d failures", consecutiveFailures)
-				}
 				consecutiveFailures = 0
 			}
 
