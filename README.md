@@ -29,7 +29,8 @@ cd flyer && go build ./cmd/flyer
 
 - Go 1.25+
 - A running Spindle daemon (default API at `127.0.0.1:7487`)
-- Access to Spindle's config (`~/.config/spindle/config.toml`) and log directories
+- For local mode: access to Spindle's config (`~/.config/spindle/config.toml`)
+- For remote mode: API endpoint and token (see [Remote Access](#remote-access))
 
 ## Usage
 
@@ -40,6 +41,33 @@ flyer --poll 3                 # set refresh interval (default: 2s)
 ```
 
 Press `h` in the TUI for the help overlay, or see [docs/keybindings.md](docs/keybindings.md) for the full reference.
+
+## Remote Access
+
+Flyer can connect to a remote Spindle daemon using CLI flags or environment variables.
+
+**CLI flags:**
+
+```bash
+flyer --api http://server:7487 --token mysecrettoken
+```
+
+**Environment variables:**
+
+```bash
+export FLYER_API_ENDPOINT=http://server:7487
+export FLYER_API_TOKEN=mysecrettoken
+flyer
+```
+
+CLI flags take precedence over environment variables. When neither is set, Flyer auto-discovers the endpoint from the local Spindle config.
+
+**Precedence order:**
+1. CLI flags (`--api`, `--token`)
+2. Environment variables (`FLYER_API_ENDPOINT`, `FLYER_API_TOKEN`)
+3. Local Spindle config (`~/.config/spindle/config.toml`)
+
+See Spindle's [API documentation](https://github.com/five82/spindle/blob/main/docs/api.md) for server-side authentication setup.
 
 ## Development
 

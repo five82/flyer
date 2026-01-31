@@ -14,9 +14,11 @@ import (
 
 // Options configure the Flyer application.
 type Options struct {
-	ConfigPath string
-	PrefsPath  string // empty uses default ~/.config/flyer/prefs.toml
-	PollEvery  int    // seconds; zero uses default
+	ConfigPath  string
+	PrefsPath   string // empty uses default ~/.config/flyer/prefs.toml
+	PollEvery   int    // seconds; zero uses default
+	APIEndpoint string // override Spindle API endpoint (e.g., http://server:7487)
+	APIToken    string // bearer token for API authentication
 }
 
 // Run boots the Flyer TUI until the context is cancelled.
@@ -28,7 +30,19 @@ func Run(ctx context.Context, opts Options) error {
 
 	userPrefs := prefs.Load(opts.PrefsPath)
 
-	client, err := spindle.NewClient(cfg.APIBind)
+	// Determine API endpoint: explicit option > config file discovery
+	apiEndpoint := opts.APIEndpoint
+	if apiEndpoint == "" {
+		apiEndpoint = cfg.APIBind
+	}
+
+	// Build client options
+	var clientOpts []spindle.ClientOption
+	if opts.APIToken != "" {
+		clientOpts = append(clientOpts, spindle.WithToken(opts.APIToken))
+	}
+
+	client, err := spindle.NewClient(apiEndpoint, clientOpts...)
 	if err != nil {
 		return fmt.Errorf("init spindle client: %w", err)
 	}

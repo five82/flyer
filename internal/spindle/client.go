@@ -28,6 +28,17 @@ type Client struct {
 	baseURL   *url.URL
 	http      *http.Client
 	userAgent string
+	token     string
+}
+
+// ClientOption configures optional Client settings.
+type ClientOption func(*Client)
+
+// WithToken sets the bearer token for API authentication.
+func WithToken(token string) ClientOption {
+	return func(c *Client) {
+		c.token = strings.TrimSpace(token)
+	}
 }
 
 const (
@@ -37,18 +48,22 @@ const (
 )
 
 // NewClient builds a Client using the provided apiBind host:port value.
-func NewClient(apiBind string) (*Client, error) {
+func NewClient(apiBind string, opts ...ClientOption) (*Client, error) {
 	base, err := parseBaseURL(apiBind)
 	if err != nil {
 		return nil, err
 	}
-	return &Client{
+	c := &Client{
 		baseURL: base,
 		http: &http.Client{
 			Timeout: requestTimeout,
 		},
 		userAgent: defaultUserAgent,
-	}, nil
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c, nil
 }
 
 // FetchStatus retrieves daemon and workflow status information.
@@ -183,6 +198,9 @@ func (c *Client) doURL(ctx context.Context, method string, rel *url.URL, dest an
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.userAgent)
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
