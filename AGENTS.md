@@ -99,8 +99,8 @@ Flyer has two distinct log views with different purposes:
 
 | View | API Filter | Shows |
 |------|------------|-------|
-| Daemon logs (`2` key) | `daemon_only=1` | Daemon startup, workflow status, API events - logs without item association |
-| Item logs (`3` key) | `item=N` | Encoding progress, subtitles, organizing - logs for selected queue item |
+| Daemon logs (`l` key) | `daemon_only=1` | Daemon startup, workflow status, API events - logs without item association |
+| Item logs (`i` key) | `item=N` | Encoding progress, subtitles, organizing - logs for selected queue item |
 
 **Important:** These views are intentionally separate. Daemon logs show system-level activity (ItemID=0). Item logs show per-item work (ItemID=N). Do not mix them.
 

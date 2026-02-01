@@ -1,37 +1,54 @@
 # Keybindings
 
-Press `h` at any time to show the help overlay with all available keybindings.
+Press `h` or `?` at any time to show the help overlay with all available keybindings.
+
+## View Switching
+
+| Key | Action |
+|-----|--------|
+| `q` | Queue view |
+| `l` | Daemon logs |
+| `i` | Item logs (for selected queue item) |
+| `p` | Problems view |
+| `Tab` | Cycle views: Queue (table) → Queue (detail) → Item Logs → Problems |
+| `Shift+Tab` | Cycle views (reverse) |
+| `Esc` | Return to Queue view |
 
 ## Navigation
 
-| Key   | Action                                           |
-|-------|--------------------------------------------------|
-| `q`   | Switch to Queue view                             |
-| `d`   | Focus Detail pane for the selected item          |
-| `i`   | Switch to Item Log view for the selected item    |
-| `l`   | Cycle log sources (Daemon / Item) and switch to log view |
-| `Tab` | Cycle through views: Queue → Detail → Daemon Log → Item Log |
-| `ESC` | Return to Queue view                             |
+| Key | Action |
+|-----|--------|
+| `j` / `Down` | Move down |
+| `k` / `Up` | Move up |
+| `g` / `Home` | Go to top |
+| `G` / `End` | Go to bottom |
+| `Ctrl+d` | Half page down |
+| `Ctrl+u` | Half page up |
+| `PgDown` | Page down |
+| `PgUp` | Page up |
 
-## Search (Log view)
+## Queue View
 
-| Key | Action                        |
-|-----|-------------------------------|
-| `/` | Start a new search (supports regex) |
-| `n` | Jump to next match            |
-| `N` | Jump to previous match        |
+| Key | Action |
+|-----|--------|
+| `f` | Cycle filter (All → Failed → Review → Active) |
+| `t` | Toggle episode list visibility |
+| `P` | Toggle path details |
 
-## Log Controls (Log view)
+## Log View
 
-| Key     | Action                         |
-|---------|--------------------------------|
-| `Space` | Toggle auto-tail (pause/follow) |
-| `F`     | Filter daemon logs (component/lane/request) |
-| `End` / `G` | Jump to bottom and follow  |
+| Key | Action |
+|-----|--------|
+| `/` | Search logs (supports regex) |
+| `n` | Jump to next match |
+| `N` | Jump to previous match |
+| `Space` | Toggle follow mode (auto-scroll) |
+| `F` | Open log filters (level, component, lane, request) |
 
 ## General
 
-| Key         | Action          |
-|-------------|-----------------|
-| `h`         | Show help overlay |
-| `e` / `Ctrl+C` | Exit Flyer   |
+| Key | Action |
+|-----|--------|
+| `T` | Cycle theme (Nightfox → Kanagawa → Slate) |
+| `h` / `?` | Toggle help overlay |
+| `e` / `Ctrl+C` | Exit Flyer |

@@ -1,16 +1,18 @@
 # Flyer
 
-A terminal dashboard for monitoring [Spindle](https://github.com/five82/spindle), the disc-ripping daemon. Flyer polls the Spindle API and tails log files to display queue status, item details, and logs in a single TUI.
+A terminal dashboard for monitoring [Spindle](https://github.com/five82/spindle), the disc-ripping daemon. Flyer polls the Spindle API to display queue status, item details, and logs in a single TUI.
 
 Flyer is read-only by design—use the Spindle CLI for retries, clears, or other mutations.
 
 ## Features
 
-- **Queue view** — items grouped by status with live counts
+- **Queue view** — items grouped by status with live counts and filtering
 - **Detail view** — metadata, progress, errors, and review flags for the selected item
 - **Episode tracker** — per-episode stage summaries for TV box sets
 - **Log viewer** — daemon and per-item logs with syntax highlighting
+- **Problems view** — aggregated error logs across all items
 - **Search** — vim-style `/` search with `n`/`N` navigation and regex support
+- **Themes** — Nightfox, Kanagawa, and Slate color schemes
 
 ## Installation
 
@@ -41,6 +43,21 @@ flyer --poll 3                 # set refresh interval (default: 2s)
 ```
 
 Press `h` in the TUI for the help overlay, or see [docs/keybindings.md](docs/keybindings.md) for the full reference.
+
+### Key Bindings
+
+| Key | Action |
+|-----|--------|
+| `q` | Queue view |
+| `l` | Daemon logs |
+| `i` | Item logs |
+| `p` | Problems view |
+| `Tab` | Cycle views |
+| `f` | Cycle queue filter (All/Failed/Review/Active) |
+| `t` | Toggle episode list |
+| `T` | Cycle theme |
+| `/` | Search logs |
+| `h` | Help overlay |
 
 ## Remote Access
 
