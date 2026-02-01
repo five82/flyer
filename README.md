@@ -42,22 +42,7 @@ flyer --config /path/to/config.toml  # override config location
 flyer --poll 3                 # set refresh interval (default: 2s)
 ```
 
-Press `h` in the TUI for the help overlay, or see [docs/keybindings.md](docs/keybindings.md) for the full reference.
-
-### Key Bindings
-
-| Key | Action |
-|-----|--------|
-| `q` | Queue view |
-| `l` | Daemon logs |
-| `i` | Item logs |
-| `p` | Problems view |
-| `Tab` | Cycle views |
-| `f` | Cycle queue filter (All/Failed/Review/Active) |
-| `t` | Toggle episode list |
-| `T` | Cycle theme |
-| `/` | Search logs |
-| `h` | Help overlay |
+Press `h` in the TUI for keyboard shortcuts.
 
 ## Remote Access
 

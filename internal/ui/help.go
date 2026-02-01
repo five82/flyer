@@ -8,11 +8,13 @@ import (
 )
 
 // HelpModal displays keyboard shortcuts.
-type HelpModal struct{}
+type HelpModal struct {
+	keys keyMap
+}
 
 // NewHelpModal creates a new help modal.
-func NewHelpModal() *HelpModal {
-	return &HelpModal{}
+func NewHelpModal(keys keyMap) *HelpModal {
+	return &HelpModal{keys: keys}
 }
 
 // Update handles input for the help modal. Any key closes it.
@@ -27,48 +29,7 @@ func (h *HelpModal) Update(msg tea.Msg, keys keyMap) (Modal, tea.Cmd, bool) {
 func (h *HelpModal) View(theme Theme, width, height int) string {
 	styles := theme.Styles()
 
-	// Help content
-	sections := []helpSection{
-		{
-			title: "Navigation",
-			items: []helpItem{
-				{"tab", "Cycle views"},
-				{"q/l/i/p", "Queue/Daemon/Item/Problems"},
-				{"esc", "Return to queue"},
-				{"j/k", "Move up/down"},
-				{"g/G", "Go to top/bottom"},
-				{"ctrl+d/u", "Half page down/up"},
-			},
-		},
-		{
-			title: "Queue",
-			items: []helpItem{
-				{"f", "Cycle filter"},
-				{"t", "Toggle episodes"},
-				{"P", "Toggle paths"},
-			},
-		},
-		{
-			title: "Logs",
-			items: []helpItem{
-				{"Space", "Toggle follow mode"},
-				{"i", "Toggle item/daemon logs"},
-				{"/", "Search logs"},
-				{"n/N", "Next/prev match"},
-				{"F", "Log filters"},
-			},
-		},
-		{
-			title: "General",
-			items: []helpItem{
-				{"T", "Cycle theme"},
-				{"h/?", "Toggle help"},
-				{"e/ctrl+c", "Quit"},
-			},
-		},
-	}
-
-	// Build help content
+	// Build help content from keyMap
 	var b strings.Builder
 
 	// Title
@@ -78,19 +39,21 @@ func (h *HelpModal) View(theme Theme, width, height int) string {
 	b.WriteString(styles.FaintText.Render(strings.Repeat("─", 30)))
 	b.WriteString("\n\n")
 
+	sections := h.keys.HelpSections()
 	for i, section := range sections {
 		// Section title
-		b.WriteString(styles.AccentText.Bold(true).Render(section.title))
+		b.WriteString(styles.AccentText.Bold(true).Render(section.Title))
 		b.WriteString("\n")
 
-		for _, item := range section.items {
+		for _, binding := range section.Bindings {
+			help := binding.Help()
 			// Key
 			keyStyle := lipgloss.NewStyle().
 				Foreground(lipgloss.Color(theme.Warning)).
 				Width(12)
-			b.WriteString(keyStyle.Render(item.key))
+			b.WriteString(keyStyle.Render(help.Key))
 			// Description
-			b.WriteString(styles.Text.Render(item.desc))
+			b.WriteString(styles.Text.Render(help.Desc))
 			b.WriteString("\n")
 		}
 
@@ -125,14 +88,4 @@ func (h *HelpModal) View(theme Theme, width, height int) string {
 		lipgloss.WithWhitespaceChars(" "),
 		lipgloss.WithWhitespaceForeground(lipgloss.Color(theme.Background)),
 	)
-}
-
-type helpSection struct {
-	title string
-	items []helpItem
-}
-
-type helpItem struct {
-	key  string
-	desc string
 }

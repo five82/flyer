@@ -194,3 +194,34 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		{k.CycleTheme, k.Help, k.Quit},
 	}
 }
+
+// HelpSection groups related key bindings for display in the help modal.
+type HelpSection struct {
+	Title    string
+	Bindings []key.Binding
+}
+
+// HelpSections returns structured help data for the help modal.
+func (k keyMap) HelpSections() []HelpSection {
+	return []HelpSection{
+		{
+			Title: "Navigation",
+			Bindings: []key.Binding{
+				k.Tab, k.ViewQueue, k.ViewDaemonLogs, k.ViewItemLogs, k.ViewProblems,
+				k.Escape, k.Up, k.Down, k.Top, k.Bottom, k.HalfPageDown, k.HalfPageUp,
+			},
+		},
+		{
+			Title:    "Queue",
+			Bindings: []key.Binding{k.CycleFilter, k.ToggleEpisodes, k.TogglePaths},
+		},
+		{
+			Title:    "Logs",
+			Bindings: []key.Binding{k.ToggleFollow, k.Search, k.NextMatch, k.PrevMatch, k.LogFilters},
+		},
+		{
+			Title:    "General",
+			Bindings: []key.Binding{k.CycleTheme, k.Help, k.Quit},
+		},
+	}
+}

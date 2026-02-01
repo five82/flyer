@@ -258,7 +258,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case key.Matches(msg, m.keys.Help):
-		m.activeModal = NewHelpModal()
+		m.activeModal = NewHelpModal(m.keys)
 		return m, nil
 
 	case key.Matches(msg, m.keys.CycleTheme):
