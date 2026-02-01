@@ -105,8 +105,11 @@ func (m *Model) renderDetailContent(item spindle.QueueItem, width int, bgColor s
 func (m *Model) renderDetailHeader(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
 	now := time.Now()
 
-	// Title
+	// Title (with edition suffix for movies)
 	title := composeTitle(item)
+	if edition := extractEdition(item.Metadata); edition != "" {
+		title = title + " - " + edition
+	}
 	b.WriteString(bg.Render(title, styles.Text.Bold(true)))
 	b.WriteString("\n")
 
@@ -173,6 +176,16 @@ func (m *Model) renderStatusChips(item spindle.QueueItem, bg BgStyle) string {
 			Padding(0, 1).
 			Render(strings.ToUpper(preset))
 		chips = append(chips, presetChip)
+	}
+
+	// Edition badge (Director's Cut, Extended Edition, etc.)
+	if edition := extractEdition(item.Metadata); edition != "" {
+		editionChip := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(m.theme.Background)).
+			Background(lipgloss.Color(m.theme.Info)).
+			Padding(0, 1).
+			Render(strings.ToUpper(edition))
+		chips = append(chips, editionChip)
 	}
 
 	// Review badge

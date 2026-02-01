@@ -171,6 +171,23 @@ func detectMediaType(raw json.RawMessage) string {
 	return ""
 }
 
+// extractEdition extracts the edition label from metadata JSON.
+func extractEdition(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return ""
+	}
+	if v, ok := obj["edition"]; ok {
+		if s, ok := v.(string); ok {
+			return strings.TrimSpace(s)
+		}
+	}
+	return ""
+}
+
 // summarizeMetadata extracts displayable metadata rows from JSON.
 func summarizeMetadata(raw json.RawMessage) []metadataRow {
 	if len(raw) == 0 {
