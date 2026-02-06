@@ -239,6 +239,30 @@ func summarizeMetadata(raw json.RawMessage) []metadataRow {
 	return rows
 }
 
+// wrapText wraps a string to fit within the given width.
+// It breaks on word boundaries where possible. If width <= 0, returns the string as-is.
+func wrapText(s string, width int) string {
+	if width <= 0 || len(s) <= width {
+		return s
+	}
+
+	var lines []string
+	for len(s) > width {
+		// Find last space within width
+		breakAt := strings.LastIndex(s[:width], " ")
+		if breakAt <= 0 {
+			// No space found - break at width
+			breakAt = width
+		}
+		lines = append(lines, s[:breakAt])
+		s = strings.TrimLeft(s[breakAt:], " ")
+	}
+	if len(s) > 0 {
+		lines = append(lines, s)
+	}
+	return strings.Join(lines, "\n")
+}
+
 // prettifyMetaKey formats a metadata key for display.
 func prettifyMetaKey(key string) string {
 	key = strings.TrimSpace(key)

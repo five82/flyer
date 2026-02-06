@@ -72,10 +72,10 @@ func (m *Model) renderDetailContent(item spindle.QueueItem, width int, bgColor s
 	if width <= 0 {
 		width = m.width - 4
 	}
-	_ = width // TODO: use for text wrapping
 	var b strings.Builder
 	styles := m.theme.Styles().WithBackground(bgColor)
 	bg := NewBgStyle(bgColor)
+	m.detailWidth = width
 
 	// Header section
 	m.renderDetailHeader(&b, item, styles, bg)
@@ -241,13 +241,34 @@ func isRipCacheHitMessage(message string) bool {
 	return strings.Contains(msg, "rip cache hit")
 }
 
-// writeSection writes a section header.
+// writeSection writes a section header with a responsive separator.
 func (m *Model) writeSection(b *strings.Builder, title string, styles Styles, bg BgStyle) {
 	b.WriteString("\n")
 	b.WriteString(bg.Render(strings.ToUpper(title), styles.MutedText))
 	b.WriteString("\n")
-	b.WriteString(bg.Render(strings.Repeat("─", 38), styles.FaintText))
+	sepWidth := min(m.detailWidth-2, 38)
+	if sepWidth < 10 {
+		sepWidth = 10
+	}
+	b.WriteString(bg.Render(strings.Repeat("─", sepWidth), styles.FaintText))
 	b.WriteString("\n")
+}
+
+// writeWrappedField writes a labeled field with text wrapping for long values.
+// The label is rendered once, and continuation lines are indented to align with the value.
+func (m *Model) writeWrappedField(b *strings.Builder, label, value string, labelStyle, valueStyle lipgloss.Style, valueWidth int, bg BgStyle) {
+	wrapped := wrapText(value, valueWidth)
+	lines := strings.Split(wrapped, "\n")
+	for i, line := range lines {
+		if i == 0 {
+			b.WriteString(bg.Render(label, labelStyle))
+		} else {
+			// Indent continuation lines to align with value
+			b.WriteString(bg.Render(strings.Repeat(" ", len(label)), labelStyle))
+		}
+		b.WriteString(bg.Render(line, valueStyle))
+		b.WriteString("\n")
+	}
 }
 
 // determineDetailContext returns the appropriate context for rendering.
@@ -392,41 +413,35 @@ func (m *Model) renderFailedDetail(b *strings.Builder, item spindle.QueueItem, s
 	// Attention section (always show for failed)
 	m.writeSection(b, "Attention", styles, bg)
 
+	// Available width for value text (after label)
+	labelWidth := 10 // "Review:   " etc.
+	valueWidth := max(m.detailWidth-labelWidth, 20)
+
 	// Review reason
 	if item.NeedsReview {
 		reason := strings.TrimSpace(item.ReviewReason)
 		if reason == "" {
 			reason = "Needs operator review"
 		}
-		b.WriteString(bg.Render("Review:   ", styles.WarningText))
-		b.WriteString(bg.Render(reason, styles.Text))
-		b.WriteString("\n")
+		m.writeWrappedField(b, "Review:   ", reason, styles.WarningText, styles.Text, valueWidth, bg)
 	}
 
 	// Error message
 	if msg := strings.TrimSpace(item.ErrorMessage); msg != "" {
-		b.WriteString(bg.Render("Error:    ", styles.DangerText))
-		b.WriteString(bg.Render(msg, styles.Text))
-		b.WriteString("\n")
+		m.writeWrappedField(b, "Error:    ", msg, styles.DangerText, styles.Text, valueWidth, bg)
 	}
 
 	// Detailed error from Drapto
 	if item.Encoding != nil && item.Encoding.Error != nil {
 		err := item.Encoding.Error
 		if title := strings.TrimSpace(err.Title); title != "" && title != strings.TrimSpace(item.ErrorMessage) {
-			b.WriteString(bg.Render("Cause:    ", styles.MutedText))
-			b.WriteString(bg.Render(title, styles.Text))
-			b.WriteString("\n")
+			m.writeWrappedField(b, "Cause:    ", title, styles.MutedText, styles.Text, valueWidth, bg)
 		}
 		if ctx := strings.TrimSpace(err.Context); ctx != "" {
-			b.WriteString(bg.Render("Context:  ", styles.MutedText))
-			b.WriteString(bg.Render(ctx, styles.Text))
-			b.WriteString("\n")
+			m.writeWrappedField(b, "Context:  ", ctx, styles.MutedText, styles.Text, valueWidth, bg)
 		}
 		if suggestion := strings.TrimSpace(err.Suggestion); suggestion != "" {
-			b.WriteString(bg.Render("Suggest:  ", styles.MutedText))
-			b.WriteString(bg.Render(suggestion, styles.SuccessText))
-			b.WriteString("\n")
+			m.writeWrappedField(b, "Suggest:  ", suggestion, styles.MutedText, styles.SuccessText, valueWidth, bg)
 		}
 	}
 
@@ -476,13 +491,9 @@ func (m *Model) renderFailedDetail(b *strings.Builder, item spindle.QueueItem, s
 	// Paths section (always expanded for debugging)
 	m.writeSection(b, "Paths", styles, bg)
 	if item.SourcePath != "" {
-		b.WriteString(bg.Render("Source:   ", styles.MutedText))
-		b.WriteString(bg.Render(item.SourcePath, styles.Text))
-		b.WriteString("\n")
+		m.writeWrappedField(b, "Source:   ", item.SourcePath, styles.MutedText, styles.Text, valueWidth, bg)
 	}
 	if item.ItemLogPath != "" {
-		b.WriteString(bg.Render("Log:      ", styles.MutedText))
-		b.WriteString(bg.Render(item.ItemLogPath, styles.Text))
-		b.WriteString("\n")
+		m.writeWrappedField(b, "Log:      ", item.ItemLogPath, styles.MutedText, styles.Text, valueWidth, bg)
 	}
 }

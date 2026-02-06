@@ -316,12 +316,16 @@ func classifyConnectionError(err error) string {
 	}
 }
 
-// renderCommandBar renders the command hints bar (matching tview cmdBar).
+// renderCommandBar renders the command bar with view tabs and context-specific hints.
 func (m Model) renderCommandBar() string {
 	// Command bar uses Surface background
 	styles := m.theme.Styles().WithBackground(m.theme.Surface)
 	bg := NewBgStyle(m.theme.Surface)
 
+	// --- View tabs ---
+	tabs := m.renderViewTabs(styles, bg)
+
+	// --- Context commands ---
 	type cmd struct{ key, desc string }
 	var commands []cmd
 
@@ -336,55 +340,78 @@ func (m Model) renderCommandBar() string {
 			{"/", "Search"},
 			{"n/N", "Next/Prev"},
 			{"F", "Filters"},
-			{"l", "Daemon"},
-			{"i", "Item"},
-			{"q", "Queue"},
-			{"?", "More"},
 		}
 	case ViewProblems:
 		commands = []cmd{
-			{"j/k", "Navigate"},
-			{"l", "Daemon"},
-			{"i", "Item"},
-			{"q", "Queue"},
-			{"Tab", "Focus"},
-			{"?", "More"},
+			{"j/k", "Nav"},
 		}
 	default: // ViewQueue
 		commands = []cmd{
-			{"f", m.filterLabel()}, // Shows current filter state
-			{"t", "Episodes"},
-			{"P", "Paths"},
-			{"j/k", "Navigate"},
-			{"l", "Daemon"},
-			{"i", "Item"},
-			{"p", "Problems"},
+			{"f", m.filterLabel()},
+			{"t", "Ep"},
+			{"P", "Path"},
+			{"j/k", "Nav"},
 			{"Tab", "Focus"},
-			{"?", "More"},
 		}
 	}
 
 	colon := bg.Sep(":")
-	sep := bg.Spaces(2)
+	cmdSep := bg.Spaces(2)
 
-	segments := make([]string, 0, len(commands))
+	segments := make([]string, 0, len(commands)+2)
 	for _, c := range commands {
 		segments = append(segments,
 			bg.Render(c.key, styles.AccentText)+colon+bg.Render(c.desc, styles.MutedText))
 	}
 
-	// Show active log search pattern (matching tview)
+	// Show active log search pattern
 	if m.currentView == ViewLogs && m.logState.searchQuery != "" {
 		pattern := truncate(m.logState.searchQuery, 18)
 		segments = append(segments,
 			bg.Render("/"+pattern, styles.AccentText))
 	}
 
-	// Add theme indicator
+	// Help and theme
+	segments = append(segments,
+		bg.Render("?", styles.AccentText)+colon+bg.Render("Help", styles.MutedText))
 	segments = append(segments,
 		bg.Render("T", styles.AccentText)+colon+bg.Render(m.theme.Name, styles.FaintText))
 
-	return styles.Header.Width(m.width).Render(strings.Join(segments, sep))
+	cmdBar := strings.Join(segments, cmdSep)
+
+	// Combine: tabs │ commands
+	divider := bg.Space() + bg.Render("│", styles.FaintText) + bg.Space()
+	content := tabs + divider + cmdBar
+
+	return styles.Header.Width(m.width).Render(content)
+}
+
+// renderViewTabs renders the view tab indicators showing which view is active.
+func (m Model) renderViewTabs(styles Styles, bg BgStyle) string {
+	type viewTab struct {
+		name string
+		view View
+	}
+	tabs := []viewTab{
+		{"Queue", ViewQueue},
+		{"Logs", ViewLogs},
+		{"Problems", ViewProblems},
+	}
+
+	tabSep := bg.Spaces(2)
+	rendered := make([]string, 0, len(tabs))
+
+	for _, tab := range tabs {
+		if tab.view == m.currentView {
+			rendered = append(rendered,
+				bg.Render("●", styles.AccentText)+bg.Space()+bg.Render(tab.name, styles.AccentText.Bold(true)))
+		} else {
+			rendered = append(rendered,
+				bg.Render(tab.name, styles.FaintText))
+		}
+	}
+
+	return strings.Join(rendered, tabSep)
 }
 
 // maxLen returns compactLen if compact is true, otherwise normalLen.

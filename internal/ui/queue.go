@@ -31,15 +31,19 @@ func (m *Model) updateQueueTable() {
 	if selectedID > 0 {
 		for i, item := range items {
 			if item.ID == selectedID {
+				if m.selectedRow != i {
+					m.detailScroll = 0 // Reset scroll on selection change
+				}
 				m.selectedRow = i
 				return
 			}
 		}
 	}
 
-	// Item not found - clamp to valid range
+	// Item not found - clamp to valid range and reset scroll
 	if m.selectedRow >= itemCount {
 		m.selectedRow = itemCount - 1
+		m.detailScroll = 0
 	}
 }
 
@@ -94,6 +98,15 @@ func (m Model) renderQueue() string {
 		return lipgloss.Place(m.width, contentHeight, lipgloss.Center, lipgloss.Center, emptyMsg)
 	}
 
+	// Check if filter results in empty list
+	filteredItems := m.getSortedItems()
+	if len(filteredItems) == 0 && m.filterMode != FilterAll {
+		msg := m.emptyFilterMessage()
+		emptyMsg := styles.MutedText.Render(msg) + "\n" +
+			styles.FaintText.Render("Press f to change filter")
+		return lipgloss.Place(m.width, contentHeight, lipgloss.Center, lipgloss.Center, emptyMsg)
+	}
+
 	// Calculate pane dimensions (responsive like tview)
 	// Extra wide (>= 160): 30% table, 70% detail
 	// Default: 40% table, 60% detail
@@ -134,6 +147,10 @@ func (m Model) renderQueue() string {
 			Background(lipgloss.Color(detailBg)).
 			Render("Select an item")
 	}
+
+	// Apply scroll offset to detail content
+	detailContent = m.applyDetailScroll(detailContent, contentHeight-2)
+
 	detailPane := m.renderBox(detailTitle, detailContent, detailWidth, contentHeight, detailFocused)
 
 	// Join side-by-side
@@ -173,7 +190,7 @@ func (m Model) renderQueueTable(width int, bgColor string) string {
 }
 
 // formatQueueRowContent formats a queue item row with inline colors.
-// Format: "Icon #ID Title" - status and progress details are shown in the Details pane.
+// Format: "Icon #ID Title         62%" for active items, "Icon #ID Title" for others.
 // When selected is true, uses SelectionText color for all text to ensure contrast.
 func (m Model) formatQueueRowContent(item spindle.QueueItem, width int, bgColor string, selected bool) string {
 	bg := NewBgStyle(bgColor)
@@ -182,30 +199,71 @@ func (m Model) formatQueueRowContent(item spindle.QueueItem, width int, bgColor 
 	icon := stageIcon(effectiveQueueStage(item))
 	idStr := fmt.Sprintf("#%d", item.ID)
 
-	// Calculate available title width: total - icon - space - id - space
-	fixedLen := 1 + 1 + len(idStr) + 1 // icon + space + id + space
+	// Check for inline progress
+	progressStr := m.formatInlineProgress(item)
+	progressLen := len(progressStr)
+	if progressLen > 0 {
+		progressLen += 1 // account for leading space
+	}
+
+	// Calculate available title width: total - icon - space - id - space - progress
+	fixedLen := 1 + 1 + len(idStr) + 1 + progressLen // icon + space + id + space + progress
 	titleWidth := max(width-fixedLen, 10)
 
 	// For selected rows, use SelectionText for all parts to ensure contrast
 	// For non-selected rows, use themed colors
-	var iconStyle, idStyle, titleStyle lipgloss.Style
+	var iconStyle, idStyle, titleStyle, progressStyle lipgloss.Style
 	if selected {
 		selText := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.SelectionText))
 		iconStyle = selText
 		idStyle = selText
 		titleStyle = selText
+		progressStyle = selText
 	} else {
 		styles := m.theme.Styles()
 		iconStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(m.colorForStatus(effectiveQueueStage(item))))
 		idStyle = styles.MutedText
 		titleStyle = styles.Text
+		progressStyle = styles.AccentText
 	}
 
 	iconPart := bg.Render(icon, iconStyle)
 	idPart := bg.Render(idStr, idStyle)
 	titlePart := bg.Render(truncate(title, titleWidth), titleStyle)
 
-	return iconPart + bg.Space() + idPart + bg.Space() + titlePart
+	row := iconPart + bg.Space() + idPart + bg.Space() + titlePart
+
+	if progressStr != "" {
+		row += bg.Space() + bg.Render(progressStr, progressStyle)
+	}
+
+	return row
+}
+
+// formatInlineProgress returns a compact progress string for active items.
+// Returns empty string for items without meaningful progress.
+func (m Model) formatInlineProgress(item spindle.QueueItem) string {
+	if !isProcessingStatus(item.Status) {
+		return ""
+	}
+
+	// Use encoding progress if available (most accurate)
+	if enc := item.Encoding; enc != nil && strings.EqualFold(item.Status, "encoding") {
+		percent := enc.Percent
+		if percent <= 0 && enc.TotalFrames > 0 && enc.CurrentFrame > 0 {
+			percent = (float64(enc.CurrentFrame) / float64(enc.TotalFrames)) * 100
+		}
+		if percent > 0 {
+			return fmt.Sprintf("%3.0f%%", percent)
+		}
+	}
+
+	// Fall back to general progress
+	if item.Progress.Percent > 0 && item.Progress.Percent < 100 {
+		return fmt.Sprintf("%3.0f%%", item.Progress.Percent)
+	}
+
+	return ""
 }
 
 // stageIcons maps status to display icon.
@@ -379,6 +437,43 @@ func titleCase(s string) string {
 		}
 	}
 	return strings.Join(words, " ")
+}
+
+// emptyFilterMessage returns a contextual message when a filter matches no items.
+func (m Model) emptyFilterMessage() string {
+	switch m.filterMode {
+	case FilterFailed:
+		return "No failed items"
+	case FilterReview:
+		return "No items need review"
+	case FilterProcessing:
+		return "No active items"
+	default:
+		return "No items match filter"
+	}
+}
+
+// applyDetailScroll applies scroll offset to the detail content string.
+// It skips the first m.detailScroll lines of content, clamping to available lines.
+func (m *Model) applyDetailScroll(content string, viewHeight int) string {
+	lines := strings.Split(content, "\n")
+	totalLines := len(lines)
+
+	// Clamp scroll to valid range
+	maxScroll := max(totalLines-viewHeight, 0)
+	if m.detailScroll > maxScroll {
+		m.detailScroll = maxScroll
+	}
+	if m.detailScroll < 0 {
+		m.detailScroll = 0
+	}
+
+	// Apply offset
+	if m.detailScroll > 0 && m.detailScroll < totalLines {
+		lines = lines[m.detailScroll:]
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // getQueueTitle returns the queue pane title with optional filter indicator.

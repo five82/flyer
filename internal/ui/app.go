@@ -85,6 +85,8 @@ type Model struct {
 	// Detail state
 	detailViewport viewport.Model
 	detailState    detailState
+	detailScroll   int // scroll offset for split-pane detail
+	detailWidth    int // current detail pane content width for wrapping
 
 	// Log state
 	logViewport viewport.Model
@@ -450,6 +452,15 @@ func (m Model) handleQueueKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// When detail pane is focused, scroll the detail content
+	if m.focusedPane == 1 {
+		return m.handleDetailScroll(msg)
+	}
+
+	halfPage := max((m.height-4)/2, 1)
+
+	prevRow := m.selectedRow
+
 	switch {
 	case key.Matches(msg, m.keys.Down):
 		if m.selectedRow < itemCount-1 {
@@ -463,6 +474,39 @@ func (m Model) handleQueueKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.selectedRow = 0
 	case key.Matches(msg, m.keys.Bottom):
 		m.selectedRow = itemCount - 1
+	case key.Matches(msg, m.keys.HalfPageDown):
+		m.selectedRow = min(m.selectedRow+halfPage, itemCount-1)
+	case key.Matches(msg, m.keys.HalfPageUp):
+		m.selectedRow = max(m.selectedRow-halfPage, 0)
+	}
+
+	// Reset detail scroll when selecting a different item
+	if m.selectedRow != prevRow {
+		m.detailScroll = 0
+	}
+
+	return m, nil
+}
+
+// handleDetailScroll processes scroll keys for the split-pane detail viewport.
+func (m Model) handleDetailScroll(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	halfPage := max((m.height-4)/2, 1)
+
+	switch {
+	case key.Matches(msg, m.keys.Down):
+		m.detailScroll++
+	case key.Matches(msg, m.keys.Up):
+		if m.detailScroll > 0 {
+			m.detailScroll--
+		}
+	case key.Matches(msg, m.keys.Top):
+		m.detailScroll = 0
+	case key.Matches(msg, m.keys.Bottom):
+		m.detailScroll = max(m.detailScroll+1000, 0) // will be clamped during render
+	case key.Matches(msg, m.keys.HalfPageDown):
+		m.detailScroll += halfPage
+	case key.Matches(msg, m.keys.HalfPageUp):
+		m.detailScroll = max(m.detailScroll-halfPage, 0)
 	}
 
 	return m, nil
