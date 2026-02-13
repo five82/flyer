@@ -29,7 +29,7 @@ cd flyer && go build ./cmd/flyer
 
 ## Requirements
 
-- Go 1.25+
+- Go 1.26+
 - A running Spindle daemon (default API at `127.0.0.1:7487`)
 - For local mode: access to Spindle's config (`~/.config/spindle/config.toml`)
 - For remote mode: API endpoint and token (see [Remote Access](#remote-access))
