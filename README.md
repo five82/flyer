@@ -1,8 +1,17 @@
-# Flyer
+# flyer
 
 A terminal dashboard for monitoring [Spindle](https://github.com/five82/spindle), the disc-ripping daemon. Flyer polls the Spindle API to display queue status, item details, and logs in a single TUI.
 
 Flyer is read-only by design—use the Spindle CLI for retries, clears, or other mutations.
+
+## Expectations
+
+This repository is shared as is. Flyer is a personal tool I built for my own workflow, hardware, and preferences. I've open sourced it because I believe in sharing but I'm not an active maintainer.
+
+- Personal-first: Things will change and break as I iterate.
+- Best-effort only: This is a part-time hobby project and I work on it when I'm able to. I may be slow to respond to questions or may not respond at all.
+- PRs: Pull requests are welcome if they align with the project's goals but I may be slow to review them or may not accept changes that don't fit my own use case.
+- “Vibe coded”: I’m not a Go developer and this project started as (and remains) a vibe-coding experiment. Expect rough edges.
 
 ## Features
 
