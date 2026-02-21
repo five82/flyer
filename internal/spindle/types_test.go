@@ -21,21 +21,6 @@ func TestEncodingHelpers(t *testing.T) {
 	}
 }
 
-func TestQueueItemHelpers(t *testing.T) {
-	item := QueueItem{DraptoPreset: " default "}
-	if item.DraptoPresetLabel() != "Default" {
-		t.Fatalf("DraptoPresetLabel = %q, want Default", item.DraptoPresetLabel())
-	}
-	item.DraptoPreset = "GrAiN"
-	if item.DraptoPresetLabel() != "Grain" {
-		t.Fatalf("DraptoPresetLabel = %q, want Grain", item.DraptoPresetLabel())
-	}
-	item.DraptoPreset = "custom"
-	if item.DraptoPresetLabel() != "Custom" {
-		t.Fatalf("DraptoPresetLabel = %q, want Custom", item.DraptoPresetLabel())
-	}
-}
-
 func TestParseTimeLayouts(t *testing.T) {
 	rfc := "2025-12-13T10:11:12Z"
 	if parseTime(rfc).IsZero() {

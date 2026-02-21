@@ -168,16 +168,6 @@ func (m *Model) renderStatusChips(item spindle.QueueItem, bg BgStyle) string {
 		chips = append(chips, laneChip)
 	}
 
-	// Drapto preset badge (GRAIN, etc.)
-	if preset := item.DraptoPresetLabel(); preset != "" {
-		presetChip := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(m.theme.Background)).
-			Background(lipgloss.Color(m.theme.StatusColors["pending"])).
-			Padding(0, 1).
-			Render(strings.ToUpper(preset))
-		chips = append(chips, presetChip)
-	}
-
 	// Edition badge (Director's Cut, Extended Edition, etc.)
 	if edition := extractEdition(item.Metadata); edition != "" {
 		editionChip := lipgloss.NewStyle().

@@ -57,7 +57,6 @@ type QueueItem struct {
 	SourcePath              string                    `json:"sourcePath"`
 	Status                  string                    `json:"status"`
 	ProcessingLane          string                    `json:"processingLane"`
-	DraptoPreset            string                    `json:"draptoPresetProfile,omitempty"`
 	Progress                QueueProgress             `json:"progress"`
 	Encoding                *EncodingStatus           `json:"encoding,omitempty"`
 	ErrorMessage            string                    `json:"errorMessage"`
@@ -348,25 +347,6 @@ func (q QueueItem) ParsedCreatedAt() time.Time {
 // ParsedUpdatedAt returns the parsed UpdatedAt timestamp.
 func (q QueueItem) ParsedUpdatedAt() time.Time {
 	return parseTime(q.UpdatedAt)
-}
-
-// DraptoPresetLabel formats the Drapto preset profile for display.
-func (q QueueItem) DraptoPresetLabel() string {
-	value := strings.TrimSpace(q.DraptoPreset)
-	if value == "" {
-		return ""
-	}
-	lower := strings.ToLower(value)
-	switch lower {
-	case "default":
-		return "Default"
-	case "clean":
-		return "Clean"
-	case "grain":
-		return "Grain"
-	default:
-		return strings.ToUpper(lower[:1]) + lower[1:]
-	}
 }
 
 // EpisodeSnapshot normalizes per-episode data for the UI, deriving it from the
