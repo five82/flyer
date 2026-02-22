@@ -94,7 +94,7 @@ func (m Model) renderQueue() string {
 		return lipgloss.Place(m.width, contentHeight, lipgloss.Center, lipgloss.Center, emptyMsg)
 	}
 
-	// Calculate pane dimensions (responsive like tview)
+	// Calculate pane dimensions (responsive)
 	// Extra wide (>= 160): 30% table, 70% detail
 	// Default: 40% table, 60% detail
 	var tableWidth, detailWidth int

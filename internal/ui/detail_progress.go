@@ -10,8 +10,8 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
-// renderPipelineStatus renders the pipeline progress visualization.
-// Matches tview's stage names and logic exactly, including episode counts for TV shows.
+// renderPipelineStatus renders the pipeline progress visualization,
+// including episode counts for TV shows.
 func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
 	// Stage names use progressive form (-ing)
 	stages := []struct {

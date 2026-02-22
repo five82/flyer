@@ -355,7 +355,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// toggleFocus cycles focus forward through views (matching tview).
+// toggleFocus cycles focus forward through views.
 // Cycle: Queue(table) → Queue(detail) → Item Logs → Problems → Queue(table)
 func (m *Model) toggleFocus() {
 	switch m.currentView {
@@ -451,7 +451,7 @@ func (m *Model) updateStageTracking() {
 	}
 }
 
-// toggleFocusReverse cycles focus backward through views (matching tview).
+// toggleFocusReverse cycles focus backward through views.
 func (m *Model) toggleFocusReverse() {
 	switch m.currentView {
 	case ViewQueue:
@@ -537,7 +537,7 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// renderMain renders the full UI (matching tview layout).
+// renderMain renders the full UI.
 func (m Model) renderMain() string {
 	var b strings.Builder
 

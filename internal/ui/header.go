@@ -60,7 +60,7 @@ func (m Model) renderConnectingHeader(styles Styles, bg BgStyle) string {
 		}
 		errorMsg := classifyConnectionError(m.snapshot.LastError)
 
-		// Build parts similar to tview: error + retrying + timestamp + log path
+		// Build parts: error + retrying + timestamp + log path
 		parts := []string{
 			bg.Render("flyer", styles.Logo),
 			bg.Render("SPINDLE "+errorMsg, styles.DangerText.Bold(true)),
@@ -316,7 +316,7 @@ func classifyConnectionError(err error) string {
 	}
 }
 
-// renderCommandBar renders the command hints bar (matching tview cmdBar).
+// renderCommandBar renders the command hints bar.
 func (m Model) renderCommandBar() string {
 	// Command bar uses Surface background
 	styles := m.theme.Styles().WithBackground(m.theme.Surface)
@@ -373,7 +373,7 @@ func (m Model) renderCommandBar() string {
 			bg.Render(c.key, styles.AccentText)+colon+bg.Render(c.desc, styles.MutedText))
 	}
 
-	// Show active log search pattern (matching tview)
+	// Show active log search pattern
 	if m.currentView == ViewLogs && m.logState.searchQuery != "" {
 		pattern := truncate(m.logState.searchQuery, 18)
 		segments = append(segments,

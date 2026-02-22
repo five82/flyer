@@ -5,26 +5,25 @@ import (
 )
 
 // Theme defines colors and styles for the UI.
-// Colors match tview theme exactly for visual parity.
 type Theme struct {
 	Name string
 
-	// Base colors (from tview Base palette)
+	// Base colors
 	Background string // Outermost background
 	Surface    string // Main content panels
 	SurfaceAlt string // Secondary surfaces
 	FocusBg    string // Focus/active states
 
-	// Table colors (from tview Table palette)
+	// Table colors
 	SelectionBg   string // Selected row background
 	SelectionText string // Selected row text
 
-	// Border colors (from tview Border palette)
+	// Border colors
 	Border      string // Default border
 	BorderMuted string // Muted border
 	BorderFocus string // Focus border
 
-	// Text colors (from tview Text palette)
+	// Text colors
 	Text    string
 	Muted   string
 	Faint   string
@@ -312,11 +311,11 @@ func slateTheme() Theme {
 		SurfaceAlt: "#1e293b", // slate-800
 		FocusBg:    "#283548", // between slate-800 and slate-700
 
-		// Table colors (matching tview Table palette exactly)
+		// Table colors
 		SelectionBg:   "#0284c7", // sky-600
 		SelectionText: "#f8fafc", // slate-50
 
-		// Border colors (matching tview Border palette)
+		// Border colors
 		Border:      "#334155", // slate-700
 		BorderMuted: "#1e293b", // slate-800
 		BorderFocus: "#38bdf8", // sky-400

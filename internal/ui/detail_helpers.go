@@ -89,7 +89,7 @@ func humanizeDuration(d time.Duration) string {
 	return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 }
 
-// humanizeDurationLong formats duration as "Xh Ym" (matching tview's format).
+// humanizeDurationLong formats duration as "Xh Ym".
 func humanizeDurationLong(d time.Duration) string {
 	if d <= 0 {
 		return ""
