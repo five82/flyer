@@ -25,7 +25,7 @@ const (
 // problemsState holds state for the problems view.
 type problemsState struct {
 	logLines    []string
-	logCursor   map[string]uint64
+	logCursor   uint64
 	lastItemID  int64
 	lastRefresh time.Time
 
@@ -38,9 +38,7 @@ type problemsState struct {
 func (m *Model) initProblemsViewport() {
 	m.problemsViewport = viewport.New(m.width-4, m.height-6)
 	m.problemsViewport.Style = lipgloss.NewStyle()
-	m.problemsState = problemsState{
-		logCursor: make(map[string]uint64),
-	}
+	m.problemsState = problemsState{}
 }
 
 // updateProblemsViewport updates the problems viewport with current content.
@@ -327,7 +325,7 @@ func (m *Model) refreshProblemsLogs() tea.Cmd {
 	// Clear logs if item changed
 	if item.ID != m.problemsState.lastItemID {
 		m.problemsState.logLines = nil
-		m.problemsState.logCursor = make(map[string]uint64)
+		m.problemsState.logCursor = 0
 		m.problemsState.lastItemID = item.ID
 	}
 
@@ -338,7 +336,7 @@ func (m *Model) refreshProblemsLogs() tea.Cmd {
 	m.problemsState.lastRefresh = time.Now()
 
 	itemID := item.ID
-	cursor := m.problemsState.logCursor[fmt.Sprintf("%d", itemID)]
+	cursor := m.problemsState.logCursor
 
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), problemsFetchTimeout)
@@ -388,7 +386,7 @@ func (m *Model) handleProblemsLogBatch(msg problemsLogBatchMsg) {
 	}
 
 	// Update cursor for this item
-	m.problemsState.logCursor[fmt.Sprintf("%d", msg.itemID)] = msg.next
+	m.problemsState.logCursor = msg.next
 
 	// Format events to lines
 	newLines := formatLogEvents(msg.events)

@@ -79,7 +79,7 @@ func (m *Model) isEpisodesCollapsed(itemID int64) bool {
 // formatEpisodeSummaryEnhanced formats the episode totals with failed count.
 func (m *Model) formatEpisodeSummaryEnhanced(episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, styles Styles, bg BgStyle) string {
 	failedCount := len(spindle.FilterFailed(episodes))
-	parts := []string{}
+	var parts []string
 
 	if failedCount > 0 {
 		parts = append(parts, bg.Render(fmt.Sprintf("%d failed", failedCount), styles.DangerText))
@@ -161,7 +161,7 @@ func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, ep spindle.EpisodeS
 // describeEpisodeWithExtras returns title and extra info (runtime, language, source).
 func (m *Model) describeEpisodeWithExtras(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) (string, []string, *spindle.RipSpecTitleInfo) {
 	title := episodeDisplayTitle(ep)
-	extras := []string{}
+	var extras []string
 
 	// Runtime
 	if runtime := formatRuntime(ep.RuntimeSeconds); runtime != "" {
@@ -376,7 +376,7 @@ func episodeDisplayTitle(ep spindle.EpisodeStatus) string {
 // describeEpisodeTrackInfo returns track info for an episode.
 func (m *Model) describeEpisodeTrackInfo(ep *spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) string {
 	info := m.lookupRipTitleInfo(ep, titles, keyLookup)
-	parts := []string{}
+	var parts []string
 	if info != nil {
 		if info.ID > 0 {
 			parts = append(parts, fmt.Sprintf("Title %02d", info.ID))
@@ -403,7 +403,7 @@ func (m *Model) lookupRipTitleInfo(ep *spindle.EpisodeStatus, titles map[int]*sp
 
 // describeEpisodeFileStates returns file state info for an episode.
 func (m *Model) describeEpisodeFileStates(ep *spindle.EpisodeStatus) string {
-	parts := []string{}
+	var parts []string
 	if ep.RippedPath != "" {
 		parts = append(parts, "[+]Ripped")
 	}
@@ -418,7 +418,7 @@ func (m *Model) describeEpisodeFileStates(ep *spindle.EpisodeStatus) string {
 
 // describeItemFileStates returns file state info for an item (movie).
 func (m *Model) describeItemFileStates(item spindle.QueueItem) string {
-	parts := []string{}
+	var parts []string
 	if item.RippedFile != "" {
 		parts = append(parts, "Ripped")
 	}

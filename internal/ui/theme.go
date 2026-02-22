@@ -135,18 +135,6 @@ type Styles struct {
 	muted        string
 }
 
-// StatusStyle returns a style for the given status.
-func (s Styles) StatusStyle(status string) lipgloss.Style {
-	color := s.statusColors[status]
-	if color == "" {
-		color = s.muted // Fallback to theme's muted color
-	}
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(s.background)).
-		Background(lipgloss.Color(color)).
-		Padding(0, 1)
-}
-
 // WithBackground returns a copy of Styles with all text styles having the specified background.
 // This ensures styled text has explicit backgrounds instead of transparent/inherit.
 func (s Styles) WithBackground(bgColor string) Styles {
@@ -206,11 +194,6 @@ func NextTheme(current string) string {
 		}
 	}
 	return themeOrder[0]
-}
-
-// ThemeNames returns available theme names.
-func ThemeNames() []string {
-	return themeOrder
 }
 
 func nightfoxTheme() Theme {

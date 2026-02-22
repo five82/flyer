@@ -17,7 +17,6 @@ type StatusFetcher interface {
 	FetchStatus(ctx context.Context) (*StatusResponse, error)
 	FetchQueue(ctx context.Context) ([]QueueItem, error)
 	FetchLogs(ctx context.Context, query LogQuery) (LogBatch, error)
-	FetchLogTail(ctx context.Context, query LogTailQuery) (LogTailBatch, error)
 }
 
 // Ensure Client implements StatusFetcher at compile time.
@@ -42,7 +41,6 @@ func WithToken(token string) ClientOption {
 }
 
 const (
-	defaultAPIBind   = "127.0.0.1:7487"
 	defaultUserAgent = "flyer/0.1"
 	requestTimeout   = 5 * time.Second
 )
@@ -148,43 +146,6 @@ func (c *Client) FetchLogs(ctx context.Context, query LogQuery) (LogBatch, error
 	return payload, nil
 }
 
-// LogTailQuery configures /api/logtail requests.
-type LogTailQuery struct {
-	ItemID int64
-	Offset int64
-	Limit  int
-	Follow bool
-	WaitMS int
-}
-
-// FetchLogTail retrieves raw log lines for an item's log file.
-func (c *Client) FetchLogTail(ctx context.Context, query LogTailQuery) (LogTailBatch, error) {
-	if c == nil {
-		return LogTailBatch{}, fmt.Errorf("client is nil")
-	}
-	if query.ItemID <= 0 {
-		return LogTailBatch{}, fmt.Errorf("item id required")
-	}
-	values := url.Values{}
-	values.Set("item", strconv.FormatInt(query.ItemID, 10))
-	values.Set("offset", strconv.FormatInt(query.Offset, 10))
-	if query.Limit > 0 {
-		values.Set("limit", strconv.Itoa(query.Limit))
-	}
-	if query.Follow {
-		values.Set("follow", "1")
-	}
-	if query.WaitMS > 0 {
-		values.Set("wait_ms", strconv.Itoa(query.WaitMS))
-	}
-	rel := &url.URL{Path: "/api/logtail", RawQuery: values.Encode()}
-	var payload LogTailBatch
-	if err := c.doURL(ctx, http.MethodGet, rel, &payload); err != nil {
-		return LogTailBatch{}, err
-	}
-	return payload, nil
-}
-
 func (c *Client) do(ctx context.Context, method, path string, dest any) error {
 	rel := &url.URL{Path: path}
 	return c.doURL(ctx, method, rel, dest)
@@ -224,7 +185,7 @@ func (c *Client) doURL(ctx context.Context, method string, rel *url.URL, dest an
 func parseBaseURL(apiBind string) (*url.URL, error) {
 	trimmed := strings.TrimSpace(apiBind)
 	if trimmed == "" {
-		trimmed = defaultAPIBind
+		return nil, fmt.Errorf("api_bind is empty")
 	}
 	if !strings.Contains(trimmed, "://") {
 		trimmed = "http://" + trimmed

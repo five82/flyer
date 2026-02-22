@@ -205,7 +205,7 @@ func (m *Model) renderLogStatus(styles Styles, bg BgStyle) string {
 
 	// Filters
 	if m.logFiltersActive() {
-		filterParts := []string{}
+		var filterParts []string
 		if m.logState.filterLevel != "" {
 			filterParts = append(filterParts, "level="+m.logState.filterLevel)
 		}
@@ -405,7 +405,7 @@ var (
 )
 
 // handleLogsKey processes keyboard input for logs view.
-func (m *Model) handleLogsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleLogsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle search input mode
 	if m.logState.searchActive {
 		return m.handleLogSearchInput(msg)
@@ -963,49 +963,27 @@ func (m Model) renderLogFilters() string {
 	b.WriteString(styles.MutedText.Render("Leave blank to disable filter."))
 	b.WriteString("\n\n")
 
-	// Level field
-	levelLabel := "Level:     "
-	if m.logFilterFocusIdx == 0 {
-		levelLabel = styles.AccentText.Render(levelLabel)
-	} else {
-		levelLabel = styles.MutedText.Render(levelLabel)
+	// Filter fields
+	fields := []struct {
+		label string
+		index int
+	}{
+		{"Level:     ", 0},
+		{"Component: ", 1},
+		{"Lane:      ", 2},
+		{"Request:   ", 3},
 	}
-	b.WriteString(levelLabel)
-	b.WriteString(m.logFilterInputs[0].View())
-	b.WriteString("\n\n")
-
-	// Component field
-	compLabel := "Component: "
-	if m.logFilterFocusIdx == 1 {
-		compLabel = styles.AccentText.Render(compLabel)
-	} else {
-		compLabel = styles.MutedText.Render(compLabel)
+	for _, f := range fields {
+		label := f.label
+		if m.logFilterFocusIdx == f.index {
+			label = styles.AccentText.Render(label)
+		} else {
+			label = styles.MutedText.Render(label)
+		}
+		b.WriteString(label)
+		b.WriteString(m.logFilterInputs[f.index].View())
+		b.WriteString("\n\n")
 	}
-	b.WriteString(compLabel)
-	b.WriteString(m.logFilterInputs[1].View())
-	b.WriteString("\n\n")
-
-	// Lane field
-	laneLabel := "Lane:      "
-	if m.logFilterFocusIdx == 2 {
-		laneLabel = styles.AccentText.Render(laneLabel)
-	} else {
-		laneLabel = styles.MutedText.Render(laneLabel)
-	}
-	b.WriteString(laneLabel)
-	b.WriteString(m.logFilterInputs[2].View())
-	b.WriteString("\n\n")
-
-	// Request field
-	reqLabel := "Request:   "
-	if m.logFilterFocusIdx == 3 {
-		reqLabel = styles.AccentText.Render(reqLabel)
-	} else {
-		reqLabel = styles.MutedText.Render(reqLabel)
-	}
-	b.WriteString(reqLabel)
-	b.WriteString(m.logFilterInputs[3].View())
-	b.WriteString("\n\n")
 
 	// Buttons hint
 	b.WriteString(styles.FaintText.Render("Enter: Apply  •  Esc: Cancel  •  Ctrl+C: Clear"))

@@ -57,7 +57,7 @@ func (m *Model) renderVideoSpecs(b *strings.Builder, item spindle.QueueItem, sty
 		return
 	}
 	video := enc.Video
-	parts := []string{}
+	var parts []string
 
 	if video.Resolution != "" {
 		parts = append(parts, video.Resolution)
@@ -91,7 +91,7 @@ func (m *Model) renderEncodingConfig(b *strings.Builder, item spindle.QueueItem,
 		return
 	}
 	cfg := enc.Config
-	parts := []string{}
+	var parts []string
 
 	if cfg.Preset != "" {
 		parts = append(parts, fmt.Sprintf("Preset %s", cfg.Preset))
@@ -121,7 +121,7 @@ func (m *Model) renderEncodeStats(b *strings.Builder, item spindle.QueueItem, st
 		return
 	}
 
-	parts := []string{}
+	var parts []string
 	if r.DurationSeconds > 0 {
 		dur := time.Duration(r.DurationSeconds * float64(time.Second))
 		parts = append(parts, humanizeDurationLong(dur))
@@ -218,7 +218,7 @@ func (m *Model) renderSubtitleSummary(b *strings.Builder, item spindle.QueueItem
 		return
 	}
 
-	parts := []string{}
+	var parts []string
 	if osCount > 0 {
 		parts = append(parts, fmt.Sprintf("%d OpenSubtitles", osCount))
 	}
@@ -293,7 +293,7 @@ func (m *Model) renderValidationDetails(b *strings.Builder, item spindle.QueueIt
 // renderMetadata renders metadata rows.
 func (m *Model) renderMetadata(b *strings.Builder, rows []metadataRow, styles Styles, bg BgStyle) {
 	for _, r := range rows {
-		key := prettifyMetaKey(r.key)
+		key := titleCase(r.key)
 		b.WriteString(bg.Spaces(2))
 		b.WriteString(bg.Render(key+":", styles.MutedText))
 		b.WriteString(bg.Space())

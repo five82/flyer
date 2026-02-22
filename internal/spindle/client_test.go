@@ -12,18 +12,12 @@ import (
 )
 
 func TestParseBaseURL_DefaultsAndNormalizes(t *testing.T) {
-	u, err := parseBaseURL("")
-	if err != nil {
-		t.Fatalf("parseBaseURL returned error: %v", err)
-	}
-	if u.Scheme != "http" {
-		t.Fatalf("scheme = %q, want http", u.Scheme)
-	}
-	if u.Host != defaultAPIBind {
-		t.Fatalf("host = %q, want %q", u.Host, defaultAPIBind)
+	_, err := parseBaseURL("")
+	if err == nil {
+		t.Fatalf("parseBaseURL returned nil error for empty input, want error")
 	}
 
-	u, err = parseBaseURL("http://example.com:1234/path?x=1#frag")
+	u, err := parseBaseURL("http://example.com:1234/path?x=1#frag")
 	if err != nil {
 		t.Fatalf("parseBaseURL returned error: %v", err)
 	}
@@ -36,7 +30,6 @@ func TestClient_FetchesEndpointsAndEncodesQueries(t *testing.T) {
 	t.Parallel()
 
 	var gotLogsQuery url.Values
-	var gotLogTailQuery url.Values
 	var gotUserAgent string
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -51,9 +44,6 @@ func TestClient_FetchesEndpointsAndEncodesQueries(t *testing.T) {
 		case "/api/logs":
 			gotLogsQuery = r.URL.Query()
 			_ = json.NewEncoder(w).Encode(LogBatch{Events: nil, Next: 99})
-		case "/api/logtail":
-			gotLogTailQuery = r.URL.Query()
-			_ = json.NewEncoder(w).Encode(LogTailBatch{Lines: []string{"a", "b"}, Offset: 10})
 		default:
 			http.NotFound(w, r)
 		}
@@ -110,37 +100,8 @@ func TestClient_FetchesEndpointsAndEncodesQueries(t *testing.T) {
 		t.Fatalf("FetchLogs query = %v, want params encoded", gotLogsQuery)
 	}
 
-	_, err = c.FetchLogTail(ctx, LogTailQuery{
-		ItemID: 101,
-		Offset: 5,
-		Limit:  50,
-		Follow: true,
-		WaitMS: 250,
-	})
-	if err != nil {
-		t.Fatalf("FetchLogTail returned error: %v", err)
-	}
-	if gotLogTailQuery.Get("item") != "101" ||
-		gotLogTailQuery.Get("offset") != "5" ||
-		gotLogTailQuery.Get("limit") != "50" ||
-		gotLogTailQuery.Get("follow") != "1" ||
-		gotLogTailQuery.Get("wait_ms") != "250" {
-		t.Fatalf("FetchLogTail query = %v, want params encoded", gotLogTailQuery)
-	}
-
 	if gotUserAgent == "" || !strings.HasPrefix(gotUserAgent, "flyer/") {
 		t.Fatalf("User-Agent = %q, want flyer/*", gotUserAgent)
-	}
-}
-
-func TestClient_FetchLogTailRequiresItemID(t *testing.T) {
-	c, err := NewClient("127.0.0.1:1")
-	if err != nil {
-		t.Fatalf("NewClient returned error: %v", err)
-	}
-	_, err = c.FetchLogTail(context.Background(), LogTailQuery{})
-	if err == nil {
-		t.Fatalf("FetchLogTail returned nil error, want error")
 	}
 }
 

@@ -369,18 +369,6 @@ func effectiveQueueStage(item spindle.QueueItem) string {
 	return item.Status
 }
 
-// titleCase converts a snake_case or lowercase string to Title Case.
-func titleCase(s string) string {
-	s = strings.ReplaceAll(s, "_", " ")
-	words := strings.Fields(s)
-	for i, word := range words {
-		if len(word) > 0 {
-			words[i] = strings.ToUpper(word[:1]) + strings.ToLower(word[1:])
-		}
-	}
-	return strings.Join(words, " ")
-}
-
 // getQueueTitle returns the queue pane title with optional filter indicator.
 func (m Model) getQueueTitle() string {
 	items := m.getSortedItems()

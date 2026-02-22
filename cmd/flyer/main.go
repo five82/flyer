@@ -15,9 +15,8 @@ func main() {
 	os.Exit(run())
 }
 
-// envOrFlag returns the environment variable value if set, otherwise the flag value.
-// Flag takes precedence over environment variable.
-func envOrFlag(envKey, flagValue string) string {
+// flagOrEnv returns the flag value if set, otherwise the environment variable.
+func flagOrEnv(flagValue, envKey string) string {
 	if flagValue != "" {
 		return flagValue
 	}
@@ -36,8 +35,8 @@ func run() int {
 
 	opts := app.Options{
 		ConfigPath:  *configPath,
-		APIEndpoint: envOrFlag("FLYER_API_ENDPOINT", *apiEndpoint),
-		APIToken:    envOrFlag("FLYER_API_TOKEN", *apiToken),
+		APIEndpoint: flagOrEnv(*apiEndpoint, "FLYER_API_ENDPOINT"),
+		APIToken:    flagOrEnv(*apiToken, "FLYER_API_TOKEN"),
 	}
 	if poll := *pollSeconds; poll > 0 {
 		opts.PollEvery = poll

@@ -239,17 +239,16 @@ func summarizeMetadata(raw json.RawMessage) []metadataRow {
 	return rows
 }
 
-// prettifyMetaKey formats a metadata key for display.
-func prettifyMetaKey(key string) string {
-	key = strings.TrimSpace(key)
-	key = strings.ReplaceAll(key, "_", " ")
-	key = strings.ReplaceAll(key, ".", " ")
-	parts := strings.Fields(key)
-	for i, p := range parts {
-		if len(p) == 0 {
-			continue
+// titleCase converts a snake_case, dot.case, or lowercase string to Title Case.
+func titleCase(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.ReplaceAll(s, "_", " ")
+	s = strings.ReplaceAll(s, ".", " ")
+	words := strings.Fields(s)
+	for i, word := range words {
+		if len(word) > 0 {
+			words[i] = strings.ToUpper(word[:1]) + strings.ToLower(word[1:])
 		}
-		parts[i] = strings.ToUpper(p[:1]) + strings.ToLower(p[1:])
 	}
-	return strings.Join(parts, " ")
+	return strings.Join(words, " ")
 }
