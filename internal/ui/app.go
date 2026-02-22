@@ -36,6 +36,12 @@ const (
 	FilterProcessing
 )
 
+// stageObservation records when an item was first seen in a given stage.
+type stageObservation struct {
+	stage     string
+	firstSeen time.Time
+}
+
 // detailState holds per-item detail view state.
 type detailState struct {
 	episodeCollapsed map[int64]bool
@@ -75,8 +81,9 @@ type Model struct {
 	focusedPane int // 0 = table, 1 = detail
 
 	// Data state
-	snapshot    state.Snapshot
-	lastUpdated time.Time
+	snapshot       state.Snapshot
+	lastUpdated    time.Time
+	stageFirstSeen map[int64]stageObservation
 
 	// Queue state
 	selectedRow int
@@ -130,15 +137,16 @@ func New(opts Options) Model {
 	}
 
 	return Model{
-		ctx:         ctx,
-		client:      opts.Client,
-		store:       opts.Store,
-		config:      opts.Config,
-		prefsPath:   prefsPath,
-		pollTick:    pollTick,
-		keys:        DefaultKeyMap(),
-		theme:       GetTheme(themeName),
-		currentView: ViewQueue,
+		ctx:            ctx,
+		client:         opts.Client,
+		store:          opts.Store,
+		config:         opts.Config,
+		prefsPath:      prefsPath,
+		pollTick:       pollTick,
+		keys:           DefaultKeyMap(),
+		theme:          GetTheme(themeName),
+		currentView:    ViewQueue,
+		stageFirstSeen: make(map[int64]stageObservation),
 		detailState: detailState{
 			episodeCollapsed: make(map[int64]bool),
 			pathExpanded:     make(map[int64]bool),
@@ -188,6 +196,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case snapshotMsg:
 		m.snapshot = state.Snapshot(msg)
 		m.lastUpdated = time.Now()
+		m.updateStageTracking()
 		m.updateQueueTable()
 		m.updateDetailViewport()
 		m.updateProblemsViewport()
@@ -417,6 +426,28 @@ func (m *Model) filterLabel() string {
 		return "Active"
 	default:
 		return "All"
+	}
+}
+
+// updateStageTracking records when each queue item first enters its current stage.
+// This allows ETA calculations to use stage entry time instead of item creation time.
+func (m *Model) updateStageTracking() {
+	now := time.Now()
+	activeIDs := make(map[int64]struct{}, len(m.snapshot.Queue))
+
+	for _, item := range m.snapshot.Queue {
+		activeIDs[item.ID] = struct{}{}
+		stage := strings.ToLower(strings.TrimSpace(item.Progress.Stage))
+		if obs, ok := m.stageFirstSeen[item.ID]; !ok || obs.stage != stage {
+			m.stageFirstSeen[item.ID] = stageObservation{stage: stage, firstSeen: now}
+		}
+	}
+
+	// Prune entries for items no longer in the queue
+	for id := range m.stageFirstSeen {
+		if _, ok := activeIDs[id]; !ok {
+			delete(m.stageFirstSeen, id)
+		}
 	}
 }
 

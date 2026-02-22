@@ -335,6 +335,11 @@ func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem,
 
 // estimateETA estimates the remaining time for an operation.
 func (m *Model) estimateETA(item spindle.QueueItem) string {
+	// Suppress during MakeMKV's brief analyzing sub-phase
+	if strings.EqualFold(item.Progress.Stage, "Analyzing") {
+		return ""
+	}
+
 	stage := itemCurrentStage(item)
 	// Check encoding ETA first
 	if enc := item.Encoding; enc != nil && (stage == "encoding" || stage == "encoded" || stage == "final") {
@@ -344,14 +349,15 @@ func (m *Model) estimateETA(item spindle.QueueItem) string {
 	}
 	// Estimate from percent
 	percent := clampPercent(item.Progress.Percent)
-	if percent <= 1 || percent >= 100 {
+	if percent < 5 || percent >= 100 {
 		return ""
 	}
-	start := item.ParsedCreatedAt()
-	if start.IsZero() {
+	// Use stage entry time instead of item creation time
+	obs, ok := m.stageFirstSeen[item.ID]
+	if !ok || obs.firstSeen.IsZero() {
 		return ""
 	}
-	elapsed := time.Since(start)
+	elapsed := time.Since(obs.firstSeen)
 	if elapsed <= 0 {
 		return ""
 	}

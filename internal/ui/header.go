@@ -428,15 +428,20 @@ func truncateMiddle(s string, max int) string {
 
 // estimateRemainingFromProgress estimates remaining time based on elapsed time and progress.
 // Returns 0 if no reliable estimate can be made.
-func estimateRemainingFromProgress(item *spindle.QueueItem) time.Duration {
-	if item.Progress.Percent <= 0 || item.Progress.Percent >= 100 {
+func (m Model) estimateRemainingFromProgress(item *spindle.QueueItem) time.Duration {
+	// Skip items in MakeMKV's brief analyzing sub-phase
+	if strings.EqualFold(item.Progress.Stage, "Analyzing") {
 		return 0
 	}
-	created := item.ParsedCreatedAt()
-	if created.IsZero() {
+	if item.Progress.Percent < 5 || item.Progress.Percent >= 100 {
 		return 0
 	}
-	elapsed := time.Since(created)
+	// Use stage entry time instead of item creation time
+	obs, ok := m.stageFirstSeen[item.ID]
+	if !ok || obs.firstSeen.IsZero() {
+		return 0
+	}
+	elapsed := time.Since(obs.firstSeen)
 	if elapsed <= 0 {
 		return 0
 	}
@@ -469,7 +474,7 @@ func (m Model) estimateQueueETA() time.Duration {
 		}
 
 		// Fall back to progress-based estimation
-		if remaining := estimateRemainingFromProgress(item); remaining > 0 {
+		if remaining := m.estimateRemainingFromProgress(item); remaining > 0 {
 			total += remaining
 			hasEstimate = true
 		}
