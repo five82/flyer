@@ -88,8 +88,10 @@ func (m *Model) isEpisodesCollapsed(itemID int64) bool {
 func (m *Model) formatEpisodeSummaryEnhanced(episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, styles Styles, bg BgStyle) string {
 	failedCount := len(spindle.FilterFailed(episodes))
 
-	// Derive counts from episode stages for accuracy
-	var rippingCount, rippedCount, encodingCount, encodedCount, finalCount int
+	// Derive counts from episode stages for accuracy.
+	// Only the Active episode counts as "ripping"/"encoding"; other episodes
+	// in the same stage are queued and count as "pending".
+	var rippingCount, rippedCount, encodingCount, encodedCount, finalCount, pendingCount int
 	for _, ep := range episodes {
 		epStage := normalizeEpisodeStage(ep.Stage)
 		switch epStage {
@@ -104,12 +106,22 @@ func (m *Model) formatEpisodeSummaryEnhanced(episodes []spindle.EpisodeStatus, t
 			encodedCount++
 			rippedCount++
 		case "encoding":
-			encodingCount++
+			if ep.Active {
+				encodingCount++
+			} else {
+				pendingCount++
+			}
 			rippedCount++
 		case "ripped":
 			rippedCount++
 		case "ripping":
-			rippingCount++
+			if ep.Active {
+				rippingCount++
+			} else {
+				pendingCount++
+			}
+		default:
+			pendingCount++
 		}
 	}
 
@@ -132,9 +144,8 @@ func (m *Model) formatEpisodeSummaryEnhanced(episodes []spindle.EpisodeStatus, t
 	if rippingCount > 0 {
 		parts = append(parts, bg.Render(fmt.Sprintf("%d ripping", rippingCount), styles.AccentText))
 	}
-	remaining := totals.Planned - rippedCount - rippingCount
-	if remaining > 0 {
-		parts = append(parts, bg.Render(fmt.Sprintf("%d planned", remaining), styles.MutedText))
+	if pendingCount > 0 {
+		parts = append(parts, bg.Render(fmt.Sprintf("%d pending", pendingCount), styles.MutedText))
 	}
 
 	if len(parts) == 0 {
