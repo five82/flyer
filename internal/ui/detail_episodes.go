@@ -38,7 +38,13 @@ func (m *Model) renderEpisodeList(b *strings.Builder, item spindle.QueueItem, st
 
 		// Progress bar for TV shows
 		if totals.Planned > 0 {
-			percent := (float64(totals.Final) / float64(totals.Planned)) * 100
+			finalCount := 0
+			for _, ep := range episodes {
+				if normalizeEpisodeStage(ep.Stage) == "final" {
+					finalCount++
+				}
+			}
+			percent := (float64(finalCount) / float64(totals.Planned)) * 100
 			bar := m.renderProgressBar(percent, 20, styles, bg)
 			b.WriteString(bar)
 			b.WriteString(bg.Space())
@@ -77,23 +83,45 @@ func (m *Model) isEpisodesCollapsed(itemID int64) bool {
 }
 
 // formatEpisodeSummaryEnhanced formats the episode totals with failed count.
+// Counts are derived from episode stages rather than path fields to stay accurate
+// during active processing.
 func (m *Model) formatEpisodeSummaryEnhanced(episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, styles Styles, bg BgStyle) string {
 	failedCount := len(spindle.FilterFailed(episodes))
-	var parts []string
 
+	// Derive counts from episode stages for accuracy
+	var rippedCount, encodedCount, finalCount int
+	for _, ep := range episodes {
+		epStage := normalizeEpisodeStage(ep.Stage)
+		switch epStage {
+		case "final":
+			finalCount++
+			encodedCount++
+			rippedCount++
+		case "organizing", "subtitled", "audio_analyzed":
+			encodedCount++
+			rippedCount++
+		case "encoding", "encoded":
+			encodedCount++
+			rippedCount++
+		case "ripped":
+			rippedCount++
+		}
+	}
+
+	var parts []string
 	if failedCount > 0 {
 		parts = append(parts, bg.Render(fmt.Sprintf("%d failed", failedCount), styles.DangerText))
 	}
-	if totals.Final > 0 {
-		parts = append(parts, bg.Render(fmt.Sprintf("%d done", totals.Final), styles.SuccessText))
+	if finalCount > 0 {
+		parts = append(parts, bg.Render(fmt.Sprintf("%d done", finalCount), styles.SuccessText))
 	}
-	if totals.Encoded > totals.Final {
-		parts = append(parts, bg.Render(fmt.Sprintf("%d encoded", totals.Encoded-totals.Final), styles.InfoText))
+	if encodedCount > finalCount {
+		parts = append(parts, bg.Render(fmt.Sprintf("%d encoded", encodedCount-finalCount), styles.InfoText))
 	}
-	if totals.Ripped > totals.Encoded {
-		parts = append(parts, bg.Render(fmt.Sprintf("%d ripped", totals.Ripped-totals.Encoded), styles.AccentText))
+	if rippedCount > encodedCount {
+		parts = append(parts, bg.Render(fmt.Sprintf("%d ripped", rippedCount-encodedCount), styles.AccentText))
 	}
-	remaining := totals.Planned - totals.Ripped
+	remaining := totals.Planned - rippedCount
 	if remaining > 0 {
 		parts = append(parts, bg.Render(fmt.Sprintf("%d planned", remaining), styles.MutedText))
 	}

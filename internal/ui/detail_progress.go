@@ -46,9 +46,12 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 
 	// For TV episodes, derive counts by inspecting episode stages
 	identifyingCount := 0
+	rippedCount := 0
+	encodedCount := 0
 	audioAnalyzedCount := 0
 	subtitledCount := 0
 	organizingCount := 0
+	finalCount := 0
 	if totals.Planned > 0 {
 		for _, ep := range episodes {
 			epStage := normalizeEpisodeStage(ep.Stage)
@@ -56,6 +59,16 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 			switch epStage {
 			case "identified", "ripping", "ripped", "episode_identifying", "episode_identified", "encoding", "encoded", "audio_analyzing", "audio_analyzed", "subtitling", "subtitled", "organizing", "final":
 				identifyingCount++
+			}
+			// Ripping is complete if we've moved past it
+			switch epStage {
+			case "ripped", "encoding", "encoded", "audio_analyzing", "audio_analyzed", "subtitling", "subtitled", "organizing", "final":
+				rippedCount++
+			}
+			// Encoding is complete if we've moved past it
+			switch epStage {
+			case "encoded", "audio_analyzing", "audio_analyzed", "subtitling", "subtitled", "organizing", "final":
+				encodedCount++
 			}
 			// Audio analysis is complete if we've moved past it
 			switch epStage {
@@ -69,6 +82,7 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 			// Organizing is complete only when final
 			if epStage == "final" {
 				organizingCount++
+				finalCount++
 			}
 		}
 	}
@@ -87,17 +101,17 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 			case "identifying":
 				count = identifyingCount
 			case "ripped":
-				count = totals.Ripped
+				count = rippedCount
+			case "encoded":
+				count = encodedCount
 			case "audio_analyzed":
 				count = audioAnalyzedCount
-			case "encoded":
-				count = totals.Encoded
 			case "subtitled":
 				count = subtitledCount
 			case "organizing":
 				count = organizingCount
 			case "final":
-				count = totals.Final
+				count = finalCount
 			}
 		} else {
 			count = singleItemPipelineCount(stage.id, item, activePipelineStage, plannedCount)
