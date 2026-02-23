@@ -89,7 +89,7 @@ func (m *Model) formatEpisodeSummaryEnhanced(episodes []spindle.EpisodeStatus, t
 	failedCount := len(spindle.FilterFailed(episodes))
 
 	// Derive counts from episode stages for accuracy
-	var rippedCount, encodedCount, finalCount int
+	var rippingCount, rippedCount, encodingCount, encodedCount, finalCount int
 	for _, ep := range episodes {
 		epStage := normalizeEpisodeStage(ep.Stage)
 		switch epStage {
@@ -97,14 +97,19 @@ func (m *Model) formatEpisodeSummaryEnhanced(episodes []spindle.EpisodeStatus, t
 			finalCount++
 			encodedCount++
 			rippedCount++
-		case "organizing", "subtitled", "audio_analyzed":
+		case "organizing", "subtitled", "subtitling", "audio_analyzed", "audio_analyzing":
 			encodedCount++
 			rippedCount++
-		case "encoding", "encoded":
+		case "encoded":
 			encodedCount++
+			rippedCount++
+		case "encoding":
+			encodingCount++
 			rippedCount++
 		case "ripped":
 			rippedCount++
+		case "ripping":
+			rippingCount++
 		}
 	}
 
@@ -118,10 +123,16 @@ func (m *Model) formatEpisodeSummaryEnhanced(episodes []spindle.EpisodeStatus, t
 	if encodedCount > finalCount {
 		parts = append(parts, bg.Render(fmt.Sprintf("%d encoded", encodedCount-finalCount), styles.InfoText))
 	}
-	if rippedCount > encodedCount {
-		parts = append(parts, bg.Render(fmt.Sprintf("%d ripped", rippedCount-encodedCount), styles.AccentText))
+	if encodingCount > 0 {
+		parts = append(parts, bg.Render(fmt.Sprintf("%d encoding", encodingCount), styles.WarningText))
 	}
-	remaining := totals.Planned - rippedCount
+	if rippedCount > encodedCount+encodingCount {
+		parts = append(parts, bg.Render(fmt.Sprintf("%d ripped", rippedCount-encodedCount-encodingCount), styles.AccentText))
+	}
+	if rippingCount > 0 {
+		parts = append(parts, bg.Render(fmt.Sprintf("%d ripping", rippingCount), styles.AccentText))
+	}
+	remaining := totals.Planned - rippedCount - rippingCount
 	if remaining > 0 {
 		parts = append(parts, bg.Render(fmt.Sprintf("%d planned", remaining), styles.MutedText))
 	}

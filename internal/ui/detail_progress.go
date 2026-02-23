@@ -13,18 +13,18 @@ import (
 // renderPipelineStatus renders the pipeline progress visualization,
 // including episode counts for TV shows.
 func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	// Stage names use progressive form (-ing)
+	// Stage labels use past/completed form since counts represent completion
 	stages := []struct {
 		id    string
 		label string
 	}{
-		{"planned", "Planning"},
-		{"identifying", "Identifying"},
-		{"ripped", "Ripping"},
-		{"encoded", "Encoding"},
-		{"audio_analyzed", "Analyzing"},
-		{"subtitled", "Subtitling"},
-		{"organizing", "Organizing"},
+		{"planned", "Planned"},
+		{"identifying", "Identified"},
+		{"ripped", "Ripped"},
+		{"encoded", "Encoded"},
+		{"audio_analyzed", "Analyzed"},
+		{"subtitled", "Subtitled"},
+		{"organizing", "Organized"},
 		{"final", "Completed"},
 	}
 
