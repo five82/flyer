@@ -87,11 +87,7 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 		}
 	}
 
-	for i, stage := range stages {
-		if i > 0 {
-			b.WriteString(bg.Render(" → ", styles.FaintText))
-		}
-
+	for _, stage := range stages {
 		// Calculate count for this stage
 		count := plannedCount
 		if totals.Planned > 0 {
@@ -140,16 +136,22 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 			style = styles.WarningText
 		}
 
-		// Render with or without counts
+		// Indent + icon
+		b.WriteString(bg.Spaces(2))
+		b.WriteString(bg.Render(icon, style))
+		b.WriteString(bg.Space())
+
+		// Label padded to 12 chars
+		paddedLabel := fmt.Sprintf("%-12s", stage.label)
+		b.WriteString(bg.Render(paddedLabel, labelStyle))
+
+		// Right-aligned count (TV shows only)
 		if plannedCount > 1 {
-			b.WriteString(bg.Render(icon, style))
-			b.WriteString(bg.Space())
-			b.WriteString(bg.Render(stage.label, labelStyle))
-			b.WriteString(bg.Space())
-			b.WriteString(bg.Render(fmt.Sprintf("%d/%d", count, plannedCount), styles.MutedText))
-		} else {
-			b.WriteString(bg.Render(icon+" "+stage.label, style))
+			countStr := fmt.Sprintf("%*d/%d", len(fmt.Sprintf("%d", plannedCount)), count, plannedCount)
+			b.WriteString(bg.Render(countStr, styles.MutedText))
 		}
+
+		b.WriteString("\n")
 	}
 }
 
