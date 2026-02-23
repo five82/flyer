@@ -24,8 +24,7 @@ const (
 // initDetailViewport initializes the detail viewport.
 func (m *Model) initDetailViewport() {
 	m.detailViewport = viewport.New(m.width-4, m.height-6)
-	m.detailViewport.Style = lipgloss.NewStyle().
-		Background(lipgloss.Color(m.theme.SurfaceAlt))
+	m.detailViewport.Style = lipgloss.NewStyle()
 }
 
 // updateDetailViewport updates the detail viewport content.
@@ -34,26 +33,44 @@ func (m *Model) updateDetailViewport() {
 		m.initDetailViewport()
 	}
 
-	// Update viewport dimensions
-	m.detailViewport.Width = m.width - 4
-	m.detailViewport.Height = m.height - 6
+	// Compute split-pane dimensions matching renderQueue layout
+	contentHeight := m.height - 2 // header + cmdbar
+	var tableWidth int
+	if m.width >= 160 {
+		tableWidth = m.width * 30 / 100
+	} else {
+		tableWidth = m.width * 40 / 100
+	}
+	detailWidth := m.width - tableWidth
 
-	// Fullscreen detail is always focused, so use FocusBg
-	bgColor := m.theme.FocusBg
+	m.detailViewport.Width = detailWidth - 2    // minus box side borders
+	m.detailViewport.Height = contentHeight - 2 // minus box top/bottom borders
 
-	// Ensure viewport has focus background
+	// Use focus-aware background
+	bgColor := m.theme.SurfaceAlt
+	if m.focusedPane == 1 {
+		bgColor = m.theme.FocusBg
+	}
+
+	// Viewport style covers empty lines below content
 	m.detailViewport.Style = lipgloss.NewStyle().Background(lipgloss.Color(bgColor))
 
 	// Get selected item
 	item := m.getSelectedItem()
 	if item == nil {
-		m.detailViewport.SetContent(m.theme.Styles().MutedText.Render("Select an item to view details"))
+		bg := NewBgStyle(bgColor)
+		m.detailViewport.SetContent(bg.FillLine(m.theme.Styles().MutedText.Render("Select an item to view details"), m.detailViewport.Width))
 		return
 	}
 
-	// Render detail content
-	content := m.renderDetailContent(*item, m.detailViewport.Width, bgColor)
-	m.detailViewport.SetContent(content)
+	// Render detail content and fill each line to viewport width
+	content := m.renderDetailContent(*item, detailWidth-4, bgColor)
+	bg := NewBgStyle(bgColor)
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		lines[i] = bg.FillLine(line, m.detailViewport.Width)
+	}
+	m.detailViewport.SetContent(strings.Join(lines, "\n"))
 }
 
 // getSelectedItem returns the currently selected queue item.

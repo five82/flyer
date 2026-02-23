@@ -127,7 +127,7 @@ func (m Model) renderQueue() string {
 	}
 	var detailContent string
 	if item != nil {
-		detailContent = m.renderDetailContent(*item, detailWidth-4, detailBg)
+		detailContent = m.detailViewport.View()
 	} else {
 		detailContent = lipgloss.NewStyle().
 			Foreground(lipgloss.Color(m.theme.Muted)).

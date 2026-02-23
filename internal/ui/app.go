@@ -363,6 +363,7 @@ func (m *Model) toggleFocus() {
 		if m.focusedPane == 0 {
 			// Table focused → focus detail pane
 			m.focusedPane = 1
+			m.updateDetailViewport()
 		} else {
 			// Detail focused → go to item logs
 			m.logState.mode = logSourceItem
@@ -458,6 +459,7 @@ func (m *Model) toggleFocusReverse() {
 		if m.focusedPane == 1 {
 			// Detail focused → focus table
 			m.focusedPane = 0
+			m.updateDetailViewport()
 		} else {
 			// Table focused → go to problems
 			m.currentView = ViewProblems
@@ -466,6 +468,7 @@ func (m *Model) toggleFocusReverse() {
 		// Logs → go to queue with detail focus
 		m.currentView = ViewQueue
 		m.focusedPane = 1
+		m.updateDetailViewport()
 	case ViewProblems:
 		// Problems → go to item logs
 		m.logState.mode = logSourceItem
@@ -481,6 +484,31 @@ func (m Model) handleQueueKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// When detail pane is focused, scroll the detail viewport
+	if m.focusedPane == 1 {
+		switch {
+		case key.Matches(msg, m.keys.Down):
+			m.detailViewport.ScrollDown(1)
+		case key.Matches(msg, m.keys.Up):
+			m.detailViewport.ScrollUp(1)
+		case key.Matches(msg, m.keys.Top):
+			m.detailViewport.GotoTop()
+		case key.Matches(msg, m.keys.Bottom):
+			m.detailViewport.GotoBottom()
+		case key.Matches(msg, m.keys.HalfPageDown):
+			m.detailViewport.HalfPageDown()
+		case key.Matches(msg, m.keys.HalfPageUp):
+			m.detailViewport.HalfPageUp()
+		case key.Matches(msg, m.keys.PageDown):
+			m.detailViewport.PageDown()
+		case key.Matches(msg, m.keys.PageUp):
+			m.detailViewport.PageUp()
+		}
+		return m, nil
+	}
+
+	// Table focused: navigate queue items
+	prev := m.selectedRow
 	switch {
 	case key.Matches(msg, m.keys.Down):
 		if m.selectedRow < itemCount-1 {
@@ -494,6 +522,12 @@ func (m Model) handleQueueKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.selectedRow = 0
 	case key.Matches(msg, m.keys.Bottom):
 		m.selectedRow = itemCount - 1
+	}
+
+	// Reset detail scroll when selection changes
+	if m.selectedRow != prev {
+		m.detailViewport.GotoTop()
+		m.updateDetailViewport()
 	}
 
 	return m, nil
