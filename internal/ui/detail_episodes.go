@@ -30,39 +30,17 @@ func (m *Model) renderEpisodeList(b *strings.Builder, item spindle.QueueItem, st
 		b.WriteString("\n")
 	}
 
-	if collapsed {
-		// Summary line only when collapsed
-		summary := m.formatEpisodeSummaryEnhanced(episodes, totals, styles, bg)
-		b.WriteString(summary)
-		b.WriteString("\n")
+	activeIdx := m.activeEpisodeIndex(item, episodes)
 
-		// Progress bar for TV shows
-		if totals.Planned > 0 {
-			finalCount := 0
-			for _, ep := range episodes {
-				if normalizeEpisodeStage(ep.Stage) == "final" {
-					finalCount++
-				}
-			}
-			percent := (float64(finalCount) / float64(totals.Planned)) * 100
-			bar := m.renderProgressBar(percent, 20, styles, bg)
-			b.WriteString(bar)
-			b.WriteString(bg.Space())
-			b.WriteString(bg.Render(fmt.Sprintf("%.0f%%", percent), styles.MutedText))
-			b.WriteString("\n")
-		}
+	if collapsed {
+		b.WriteString(bg.Render(fmt.Sprintf("%d episodes", len(episodes)), styles.MutedText))
+		b.WriteString("\n")
 		b.WriteString(bg.Render("(press t to expand)", styles.FaintText))
 		b.WriteString("\n")
 		return
 	}
 
-	// Summary line
-	summary := m.formatEpisodeSummaryEnhanced(episodes, totals, styles, bg)
-	b.WriteString(summary)
-	b.WriteString("\n\n")
-
 	// Episode list with enhanced rendering
-	activeIdx := m.activeEpisodeIndex(item, episodes)
 	for idx, ep := range episodes {
 		isActive := idx == activeIdx
 		stage := m.episodeStage(ep, currentStage, isActive)
@@ -80,78 +58,6 @@ func (m *Model) isEpisodesCollapsed(itemID int64) bool {
 		return true // Default to collapsed
 	}
 	return collapsed
-}
-
-// formatEpisodeSummaryEnhanced formats the episode totals with failed count.
-// Counts are derived from episode stages rather than path fields to stay accurate
-// during active processing.
-func (m *Model) formatEpisodeSummaryEnhanced(episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, styles Styles, bg BgStyle) string {
-	failedCount := len(spindle.FilterFailed(episodes))
-
-	// Derive counts from episode stages for accuracy.
-	// Only the Active episode counts as "ripping"/"encoding"; other episodes
-	// in the same stage are queued and count as "pending".
-	var rippingCount, rippedCount, encodingCount, encodedCount, finalCount, pendingCount int
-	for _, ep := range episodes {
-		epStage := normalizeEpisodeStage(ep.Stage)
-		switch epStage {
-		case "final":
-			finalCount++
-			encodedCount++
-			rippedCount++
-		case "organizing", "subtitled", "subtitling", "audio_analyzed", "audio_analyzing":
-			encodedCount++
-			rippedCount++
-		case "encoded":
-			encodedCount++
-			rippedCount++
-		case "encoding":
-			if ep.Active {
-				encodingCount++
-			} else {
-				pendingCount++
-			}
-			rippedCount++
-		case "ripped":
-			rippedCount++
-		case "ripping":
-			if ep.Active {
-				rippingCount++
-			} else {
-				pendingCount++
-			}
-		default:
-			pendingCount++
-		}
-	}
-
-	var parts []string
-	if failedCount > 0 {
-		parts = append(parts, bg.Render(fmt.Sprintf("%d failed", failedCount), styles.DangerText))
-	}
-	if finalCount > 0 {
-		parts = append(parts, bg.Render(fmt.Sprintf("%d done", finalCount), styles.SuccessText))
-	}
-	if encodedCount > finalCount {
-		parts = append(parts, bg.Render(fmt.Sprintf("%d encoded", encodedCount-finalCount), styles.InfoText))
-	}
-	if encodingCount > 0 {
-		parts = append(parts, bg.Render(fmt.Sprintf("%d encoding", encodingCount), styles.WarningText))
-	}
-	if rippedCount > encodedCount+encodingCount {
-		parts = append(parts, bg.Render(fmt.Sprintf("%d ripped", rippedCount-encodedCount-encodingCount), styles.AccentText))
-	}
-	if rippingCount > 0 {
-		parts = append(parts, bg.Render(fmt.Sprintf("%d ripping", rippingCount), styles.AccentText))
-	}
-	if pendingCount > 0 {
-		parts = append(parts, bg.Render(fmt.Sprintf("%d pending", pendingCount), styles.MutedText))
-	}
-
-	if len(parts) == 0 {
-		return bg.Render(fmt.Sprintf("%d episodes", totals.Planned), styles.Text)
-	}
-	return bg.Join(parts, ", ")
 }
 
 // renderEpisodeRowEnhanced renders a single episode with stage chip and extras.
