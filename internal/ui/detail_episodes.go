@@ -238,7 +238,7 @@ func (m *Model) activeEpisodeIndex(item spindle.QueueItem, episodes []spindle.Ep
 func (m *Model) episodeStage(ep spindle.EpisodeStatus, currentGlobalStage string, isActive bool) string {
 	if isActive {
 		switch currentGlobalStage {
-		case "ripping", "encoding", "identifying", "subtitling":
+		case "ripping", "encoding", "identifying", "episode_identifying", "subtitling":
 			return currentGlobalStage
 		}
 	}
@@ -297,13 +297,16 @@ func (m *Model) episodeStageChip(stage string, failed bool, styles Styles, bg Bg
 	case "ripped":
 		color = m.theme.StatusColors["ripped"]
 		label = "RIPD"
+	case "episode_identified":
+		color = m.theme.StatusColors["episode_identified"]
+		label = "EPID"
 	case "identified":
 		color = m.theme.StatusColors["ripped"]
 		label = "IDNT"
 	case "planned":
 		color = m.theme.Muted
 		label = "PLAN"
-	case "encoding", "ripping", "subtitling", "identifying":
+	case "encoding", "ripping", "subtitling", "identifying", "episode_identifying":
 		color = m.theme.StatusColors[stage]
 		label = "WORK"
 	}

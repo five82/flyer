@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -10,24 +11,55 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
+// stageOrdinal maps every known episode stage to its position in the pipeline.
+// Used to determine whether an episode has reached or passed a given stage.
+var stageOrdinal = map[string]int{
+	"planned":             0,
+	"identifying":         1,
+	"identified":          2,
+	"ripping":             3,
+	"ripped":              4,
+	"episode_identifying": 5,
+	"episode_identified":  6,
+	"encoding":            7,
+	"encoded":             8,
+	"audio_analyzing":     9,
+	"audio_analyzed":      10,
+	"subtitling":          11,
+	"subtitled":           12,
+	"organizing":          13,
+	"final":               14,
+}
+
+// stageAtOrBeyond reports whether epStage is at or beyond threshold in the pipeline.
+func stageAtOrBeyond(epStage, threshold string) bool {
+	epIdx, ok1 := stageOrdinal[epStage]
+	thIdx, ok2 := stageOrdinal[threshold]
+	return ok1 && ok2 && epIdx >= thIdx
+}
+
+// pipelineStages defines the display stages for the detail view pipeline.
+// Each entry's threshold is the earliest stage that counts as "complete" for that row.
+var pipelineStages = []struct {
+	id        string
+	label     string
+	threshold string // episode stage at which this pipeline step is considered done
+	tvOnly    bool   // only shown for TV shows (multi-episode items)
+}{
+	{"planned", "Planned", "", false},
+	{"identifying", "Identified", "identified", false},
+	{"ripped", "Ripped", "ripped", false},
+	{"episode_identified", "Ep. Matched", "episode_identified", true},
+	{"encoded", "Encoded", "encoded", false},
+	{"audio_analyzed", "Analyzed", "audio_analyzed", false},
+	{"subtitled", "Subtitled", "subtitled", false},
+	{"organizing", "Organized", "final", false},
+	{"final", "Completed", "final", false},
+}
+
 // renderPipelineStatus renders the pipeline progress visualization,
 // including episode counts for TV shows.
 func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	// Stage labels use past/completed form since counts represent completion
-	stages := []struct {
-		id    string
-		label string
-	}{
-		{"planned", "Planned"},
-		{"identifying", "Identified"},
-		{"ripped", "Ripped"},
-		{"encoded", "Encoded"},
-		{"audio_analyzed", "Analyzed"},
-		{"subtitled", "Subtitled"},
-		{"organizing", "Organized"},
-		{"final", "Completed"},
-	}
-
 	// Get episode data for counts
 	episodes, totals := item.EpisodeSnapshot()
 
@@ -44,73 +76,28 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 		plannedCount = 1
 	}
 
-	// For TV episodes, derive counts by inspecting episode stages
-	identifyingCount := 0
-	rippedCount := 0
-	encodedCount := 0
-	audioAnalyzedCount := 0
-	subtitledCount := 0
-	organizingCount := 0
-	finalCount := 0
-	if totals.Planned > 0 {
-		for _, ep := range episodes {
-			epStage := normalizeEpisodeStage(ep.Stage)
-			// Identifying is complete if we've moved past it
-			switch epStage {
-			case "identified", "ripping", "ripped", "episode_identifying", "episode_identified", "encoding", "encoded", "audio_analyzing", "audio_analyzed", "subtitling", "subtitled", "organizing", "final":
-				identifyingCount++
-			}
-			// Ripping is complete if we've moved past it
-			switch epStage {
-			case "ripped", "encoding", "encoded", "audio_analyzing", "audio_analyzed", "subtitling", "subtitled", "organizing", "final":
-				rippedCount++
-			}
-			// Encoding is complete if we've moved past it
-			switch epStage {
-			case "encoded", "audio_analyzing", "audio_analyzed", "subtitling", "subtitled", "organizing", "final":
-				encodedCount++
-			}
-			// Audio analysis is complete if we've moved past it
-			switch epStage {
-			case "audio_analyzed", "subtitling", "subtitled", "organizing", "final":
-				audioAnalyzedCount++
-			}
-			// Subtitled includes both subtitled and final
-			if epStage == "subtitled" || epStage == "final" {
-				subtitledCount++
-			}
-			// Organizing is complete only when final
-			if epStage == "final" {
-				organizingCount++
-				finalCount++
-			}
-		}
-	}
+	// Pre-compute count width for right-aligned display
+	countWidth := len(strconv.Itoa(plannedCount))
 
-	for _, stage := range stages {
+	for _, stage := range pipelineStages {
+		if stage.tvOnly && totals.Planned <= 0 {
+			continue
+		}
+
 		// Calculate count for this stage
-		count := plannedCount
+		var count int
 		if totals.Planned > 0 {
-			switch stage.id {
-			case "planned":
+			if stage.id == "planned" {
 				count = totals.Planned
-			case "identifying":
-				count = identifyingCount
-			case "ripped":
-				count = rippedCount
-			case "encoded":
-				count = encodedCount
-			case "audio_analyzed":
-				count = audioAnalyzedCount
-			case "subtitled":
-				count = subtitledCount
-			case "organizing":
-				count = organizingCount
-			case "final":
-				count = finalCount
+			} else {
+				for _, ep := range episodes {
+					if stageAtOrBeyond(normalizeEpisodeStage(ep.Stage), stage.threshold) {
+						count++
+					}
+				}
 			}
 		} else {
-			count = singleItemPipelineCount(stage.id, item, activePipelineStage, plannedCount)
+			count = singleItemPipelineCount(stage.id, activePipelineStage, plannedCount)
 		}
 
 		isComplete := count >= plannedCount
@@ -147,7 +134,7 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 
 		// Right-aligned count (TV shows only)
 		if plannedCount > 1 {
-			countStr := fmt.Sprintf("%*d/%d", len(fmt.Sprintf("%d", plannedCount)), count, plannedCount)
+			countStr := fmt.Sprintf("%*d/%d", countWidth, count, plannedCount)
 			b.WriteString(bg.Render(countStr, styles.MutedText))
 		}
 
@@ -171,6 +158,7 @@ func itemCurrentStage(item spindle.QueueItem) string {
 func isKnownPipelineStage(stage string) bool {
 	switch stage {
 	case "planned", "pending", "identifying", "identified", "ripping", "ripped",
+		"episode_identifying", "episode_identified",
 		"audio_analyzing", "audio_analyzed",
 		"encoding", "encoded", "subtitling", "subtitled",
 		"organizing", "final", "completed", "failed":
@@ -183,10 +171,6 @@ func isKnownPipelineStage(stage string) bool {
 func normalizeEpisodeStage(stage string) string {
 	stage = strings.ToLower(strings.TrimSpace(stage))
 	switch stage {
-	case "episode_identifying":
-		return "identifying"
-	case "episode_identified":
-		return "identified"
 	case "completed":
 		return "final"
 	case "pending":
@@ -205,6 +189,8 @@ func pipelineStageForStatus(status string) string {
 		return "identifying"
 	case "ripping", "ripped":
 		return "ripped"
+	case "episode_identifying", "episode_identified":
+		return "episode_identified"
 	case "audio_analyzing", "audio_analyzed":
 		return "audio_analyzed"
 	case "encoding", "encoded":
@@ -221,7 +207,7 @@ func pipelineStageForStatus(status string) string {
 }
 
 // singleItemPipelineCount returns the count for a single-item (movie) pipeline stage.
-func singleItemPipelineCount(stageID string, item spindle.QueueItem, activeStage string, plannedCount int) int {
+func singleItemPipelineCount(stageID string, activeStage string, plannedCount int) int {
 	activeNorm := normalizeEpisodeStage(activeStage)
 
 	// If completed/final, all stages are complete
@@ -229,20 +215,8 @@ func singleItemPipelineCount(stageID string, item spindle.QueueItem, activeStage
 		return plannedCount
 	}
 
-	// Define stage order
-	stageOrder := map[string]int{
-		"planned":        0,
-		"identifying":    1,
-		"ripped":         2,
-		"encoded":        3,
-		"audio_analyzed": 4,
-		"subtitled":      5,
-		"organizing":     6,
-		"final":          7,
-	}
-
-	activeIdx, activeOK := stageOrder[activeNorm]
-	stageIdx, stageOK := stageOrder[stageID]
+	activeIdx, activeOK := stageOrdinal[activeNorm]
+	stageIdx, stageOK := stageOrdinal[stageID]
 
 	if !activeOK || !stageOK {
 		return 0
@@ -267,6 +241,10 @@ func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem,
 	switch stage {
 	case "identifying", "identified":
 		label = "IDENTIFYING"
+		icon = "🔍"
+		color = styles.InfoText
+	case "episode_identifying", "episode_identified":
+		label = "EP. MATCHING"
 		icon = "🔍"
 		color = styles.InfoText
 	case "ripping", "ripped":
