@@ -7,6 +7,49 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
+func TestCountEpisodesForPipelineStage_EpisodeIdentifiedUsesMappedFields(t *testing.T) {
+	episodes := []spindle.EpisodeStatus{
+		{Key: "s02_001", Stage: "encoded", Episode: 29, MatchScore: 0.94},
+		{Key: "s02_002", Stage: "encoded", Episode: 28, MatchScore: 0.92},
+		{Key: "s02_003", Stage: "encoded", Episode: 27, MatchScore: 0.93},
+		{Key: "s02_004", Stage: "ripped", Episode: 26, MatchScore: 0.94},
+		{Key: "s02_005", Stage: "ripped", Episode: 25, MatchScore: 0.94},
+		{Key: "s02_006", Stage: "ripped", Episode: 30, MatchScore: 0.96},
+	}
+
+	gotMatched := countEpisodesForPipelineStage("episode_identified", "episode_identified", episodes, 6, "encoded", 6)
+	if gotMatched != 6 {
+		t.Fatalf("episode_identified count = %d, want 6", gotMatched)
+	}
+
+	gotEncoded := countEpisodesForPipelineStage("encoded", "encoded", episodes, 6, "encoded", 6)
+	if gotEncoded != 3 {
+		t.Fatalf("encoded count = %d, want 3", gotEncoded)
+	}
+}
+
+func TestIsEpisodeMapped(t *testing.T) {
+	cases := []struct {
+		name string
+		ep   spindle.EpisodeStatus
+		want bool
+	}{
+		{name: "placeholder", ep: spindle.EpisodeStatus{Episode: 0, MatchScore: 0, MatchedEpisode: 0}, want: false},
+		{name: "resolved episode number", ep: spindle.EpisodeStatus{Episode: 26}, want: true},
+		{name: "resolved by match score", ep: spindle.EpisodeStatus{Episode: 0, MatchScore: 0.91}, want: true},
+		{name: "resolved by matched episode", ep: spindle.EpisodeStatus{Episode: 0, MatchedEpisode: 26}, want: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isEpisodeMapped(tc.ep)
+			if got != tc.want {
+				t.Fatalf("isEpisodeMapped() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestEstimateETA_SuppressedDuringAnalyzing(t *testing.T) {
 	m := Model{stageFirstSeen: make(map[int64]stageObservation)}
 	m.stageFirstSeen[1] = stageObservation{

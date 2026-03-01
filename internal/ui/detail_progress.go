@@ -85,20 +85,7 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 		}
 
 		// Calculate count for this stage
-		var count int
-		if totals.Planned > 0 {
-			if stage.id == "planned" {
-				count = totals.Planned
-			} else {
-				for _, ep := range episodes {
-					if stageAtOrBeyond(normalizeEpisodeStage(ep.Stage), stage.threshold) {
-						count++
-					}
-				}
-			}
-		} else {
-			count = singleItemPipelineCount(stage.id, activePipelineStage, plannedCount)
-		}
+		count := countEpisodesForPipelineStage(stage.id, stage.threshold, episodes, totals.Planned, activePipelineStage, plannedCount)
 
 		isComplete := count >= plannedCount
 		isCurrent := !isComplete && stage.id == activePipelineStage
@@ -140,6 +127,41 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 
 		b.WriteString("\n")
 	}
+}
+
+func countEpisodesForPipelineStage(stageID, threshold string, episodes []spindle.EpisodeStatus, episodePlanned int, activePipelineStage string, plannedCount int) int {
+	if episodePlanned <= 0 {
+		return singleItemPipelineCount(stageID, activePipelineStage, plannedCount)
+	}
+	if stageID == "planned" {
+		return episodePlanned
+	}
+	// Episode matching completion is data-driven (resolved episode numbers/scores),
+	// not asset-stage-driven. During encoding, matched episodes may still report
+	// stage="ripped" until encode output exists.
+	if stageID == "episode_identified" {
+		count := 0
+		for _, ep := range episodes {
+			if isEpisodeMapped(ep) {
+				count++
+			}
+		}
+		return count
+	}
+	count := 0
+	for _, ep := range episodes {
+		if stageAtOrBeyond(normalizeEpisodeStage(ep.Stage), threshold) {
+			count++
+		}
+	}
+	return count
+}
+
+func isEpisodeMapped(ep spindle.EpisodeStatus) bool {
+	if ep.MatchedEpisode > 0 || ep.MatchScore > 0 {
+		return true
+	}
+	return ep.Episode > 0
 }
 
 // itemCurrentStage returns the normalized current stage for an item.
