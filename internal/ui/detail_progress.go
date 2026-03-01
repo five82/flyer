@@ -85,7 +85,7 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 		}
 
 		// Calculate count for this stage
-		count := countEpisodesForPipelineStage(stage.id, stage.threshold, episodes, totals.Planned, activePipelineStage, plannedCount)
+		count := countEpisodesForPipelineStage(stage.id, stage.threshold, episodes, totals.Planned, item.EpisodeIdentifiedCount, activePipelineStage, plannedCount)
 
 		isComplete := count >= plannedCount
 		isCurrent := !isComplete && stage.id == activePipelineStage
@@ -129,7 +129,7 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 	}
 }
 
-func countEpisodesForPipelineStage(stageID, threshold string, episodes []spindle.EpisodeStatus, episodePlanned int, activePipelineStage string, plannedCount int) int {
+func countEpisodesForPipelineStage(stageID, threshold string, episodes []spindle.EpisodeStatus, episodePlanned int, episodeIdentifiedCount int, activePipelineStage string, plannedCount int) int {
 	if episodePlanned <= 0 {
 		return singleItemPipelineCount(stageID, activePipelineStage, plannedCount)
 	}
@@ -140,6 +140,9 @@ func countEpisodesForPipelineStage(stageID, threshold string, episodes []spindle
 	// not asset-stage-driven. During encoding, matched episodes may still report
 	// stage="ripped" until encode output exists.
 	if stageID == "episode_identified" {
+		if episodeIdentifiedCount > 0 {
+			return min(episodeIdentifiedCount, episodePlanned)
+		}
 		count := 0
 		for _, ep := range episodes {
 			if isEpisodeMapped(ep) {

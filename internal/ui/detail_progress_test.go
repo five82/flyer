@@ -17,14 +17,30 @@ func TestCountEpisodesForPipelineStage_EpisodeIdentifiedUsesMappedFields(t *test
 		{Key: "s02_006", Stage: "ripped", Episode: 30, MatchScore: 0.96},
 	}
 
-	gotMatched := countEpisodesForPipelineStage("episode_identified", "episode_identified", episodes, 6, "encoded", 6)
+	gotMatched := countEpisodesForPipelineStage("episode_identified", "episode_identified", episodes, 6, 0, "encoded", 6)
 	if gotMatched != 6 {
 		t.Fatalf("episode_identified count = %d, want 6", gotMatched)
 	}
 
-	gotEncoded := countEpisodesForPipelineStage("encoded", "encoded", episodes, 6, "encoded", 6)
+	gotEncoded := countEpisodesForPipelineStage("encoded", "encoded", episodes, 6, 0, "encoded", 6)
 	if gotEncoded != 3 {
 		t.Fatalf("encoded count = %d, want 3", gotEncoded)
+	}
+}
+
+func TestCountEpisodesForPipelineStage_EpisodeIdentifiedPrefersExplicitCount(t *testing.T) {
+	episodes := []spindle.EpisodeStatus{
+		{Key: "s02_001", Stage: "encoded", Episode: 29, MatchScore: 0.94},
+		{Key: "s02_002", Stage: "encoded", Episode: 28, MatchScore: 0.92},
+		{Key: "s02_003", Stage: "encoded", Episode: 27, MatchScore: 0.93},
+		{Key: "s02_004", Stage: "ripped", Episode: 26, MatchScore: 0.94},
+		{Key: "s02_005", Stage: "ripped", Episode: 25, MatchScore: 0.94},
+		{Key: "s02_006", Stage: "ripped", Episode: 30, MatchScore: 0.96},
+	}
+
+	got := countEpisodesForPipelineStage("episode_identified", "episode_identified", episodes, 6, 3, "encoded", 6)
+	if got != 3 {
+		t.Fatalf("episode_identified count = %d, want 3", got)
 	}
 }
 

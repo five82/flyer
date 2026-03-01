@@ -73,6 +73,7 @@ type QueueItem struct {
 	RipSpec                 json.RawMessage           `json:"ripSpec"`
 	Episodes                []EpisodeStatus           `json:"episodes"`
 	EpisodeTotals           *EpisodeTotals            `json:"episodeTotals"`
+	EpisodeIdentifiedCount  int                       `json:"episodeIdentifiedCount"`
 	EpisodesSynced          bool                      `json:"episodesSynchronized"`
 	SubtitleGeneration      *SubtitleGenerationStatus `json:"subtitleGeneration"`
 	PrimaryAudioDescription string                    `json:"primaryAudioDescription"`
