@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/five82/flyer/internal/spindle"
 )
@@ -36,20 +36,23 @@ type problemsState struct {
 
 // initProblemsViewport initializes the problems viewport.
 func (m *Model) initProblemsViewport() {
-	m.problemsViewport = viewport.New(m.width-4, m.height-6)
+	m.problemsViewport = viewport.New(
+		viewport.WithWidth(m.width-4),
+		viewport.WithHeight(m.height-6),
+	)
 	m.problemsViewport.Style = lipgloss.NewStyle()
 	m.problemsState = problemsState{}
 }
 
 // updateProblemsViewport updates the problems viewport with current content.
 func (m *Model) updateProblemsViewport() {
-	if m.problemsViewport.Width == 0 {
+	if m.problemsViewport.Width() == 0 {
 		m.initProblemsViewport()
 	}
 
 	// Update dimensions
-	m.problemsViewport.Width = m.width - 4
-	m.problemsViewport.Height = m.height - 6
+	m.problemsViewport.SetWidth(m.width - 4)
+	m.problemsViewport.SetHeight(m.height - 6)
 
 	// Ensure viewport has focus background (problems view is always focused when shown)
 	m.problemsViewport.Style = lipgloss.NewStyle().Background(lipgloss.Color(m.theme.FocusBg))
@@ -92,7 +95,7 @@ func (m *Model) renderProblemsContent() string {
 	item := m.getSelectedItem()
 	bg := NewBgStyle(m.theme.FocusBg)
 	styles := m.theme.Styles().WithBackground(m.theme.FocusBg)
-	width := m.problemsViewport.Width
+	width := m.problemsViewport.Width()
 
 	if item == nil {
 		return bg.FillLine(bg.Render("Select an item to view problems", styles.MutedText), width)
@@ -265,7 +268,7 @@ func (m *Model) renderProblemSection(b *strings.Builder, title string, titleStyl
 }
 
 // handleProblemsKey processes keyboard input for problems view.
-func (m Model) handleProblemsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleProblemsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Top):
 		m.problemsViewport.GotoTop()

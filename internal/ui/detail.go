@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	"charm.land/lipgloss/v2"
 
 	"github.com/five82/flyer/internal/spindle"
 )
@@ -23,13 +23,16 @@ const (
 
 // initDetailViewport initializes the detail viewport.
 func (m *Model) initDetailViewport() {
-	m.detailViewport = viewport.New(m.width-4, m.height-6)
+	m.detailViewport = viewport.New(
+		viewport.WithWidth(m.width-4),
+		viewport.WithHeight(m.height-6),
+	)
 	m.detailViewport.Style = lipgloss.NewStyle()
 }
 
 // updateDetailViewport updates the detail viewport content.
 func (m *Model) updateDetailViewport() {
-	if m.detailViewport.Width == 0 {
+	if m.detailViewport.Width() == 0 {
 		m.initDetailViewport()
 	}
 
@@ -43,8 +46,8 @@ func (m *Model) updateDetailViewport() {
 	}
 	detailWidth := m.width - tableWidth
 
-	m.detailViewport.Width = detailWidth - 2    // minus box side borders
-	m.detailViewport.Height = contentHeight - 2 // minus box top/bottom borders
+	m.detailViewport.SetWidth(detailWidth - 2)    // minus box side borders
+	m.detailViewport.SetHeight(contentHeight - 2) // minus box top/bottom borders
 
 	// Use focus-aware background
 	bgColor := m.theme.SurfaceAlt
@@ -59,7 +62,7 @@ func (m *Model) updateDetailViewport() {
 	item := m.getSelectedItem()
 	if item == nil {
 		bg := NewBgStyle(bgColor)
-		m.detailViewport.SetContent(bg.FillLine(m.theme.Styles().MutedText.Render("Select an item to view details"), m.detailViewport.Width))
+		m.detailViewport.SetContent(bg.FillLine(m.theme.Styles().MutedText.Render("Select an item to view details"), m.detailViewport.Width()))
 		return
 	}
 
@@ -68,7 +71,7 @@ func (m *Model) updateDetailViewport() {
 	bg := NewBgStyle(bgColor)
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {
-		lines[i] = bg.FillLine(line, m.detailViewport.Width)
+		lines[i] = bg.FillLine(line, m.detailViewport.Width())
 	}
 	m.detailViewport.SetContent(strings.Join(lines, "\n"))
 }

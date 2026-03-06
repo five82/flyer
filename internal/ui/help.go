@@ -3,8 +3,8 @@ package ui
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // HelpModal displays keyboard shortcuts.
@@ -19,7 +19,7 @@ func NewHelpModal(keys keyMap) *HelpModal {
 
 // Update handles input for the help modal. Any key closes it.
 func (h *HelpModal) Update(msg tea.Msg, keys keyMap) (Modal, tea.Cmd, bool) {
-	if _, ok := msg.(tea.KeyMsg); ok {
+	if _, ok := msg.(tea.KeyPressMsg); ok {
 		return h, nil, true // Any key closes help
 	}
 	return h, nil, false
@@ -86,6 +86,6 @@ func (h *HelpModal) View(theme Theme, width, height int) string {
 		lipgloss.Center,
 		modalContent,
 		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color(theme.Background)),
+		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Background))),
 	)
 }

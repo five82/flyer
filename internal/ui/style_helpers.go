@@ -1,16 +1,17 @@
 package ui
 
 import (
+	"image/color"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // BgStyle provides helpers for rendering text with consistent background colors.
 // This solves lipgloss's limitation where ANSI reset codes between styled segments
-// cause gaps in background color. See: https://github.com/charmbracelet/lipgloss/discussions/78
+// cause gaps in background color. See: https://charm.land/lipgloss/v2/discussions/78
 type BgStyle struct {
-	bg    lipgloss.Color
+	bg    color.Color
 	space string // cached styled space
 }
 
@@ -71,7 +72,7 @@ func (b BgStyle) Join(parts []string, sep string) string {
 }
 
 // Color returns the background color.
-func (b BgStyle) Color() lipgloss.Color {
+func (b BgStyle) Color() color.Color {
 	return b.bg
 }
 

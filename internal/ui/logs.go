@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/five82/flyer/internal/spindle"
 )
@@ -80,21 +80,24 @@ func (m *Model) initLogState() {
 
 // initLogViewport initializes the log viewport.
 func (m *Model) initLogViewport() {
-	m.logViewport = viewport.New(m.width-4, m.height-5)
+	m.logViewport = viewport.New(
+		viewport.WithWidth(m.width-4),
+		viewport.WithHeight(m.height-5),
+	)
 	m.logViewport.Style = lipgloss.NewStyle()
 }
 
 // updateLogViewport updates the log viewport with current content.
 func (m *Model) updateLogViewport() {
-	if m.logViewport.Width == 0 {
+	if m.logViewport.Width() == 0 {
 		m.initLogViewport()
 	}
 
 	// Update dimensions
 	// Box height = m.height - 3 (header, cmdbar, status bar below)
 	// Box inner = box height - 2 (top and bottom borders) = m.height - 5
-	m.logViewport.Width = m.width - 4
-	m.logViewport.Height = m.height - 5
+	m.logViewport.SetWidth(m.width - 4)
+	m.logViewport.SetHeight(m.height - 5)
 
 	// Ensure viewport has focus background
 	m.logViewport.Style = lipgloss.NewStyle().Background(lipgloss.Color(m.theme.FocusBg))
@@ -239,7 +242,7 @@ func (m *Model) renderLogContent() string {
 	// Logs view is always focused when shown, so use FocusBg
 	bg := NewBgStyle(m.theme.FocusBg)
 	styles := m.theme.Styles()
-	width := m.logViewport.Width
+	width := m.logViewport.Width()
 
 	// Empty state for item logs with no item selected
 	if m.logState.mode == logSourceItem && m.getSelectedItem() == nil {
@@ -405,7 +408,7 @@ var (
 )
 
 // handleLogsKey processes keyboard input for logs view.
-func (m Model) handleLogsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleLogsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Handle search input mode
 	if m.logState.searchActive {
 		return m.handleLogSearchInput(msg)
@@ -503,7 +506,7 @@ func (m Model) handleLogsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleLogSearchInput handles keyboard input during log search.
-func (m *Model) handleLogSearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleLogSearchInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Confirm):
 		// Apply search
@@ -609,7 +612,7 @@ func (m *Model) scrollToSearchMatch() {
 	m.logState.follow = false
 
 	// Calculate scroll position to center the match if possible
-	viewportHeight := m.logViewport.Height
+	viewportHeight := m.logViewport.Height()
 	scrollTo := max(targetLine-viewportHeight/2, 0)
 	m.logViewport.SetYOffset(scrollTo)
 }
@@ -846,25 +849,25 @@ func (m *Model) initLogFilterInputs() {
 	levelInput := textinput.New()
 	levelInput.Placeholder = "e.g. error, warn, info, debug"
 	levelInput.CharLimit = 20
-	levelInput.Width = 30
+	levelInput.SetWidth(30)
 
 	// Component input
 	compInput := textinput.New()
 	compInput.Placeholder = "e.g. api, workflow, encoder"
 	compInput.CharLimit = 50
-	compInput.Width = 30
+	compInput.SetWidth(30)
 
 	// Lane input
 	laneInput := textinput.New()
 	laneInput.Placeholder = "e.g. ripping, encoding"
 	laneInput.CharLimit = 50
-	laneInput.Width = 30
+	laneInput.SetWidth(30)
 
 	// Request input
 	reqInput := textinput.New()
 	reqInput.Placeholder = "e.g. abc123"
 	reqInput.CharLimit = 50
-	reqInput.Width = 30
+	reqInput.SetWidth(30)
 
 	m.logFilterInputs[0] = levelInput
 	m.logFilterInputs[1] = compInput
@@ -888,7 +891,7 @@ func (m *Model) openLogFilters() {
 }
 
 // handleLogFiltersKey handles keyboard input for the log filters modal.
-func (m Model) handleLogFiltersKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleLogFiltersKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Escape):
 		// Cancel and close modal
@@ -1009,6 +1012,6 @@ func (m Model) renderLogFilters() string {
 		lipgloss.Center,
 		modalContent,
 		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color(m.theme.Background)),
+		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Background))),
 	)
 }

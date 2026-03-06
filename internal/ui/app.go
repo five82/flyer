@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/five82/flyer/internal/config"
 	"github.com/five82/flyer/internal/prefs"
@@ -157,7 +157,6 @@ func New(opts Options) Model {
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
-		tea.EnterAltScreen,
 		tickCmd(m.pollTick),
 	}
 	// Fetch snapshot immediately on start
@@ -170,7 +169,7 @@ func (m Model) Init() tea.Cmd {
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
 	case tea.WindowSizeMsg:
@@ -225,26 +224,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View implements tea.Model.
-func (m Model) View() string {
+func (m Model) View() tea.View {
+	var v tea.View
 	if !m.ready {
-		return "Loading..."
+		v = tea.NewView("Loading...")
+		v.AltScreen = true
+		return v
 	}
 
 	// Show modal overlay if active
 	if m.activeModal != nil {
-		return m.activeModal.View(m.theme, m.width, m.height)
+		v = tea.NewView(m.activeModal.View(m.theme, m.width, m.height))
+		v.AltScreen = true
+		return v
 	}
 
 	// Show log filters modal if active
 	if m.showLogFilters {
-		return m.renderLogFilters()
+		v = tea.NewView(m.renderLogFilters())
+		v.AltScreen = true
+		return v
 	}
 
-	return m.renderMain()
+	v = tea.NewView(m.renderMain())
+	v.AltScreen = true
+	return v
 }
 
 // handleKey processes keyboard input.
-func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Handle active modal
 	if m.activeModal != nil {
 		modal, cmd, closed := m.activeModal.Update(msg, m.keys)
@@ -477,7 +485,7 @@ func (m *Model) toggleFocusReverse() {
 }
 
 // handleQueueKey processes keyboard input for queue view.
-func (m Model) handleQueueKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleQueueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	items := m.getSortedItems()
 	itemCount := len(items)
 	if itemCount == 0 {
@@ -626,7 +634,7 @@ func fetchSnapshotCmd(store *state.Store) tea.Cmd {
 // Run starts the Bubble Tea program.
 func Run(opts Options) error {
 	m := New(opts)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m)
 	_, err := p.Run()
 	return err
 }
