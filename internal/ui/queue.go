@@ -51,7 +51,7 @@ func (m *Model) getSortedItems() []spindle.QueueItem {
 	for _, item := range m.snapshot.Queue {
 		switch m.filterMode {
 		case FilterFailed:
-			if !strings.EqualFold(item.Status, "failed") {
+			if !strings.EqualFold(item.Stage, "failed") {
 				continue
 			}
 		case FilterReview:
@@ -59,7 +59,7 @@ func (m *Model) getSortedItems() []spindle.QueueItem {
 				continue
 			}
 		case FilterProcessing:
-			if !isProcessingStatus(item.Status) {
+			if !isProcessingStatus(item.Stage) {
 				continue
 			}
 		}
@@ -72,8 +72,8 @@ func (m *Model) getSortedItems() []spindle.QueueItem {
 			return items[i].NeedsReview
 		}
 		// Then by status rank (active items bubble up)
-		pi := statusRank(items[i].Status)
-		pj := statusRank(items[j].Status)
+		pi := statusRank(items[i].Stage)
+		pj := statusRank(items[j].Stage)
 		if pi != pj {
 			return pi < pj
 		}
@@ -210,23 +210,26 @@ func (m Model) formatQueueRowContent(item spindle.QueueItem, width int, bgColor 
 
 // stageIcons maps status to display icon.
 var stageIcons = map[string]string{
-	"pending":             "~",
-	"identifying":         "*",
-	"episode_identifying": "*",
-	"identified":          "*",
-	"episode_identified":  "*",
-	"ripping":             ">",
-	"ripped":              ">",
-	"encoding":            "%",
-	"encoded":             "%",
-	"audio_analyzing":     "#",
-	"audio_analyzed":      "#",
-	"subtitling":          "@",
-	"subtitled":           "@",
-	"organizing":          "+",
-	"completed":           "+",
-	"failed":              "!",
-	"review":              "?",
+	"pending":                "~",
+	"identifying":            "*",
+	"identification":         "*",
+	"episode_identifying":    "*",
+	"episode_identification": "*",
+	"identified":             "*",
+	"episode_identified":     "*",
+	"ripping":                ">",
+	"ripped":                 ">",
+	"encoding":               "%",
+	"encoded":                "%",
+	"audio_analyzing":        "#",
+	"audio_analysis":         "#",
+	"audio_analyzed":         "#",
+	"subtitling":             "@",
+	"subtitled":              "@",
+	"organizing":             "+",
+	"completed":              "+",
+	"failed":                 "!",
+	"review":                 "?",
 }
 
 // stageIcon returns a display icon for the given status.
@@ -315,23 +318,26 @@ func (m Model) renderBox(title, content string, width, height int, focused bool)
 // statusRank returns the priority rank for a status (lower = higher priority).
 func statusRank(status string) int {
 	ranks := map[string]int{
-		"failed":              0,
-		"review":              1,
-		"encoding":            2,
-		"subtitling":          3,
-		"ripping":             4,
-		"audio_analyzing":     5,
-		"identifying":         6,
-		"episode_identifying": 7,
-		"organizing":          8,
-		"subtitled":           9,
-		"encoded":             10,
-		"ripped":              11,
-		"audio_analyzed":      12,
-		"identified":          13,
-		"episode_identified":  14,
-		"pending":             15,
-		"completed":           16,
+		"failed":                 0,
+		"review":                 1,
+		"encoding":               2,
+		"subtitling":             3,
+		"ripping":                4,
+		"audio_analyzing":        5,
+		"audio_analysis":         5,
+		"identifying":            6,
+		"identification":         6,
+		"episode_identifying":    7,
+		"episode_identification": 7,
+		"organizing":             8,
+		"subtitled":              9,
+		"encoded":                10,
+		"ripped":                 11,
+		"audio_analyzed":         12,
+		"identified":             13,
+		"episode_identified":     14,
+		"pending":                15,
+		"completed":              16,
 	}
 	if r, ok := ranks[strings.ToLower(status)]; ok {
 		return r
@@ -350,14 +356,6 @@ func composeTitle(item spindle.QueueItem) string {
 	if item.DiscTitle != "" {
 		return item.DiscTitle
 	}
-	if item.SourcePath != "" {
-		// Extract filename from path
-		parts := strings.Split(item.SourcePath, "/")
-		if len(parts) > 0 {
-			return parts[len(parts)-1]
-		}
-		return item.SourcePath
-	}
 	return fmt.Sprintf("Item #%d", item.ID)
 }
 
@@ -366,7 +364,7 @@ func effectiveQueueStage(item spindle.QueueItem) string {
 	if item.NeedsReview {
 		return "review"
 	}
-	return item.Status
+	return item.Stage
 }
 
 // getQueueTitle returns the queue pane title with optional filter indicator.

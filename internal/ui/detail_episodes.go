@@ -24,8 +24,8 @@ func (m *Model) renderEpisodeList(b *strings.Builder, item spindle.QueueItem, st
 	toggleHint := "[t]"
 	m.writeSection(b, fmt.Sprintf("Episodes %s", toggleHint), styles, bg)
 
-	// Episode sync warning
-	if !item.EpisodesSynced {
+	// Episode sync warning (show when episodes don't have resolved keys)
+	if item.EpisodeIdentifiedCount > 0 && item.EpisodeIdentifiedCount < len(episodes) {
 		b.WriteString(bg.Render("⚠ Episode numbers not confirmed", styles.WarningText))
 		b.WriteString("\n")
 	}
@@ -168,32 +168,12 @@ func (m *Model) activeEpisodeIndex(item spindle.QueueItem, episodes []spindle.Ep
 
 	stage := itemCurrentStage(item)
 
-	// 1. Precise Match: File path matching
-	if stage == "ripping" && item.RippedFile != "" {
+	// 1. Precise Match: File path matching via encoding input file
+	if (stage == "encoding" || stage == "subtitling") && item.Encoding != nil && item.Encoding.InputFile != "" {
+		input := item.Encoding.InputFile
 		for i, ep := range episodes {
-			if checkMatch(item.RippedFile, ep.RippedPath) || checkMatch(item.RippedFile, ep.OutputBasename) {
+			if checkMatch(input, ep.RippedPath) || checkMatch(input, ep.OutputBasename) {
 				return i
-			}
-		}
-	}
-	if stage == "encoding" || stage == "subtitling" {
-		target := item.EncodedFile
-		if target == "" && item.Encoding != nil && item.Encoding.Video != nil {
-			target = item.Encoding.Video.OutputFile
-		}
-		if target != "" {
-			for i, ep := range episodes {
-				if checkMatch(target, ep.EncodedPath) || checkMatch(target, ep.OutputBasename) {
-					return i
-				}
-			}
-		}
-		if item.Encoding != nil && item.Encoding.Video != nil && item.Encoding.Video.InputFile != "" {
-			input := item.Encoding.Video.InputFile
-			for i, ep := range episodes {
-				if checkMatch(input, ep.RippedPath) {
-					return i
-				}
 			}
 		}
 	}
@@ -375,19 +355,24 @@ func (m *Model) describeEpisodeFileStates(ep *spindle.EpisodeStatus) string {
 	return strings.Join(parts, " ")
 }
 
-// describeItemFileStates returns file state info for an item (movie).
+// describeItemFileStates returns file state info for a movie item.
+// Uses the "main" episode key from the episodes array (API-provided) or totals.
 func (m *Model) describeItemFileStates(item spindle.QueueItem) string {
-	var parts []string
-	if item.RippedFile != "" {
-		parts = append(parts, "Ripped")
+	// For movies, check the first episode (key "main") or use totals
+	if item.EpisodeTotals != nil {
+		var parts []string
+		if item.EpisodeTotals.Ripped > 0 {
+			parts = append(parts, "Ripped")
+		}
+		if item.EpisodeTotals.Encoded > 0 {
+			parts = append(parts, "Encoded")
+		}
+		if item.EpisodeTotals.Final > 0 {
+			parts = append(parts, "Final")
+		}
+		return strings.Join(parts, " · ")
 	}
-	if item.EncodedFile != "" {
-		parts = append(parts, "Encoded")
-	}
-	if item.FinalFile != "" {
-		parts = append(parts, "Final")
-	}
-	return strings.Join(parts, " · ")
+	return ""
 }
 
 // movieFocusLine returns the focus line for a movie item.

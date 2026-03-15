@@ -17,15 +17,18 @@ const compactWidthThreshold = 100
 // Past-tense statuses like "episode_identified" and "subtitled" are included
 // because they represent transitional states where work is still pending.
 var processingStatuses = map[string]struct{}{
-	"identifying":         {},
-	"ripping":             {},
-	"audio_analyzing":     {},
-	"episode_identifying": {},
-	"episode_identified":  {},
-	"encoding":            {},
-	"subtitling":          {},
-	"subtitled":           {},
-	"organizing":          {},
+	"identifying":            {},
+	"identification":         {},
+	"ripping":                {},
+	"audio_analyzing":        {},
+	"audio_analysis":         {},
+	"episode_identifying":    {},
+	"episode_identification": {},
+	"episode_identified":     {},
+	"encoding":               {},
+	"subtitling":             {},
+	"subtitled":              {},
+	"organizing":             {},
 }
 
 // renderHeader renders the status bar with all information.
@@ -230,7 +233,7 @@ func (m Model) buildStatusContent(styles Styles, bg BgStyle) string {
 // countProblemCounts returns the number of failed and review items.
 func (m Model) countProblemCounts() (failed, review int) {
 	for _, item := range m.snapshot.Queue {
-		if strings.EqualFold(item.Status, "failed") {
+		if strings.EqualFold(item.Stage, "failed") {
 			failed++
 		}
 		if item.NeedsReview {
@@ -460,7 +463,7 @@ func (m Model) estimateQueueETA() time.Duration {
 
 	for i := range m.snapshot.Queue {
 		item := &m.snapshot.Queue[i]
-		if strings.EqualFold(item.Status, "completed") || strings.EqualFold(item.Status, "failed") {
+		if strings.EqualFold(item.Stage, "completed") || strings.EqualFold(item.Stage, "failed") {
 			continue
 		}
 
@@ -510,7 +513,7 @@ func formatQueueETA(d time.Duration) string {
 func (m Model) activeEncodingItem() *spindle.QueueItem {
 	for i := range m.snapshot.Queue {
 		item := &m.snapshot.Queue[i]
-		if strings.EqualFold(item.Status, "encoding") && item.Encoding != nil {
+		if strings.EqualFold(item.Stage, "encoding") && item.Encoding != nil {
 			return item
 		}
 	}

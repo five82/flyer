@@ -176,7 +176,7 @@ func itemCurrentStage(item spindle.QueueItem) string {
 			return stage
 		}
 	}
-	return normalizeEpisodeStage(item.Status)
+	return normalizeEpisodeStage(item.Stage)
 }
 
 // isKnownPipelineStage returns true if the stage maps to a pipeline stage.
@@ -186,13 +186,16 @@ func isKnownPipelineStage(stage string) bool {
 		"episode_identifying", "episode_identified",
 		"audio_analyzing", "audio_analyzed",
 		"encoding", "encoded", "subtitling", "subtitled",
-		"organizing", "final", "completed", "failed":
+		"organizing", "final", "completed", "failed",
+		// Spindle's raw stage names (normalized by normalizeEpisodeStage)
+		"identification", "episode_identification", "audio_analysis":
 		return true
 	}
 	return false
 }
 
 // normalizeEpisodeStage normalizes various stage names to a canonical form.
+// Maps spindle's raw stage names to flyer's display names.
 func normalizeEpisodeStage(stage string) string {
 	stage = strings.ToLower(strings.TrimSpace(stage))
 	switch stage {
@@ -200,6 +203,12 @@ func normalizeEpisodeStage(stage string) string {
 		return "final"
 	case "pending":
 		return "planned"
+	case "identification":
+		return "identifying"
+	case "episode_identification":
+		return "episode_identifying"
+	case "audio_analysis":
+		return "audio_analyzing"
 	default:
 		return stage
 	}
@@ -286,7 +295,7 @@ func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem,
 		color = styles.WarningText
 		// Check for encoding substage from Drapto
 		if enc := item.Encoding; enc != nil {
-			substage := strings.ToLower(strings.TrimSpace(enc.Stage))
+			substage := strings.ToLower(strings.TrimSpace(enc.Substage))
 			switch {
 			case strings.Contains(substage, "analysis") || strings.Contains(substage, "crop"):
 				label = "ANALYZING"

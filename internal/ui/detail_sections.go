@@ -34,43 +34,34 @@ func (m *Model) renderEstimatedSize(b *strings.Builder, item spindle.QueueItem, 
 // renderSizeResult renders the file size comparison (input → output with reduction %).
 func (m *Model) renderSizeResult(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
 	enc := item.Encoding
-	if enc == nil || enc.Result == nil {
-		return
-	}
-	r := enc.Result
-	if r.OriginalSize <= 0 || r.EncodedSize <= 0 {
+	if enc == nil || enc.OriginalSize <= 0 || enc.EncodedSize <= 0 {
 		return
 	}
 
 	b.WriteString(bg.Render("Size:      ", styles.MutedText))
-	b.WriteString(bg.Render(formatBytes(r.OriginalSize), styles.Text))
+	b.WriteString(bg.Render(formatBytes(enc.OriginalSize), styles.Text))
 	b.WriteString(bg.Render(" → ", styles.FaintText))
-	b.WriteString(bg.Render(formatBytes(r.EncodedSize), styles.AccentText))
-	b.WriteString(bg.Render(fmt.Sprintf(" (%.0f%% reduction)", r.SizeReductionPercent), styles.MutedText))
+	b.WriteString(bg.Render(formatBytes(enc.EncodedSize), styles.AccentText))
+	b.WriteString(bg.Render(fmt.Sprintf(" (%.0f%% reduction)", enc.SizeReductionPercent), styles.MutedText))
 	b.WriteString("\n")
 }
 
 // renderVideoSpecs renders the video specs line (resolution + HDR status).
 func (m *Model) renderVideoSpecs(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
 	enc := item.Encoding
-	if enc == nil || enc.Video == nil {
+	if enc == nil || enc.Resolution == "" {
 		return
 	}
-	video := enc.Video
 	var parts []string
 
-	if video.Resolution != "" {
-		parts = append(parts, video.Resolution)
-	}
-	if video.DynamicRange != "" {
-		parts = append(parts, strings.ToUpper(video.DynamicRange))
+	parts = append(parts, enc.Resolution)
+	if enc.DynamicRange != "" {
+		parts = append(parts, strings.ToUpper(enc.DynamicRange))
 	}
 
-	if len(parts) > 0 {
-		b.WriteString(bg.Render("Video:     ", styles.MutedText))
-		b.WriteString(bg.Render(strings.Join(parts, " "), styles.AccentText))
-		b.WriteString("\n")
-	}
+	b.WriteString(bg.Render("Video:     ", styles.MutedText))
+	b.WriteString(bg.Render(strings.Join(parts, " "), styles.AccentText))
+	b.WriteString("\n")
 }
 
 // renderAudioInfo renders the source audio format.
@@ -87,47 +78,38 @@ func (m *Model) renderAudioInfo(b *strings.Builder, item spindle.QueueItem, styl
 // renderEncodingConfig renders the encoding config line (preset + CRF + tune).
 func (m *Model) renderEncodingConfig(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
 	enc := item.Encoding
-	if enc == nil || enc.Config == nil {
+	if enc == nil || enc.Preset == "" {
 		return
 	}
-	cfg := enc.Config
 	var parts []string
 
-	if cfg.Preset != "" {
-		parts = append(parts, fmt.Sprintf("Preset %s", cfg.Preset))
+	parts = append(parts, fmt.Sprintf("Preset %s", enc.Preset))
+	if enc.Quality != "" {
+		parts = append(parts, enc.Quality)
 	}
-	if cfg.Quality != "" {
-		parts = append(parts, cfg.Quality)
-	}
-	if cfg.Tune != "" {
-		parts = append(parts, fmt.Sprintf("Tune %s", cfg.Tune))
+	if enc.Tune != "" {
+		parts = append(parts, fmt.Sprintf("Tune %s", enc.Tune))
 	}
 
-	if len(parts) > 0 {
-		b.WriteString(bg.Render("Config:    ", styles.MutedText))
-		b.WriteString(bg.Render(strings.Join(parts, " • "), styles.AccentText))
-		b.WriteString("\n")
-	}
+	b.WriteString(bg.Render("Config:    ", styles.MutedText))
+	b.WriteString(bg.Render(strings.Join(parts, " • "), styles.AccentText))
+	b.WriteString("\n")
 }
 
 // renderEncodeStats renders duration and average speed (for completed).
 func (m *Model) renderEncodeStats(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
 	enc := item.Encoding
-	if enc == nil || enc.Result == nil {
-		return
-	}
-	r := enc.Result
-	if r.DurationSeconds <= 0 && r.AverageSpeed <= 0 {
+	if enc == nil || (enc.EncodeDurationSeconds <= 0 && enc.AverageSpeed <= 0) {
 		return
 	}
 
 	var parts []string
-	if r.DurationSeconds > 0 {
-		dur := time.Duration(r.DurationSeconds * float64(time.Second))
+	if enc.EncodeDurationSeconds > 0 {
+		dur := time.Duration(enc.EncodeDurationSeconds * float64(time.Second))
 		parts = append(parts, humanizeDurationLong(dur))
 	}
-	if r.AverageSpeed > 0 {
-		parts = append(parts, fmt.Sprintf("%.1fx avg", r.AverageSpeed))
+	if enc.AverageSpeed > 0 {
+		parts = append(parts, fmt.Sprintf("%.1fx avg", enc.AverageSpeed))
 	}
 
 	b.WriteString(bg.Render("Encoded:   ", styles.MutedText))
@@ -166,25 +148,17 @@ func (m *Model) renderValidationSummary(b *strings.Builder, item spindle.QueueIt
 // renderCropInfo renders the crop detection line.
 func (m *Model) renderCropInfo(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
 	enc := item.Encoding
-	if enc == nil || enc.Crop == nil {
-		return
-	}
-	crop := enc.Crop
-
-	if crop.Disabled {
-		b.WriteString(bg.Render("Crop:      ", styles.MutedText))
-		b.WriteString(bg.Render("Disabled", styles.FaintText))
-		b.WriteString("\n")
+	if enc == nil {
 		return
 	}
 
-	if crop.Required && crop.Crop != "" {
+	if enc.CropRequired && enc.CropFilter != "" {
 		// Strip "crop=" prefix for cleaner display
-		cropVal := strings.TrimPrefix(crop.Crop, "crop=")
+		cropVal := strings.TrimPrefix(enc.CropFilter, "crop=")
 		b.WriteString(bg.Render("Crop:      ", styles.MutedText))
 		b.WriteString(bg.Render(cropVal, styles.AccentText))
 		b.WriteString("\n")
-	} else if crop.Message != "" {
+	} else if enc.CropMessage != "" {
 		// Detection complete but no cropping needed
 		b.WriteString(bg.Render("Crop:      ", styles.MutedText))
 		b.WriteString(bg.Render("None", styles.FaintText))

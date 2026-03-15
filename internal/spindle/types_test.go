@@ -13,12 +13,6 @@ func TestEncodingHelpers(t *testing.T) {
 	if (&EncodingStatus{ETASeconds: 2.5}).ETADuration() != 2500*time.Millisecond {
 		t.Fatalf("ETADuration mismatch")
 	}
-	if (&EncodingStatus{TotalFrames: 0, CurrentFrame: 10}).FramePercent() != 0 {
-		t.Fatalf("FramePercent should be 0 when TotalFrames<=0")
-	}
-	if got := (&EncodingStatus{TotalFrames: 100, CurrentFrame: 25}).FramePercent(); got != 0.25 {
-		t.Fatalf("FramePercent = %v, want 0.25", got)
-	}
 }
 
 func TestParseTimeLayouts(t *testing.T) {

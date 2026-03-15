@@ -166,7 +166,7 @@ func (m *Model) renderStatusChips(item spindle.QueueItem, bg BgStyle) string {
 	var chips []string
 
 	// Status chip
-	colorHex := m.theme.StatusColors[strings.ToLower(item.Status)]
+	colorHex := m.theme.StatusColors[strings.ToLower(item.Stage)]
 	if colorHex == "" {
 		colorHex = m.theme.Muted
 	}
@@ -175,18 +175,8 @@ func (m *Model) renderStatusChips(item spindle.QueueItem, bg BgStyle) string {
 		Foreground(lipgloss.Color(m.theme.Background)).
 		Background(statusColor).
 		Padding(0, 1).
-		Render(strings.ToUpper(titleCase(item.Status)))
+		Render(strings.ToUpper(titleCase(item.Stage)))
 	chips = append(chips, statusChip)
-
-	// Lane chip
-	if lane := item.ProcessingLane; lane != "" {
-		laneChip := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(m.theme.Background)).
-			Background(lipgloss.Color(m.theme.Accent)).
-			Padding(0, 1).
-			Render(strings.ToUpper(lane))
-		chips = append(chips, laneChip)
-	}
 
 	// Edition badge (Director's Cut, Extended Edition, etc.)
 	if edition := extractEdition(item.Metadata); edition != "" {
@@ -262,7 +252,7 @@ func (m *Model) writeSection(b *strings.Builder, title string, styles Styles, bg
 
 // determineDetailContext returns the appropriate context for rendering.
 func determineDetailContext(item spindle.QueueItem) detailContext {
-	status := strings.ToLower(strings.TrimSpace(item.Status))
+	status := strings.ToLower(strings.TrimSpace(item.Stage))
 
 	if status == "failed" || item.NeedsReview || strings.TrimSpace(item.ErrorMessage) != "" {
 		return contextFailed
@@ -286,13 +276,6 @@ func (m *Model) renderPendingDetail(b *strings.Builder, item spindle.QueueItem, 
 	if metaRows := summarizeMetadata(item.Metadata); len(metaRows) > 0 {
 		m.writeSection(b, "Metadata", styles, bg)
 		m.renderMetadata(b, metaRows, styles, bg)
-	}
-
-	// Source path
-	if item.SourcePath != "" {
-		m.writeSection(b, "Source", styles, bg)
-		b.WriteString(bg.Render(item.SourcePath, styles.Text))
-		b.WriteString("\n")
 	}
 }
 
@@ -390,7 +373,7 @@ func (m *Model) renderCompletedDetail(b *strings.Builder, item spindle.QueueItem
 	}
 
 	// Episode list for TV content
-	currentStage := normalizeEpisodeStage(item.Status)
+	currentStage := normalizeEpisodeStage(item.Stage)
 	m.renderEpisodeList(b, item, styles, bg, titleLookup, episodeTitleIndex, currentStage, totals)
 }
 
@@ -482,17 +465,4 @@ func (m *Model) renderFailedDetail(b *strings.Builder, item spindle.QueueItem, s
 
 	// Validation details (show all steps if there are failures)
 	m.renderValidationDetails(b, item, styles, bg)
-
-	// Paths section (always expanded for debugging)
-	m.writeSection(b, "Paths", styles, bg)
-	if item.SourcePath != "" {
-		b.WriteString(bg.Render("Source:   ", styles.MutedText))
-		b.WriteString(bg.Render(item.SourcePath, styles.Text))
-		b.WriteString("\n")
-	}
-	if item.ItemLogPath != "" {
-		b.WriteString(bg.Render("Log:      ", styles.MutedText))
-		b.WriteString(bg.Render(item.ItemLogPath, styles.Text))
-		b.WriteString("\n")
-	}
 }
