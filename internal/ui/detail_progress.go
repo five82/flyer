@@ -41,20 +41,21 @@ func stageAtOrBeyond(epStage, threshold string) bool {
 // pipelineStages defines the display stages for the detail view pipeline.
 // Each entry's threshold is the earliest stage that counts as "complete" for that row.
 var pipelineStages = []struct {
-	id        string
-	label     string
-	threshold string // episode stage at which this pipeline step is considered done
-	tvOnly    bool   // only shown for TV shows (multi-episode items)
+	id          string
+	activeLabel string // present tense (shown when incomplete)
+	doneLabel   string // past tense (shown when complete)
+	threshold   string // episode stage at which this pipeline step is considered done
+	tvOnly      bool   // only shown for TV shows (multi-episode items)
 }{
-	{"planned", "Planned", "", false},
-	{"identifying", "Identified", "identified", false},
-	{"ripped", "Ripped", "ripped", false},
-	{"episode_identified", "Ep. Matched", "episode_identified", true},
-	{"encoded", "Encoded", "encoded", false},
-	{"audio_analyzed", "Analyzed", "audio_analyzed", false},
-	{"subtitled", "Subtitled", "subtitled", false},
-	{"organizing", "Organized", "final", false},
-	{"final", "Completed", "final", false},
+	{"planned", "Planning", "Planned", "", false},
+	{"identifying", "Identifying", "Identified", "identified", false},
+	{"ripped", "Ripping", "Ripped", "ripped", false},
+	{"episode_identified", "Ep. Matching", "Ep. Matched", "episode_identified", true},
+	{"encoded", "Encoding", "Encoded", "encoded", false},
+	{"audio_analyzed", "Analyzing", "Analyzed", "audio_analyzed", false},
+	{"subtitled", "Subtitling", "Subtitled", "subtitled", false},
+	{"organizing", "Organizing", "Organized", "final", false},
+	{"final", "Completed", "Completed", "final", false},
 }
 
 // renderPipelineStatus renders the pipeline progress visualization,
@@ -115,8 +116,12 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 		b.WriteString(bg.Render(icon, style))
 		b.WriteString(bg.Space())
 
-		// Label padded to 12 chars
-		paddedLabel := fmt.Sprintf("%-12s", stage.label)
+		// Pick label based on completion state
+		label := stage.activeLabel
+		if isComplete {
+			label = stage.doneLabel
+		}
+		paddedLabel := fmt.Sprintf("%-12s", label)
 		b.WriteString(bg.Render(paddedLabel, labelStyle))
 
 		// Right-aligned count (TV shows only)
