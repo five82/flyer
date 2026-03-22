@@ -129,29 +129,3 @@ func TestEstimateETA_UsesStageEntryTime(t *testing.T) {
 		}
 	}
 }
-
-func TestEstimateRemainingFromProgress_SuppressedDuringAnalyzing(t *testing.T) {
-	m := Model{stageFirstSeen: make(map[int64]stageObservation)}
-	item := &spindle.QueueItem{
-		ID:       1,
-		Progress: spindle.QueueProgress{Stage: "Analyzing", Percent: 50},
-	}
-	if got := m.estimateRemainingFromProgress(item); got != 0 {
-		t.Fatalf("expected 0 during Analyzing, got %v", got)
-	}
-}
-
-func TestEstimateRemainingFromProgress_SuppressedBelowThreshold(t *testing.T) {
-	m := Model{stageFirstSeen: make(map[int64]stageObservation)}
-	m.stageFirstSeen[1] = stageObservation{
-		stage:     "ripping",
-		firstSeen: time.Now().Add(-5 * time.Minute),
-	}
-	item := &spindle.QueueItem{
-		ID:       1,
-		Progress: spindle.QueueProgress{Stage: "Ripping", Percent: 3},
-	}
-	if got := m.estimateRemainingFromProgress(item); got != 0 {
-		t.Fatalf("expected 0 at 3%%, got %v", got)
-	}
-}

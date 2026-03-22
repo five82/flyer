@@ -103,20 +103,17 @@ func (m Model) countProcessingItems() int {
 }
 
 // buildProcessingPart builds the active encoding or processing count display.
-// Returns the rendered part and whether an encoding ETA was shown.
-func (m Model) buildProcessingPart(compact bool, processing int, styles Styles, bg BgStyle) (string, bool) {
+func (m Model) buildProcessingPart(compact bool, processing int, styles Styles, bg BgStyle) string {
 	if encodingItem := m.activeEncodingItem(); encodingItem != nil {
-		encodingMini := m.formatEncodingMini(encodingItem, compact, styles, bg)
-		showedETA := !compact && encodingItem.Encoding != nil && encodingItem.Encoding.ETADuration() > 0
-		return encodingMini, showedETA
+		return m.formatEncodingMini(encodingItem, compact, styles, bg)
 	}
 	if processing > 0 {
 		color := lipgloss.Color(m.theme.StatusColors["encoding"])
 		activeStyle := lipgloss.NewStyle().Foreground(color)
 		return bg.Render("Active:", styles.MutedText) + bg.Space() +
-			bg.Render(fmt.Sprintf("%d", processing), activeStyle), false
+			bg.Render(fmt.Sprintf("%d", processing), activeStyle)
 	}
-	return "", false
+	return ""
 }
 
 // buildProblemCountsPart builds the failed/review counts display.
@@ -194,19 +191,8 @@ func (m Model) buildStatusContent(styles Styles, bg BgStyle) string {
 	)
 
 	// Active encoding or processing count
-	processingPart, showedEncodingETA := m.buildProcessingPart(compact, processing, styles, bg)
-	if processingPart != "" {
+	if processingPart := m.buildProcessingPart(compact, processing, styles, bg); processingPart != "" {
 		parts = append(parts, processingPart)
-	}
-
-	// Queue ETA (only show if we didn't already show encoding ETA)
-	if !showedEncodingETA {
-		if eta := m.estimateQueueETA(); eta > 0 {
-			parts = append(parts,
-				bg.Render("ETA:", styles.MutedText)+bg.Space()+
-					bg.Render(formatQueueETA(eta), styles.InfoText),
-			)
-		}
 	}
 
 	// Failed and review counts (only shown when non-zero)
@@ -429,86 +415,6 @@ func truncateMiddle(s string, max int) string {
 	return s[:startLen] + "..." + s[len(s)-endLen:]
 }
 
-// estimateRemainingFromProgress estimates remaining time based on elapsed time and progress.
-// Returns 0 if no reliable estimate can be made.
-func (m Model) estimateRemainingFromProgress(item *spindle.QueueItem) time.Duration {
-	// Skip items in MakeMKV's brief analyzing sub-phase
-	if strings.EqualFold(item.Progress.Stage, "Analyzing") {
-		return 0
-	}
-	if item.Progress.Percent < 5 || item.Progress.Percent >= 100 {
-		return 0
-	}
-	// Use stage entry time instead of item creation time
-	obs, ok := m.stageFirstSeen[item.ID]
-	if !ok || obs.firstSeen.IsZero() {
-		return 0
-	}
-	elapsed := time.Since(obs.firstSeen)
-	if elapsed <= 0 {
-		return 0
-	}
-	remaining := time.Duration(float64(elapsed) * (100 - item.Progress.Percent) / item.Progress.Percent)
-	if remaining <= 0 {
-		return 0
-	}
-	return remaining
-}
-
-// estimateQueueETA calculates the total estimated time remaining for the queue.
-// Returns 0 if no reliable estimate is available.
-func (m Model) estimateQueueETA() time.Duration {
-	var total time.Duration
-	hasEstimate := false
-
-	for i := range m.snapshot.Queue {
-		item := &m.snapshot.Queue[i]
-		if strings.EqualFold(item.Stage, "completed") || strings.EqualFold(item.Stage, "failed") {
-			continue
-		}
-
-		// Use encoding ETA if available (most accurate)
-		if enc := item.Encoding; enc != nil {
-			if eta := enc.ETADuration(); eta > 0 {
-				total += eta
-				hasEstimate = true
-				continue
-			}
-		}
-
-		// Fall back to progress-based estimation
-		if remaining := m.estimateRemainingFromProgress(item); remaining > 0 {
-			total += remaining
-			hasEstimate = true
-		}
-	}
-
-	if !hasEstimate {
-		return 0
-	}
-	return total
-}
-
-// formatQueueETA formats the queue ETA for display in the header.
-func formatQueueETA(d time.Duration) string {
-	if d <= 0 {
-		return "--"
-	}
-
-	hours := int(d.Hours())
-	minutes := int(d.Minutes()) % 60
-
-	if hours >= 24 {
-		days := hours / 24
-		hours %= 24
-		return fmt.Sprintf("~%dd %dh", days, hours)
-	}
-	if hours > 0 {
-		return fmt.Sprintf("~%dh %dm", hours, minutes)
-	}
-	return fmt.Sprintf("~%dm", minutes)
-}
-
 // activeEncodingItem returns the first item that is actively encoding.
 func (m Model) activeEncodingItem() *spindle.QueueItem {
 	for i := range m.snapshot.Queue {
@@ -544,13 +450,6 @@ func (m Model) formatEncodingMini(item *spindle.QueueItem, compact bool, styles 
 	parts = append(parts, bg.Render("⚙", iconStyle))
 	parts = append(parts, bg.Render(title, styles.Text))
 	parts = append(parts, bg.Render(fmt.Sprintf("%.0f%%", percent), styles.AccentText))
-
-	// Add ETA if available
-	if eta := enc.ETADuration(); eta > 0 {
-		if !compact {
-			parts = append(parts, bg.Render(formatQueueETA(eta), styles.MutedText))
-		}
-	}
 
 	return strings.Join(parts, bg.Space())
 }

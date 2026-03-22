@@ -332,6 +332,12 @@ func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem,
 	b.WriteString(bg.Space())
 	b.WriteString(bg.Render(fmt.Sprintf("%3.0f%%", percent), styles.Text))
 
+	// Add ETA for stages that support it
+	if eta := m.estimateETA(item); eta != "" {
+		b.WriteString(bg.Spaces(2))
+		b.WriteString(bg.Render(eta, styles.MutedText))
+	}
+
 	// Add byte progress for organizing stage
 	if stage == "organizing" && item.Progress.TotalBytes > 0 {
 		b.WriteString(bg.Spaces(2))
@@ -350,10 +356,7 @@ func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem,
 				msg += fmt.Sprintf(" • %.0f fps", item.Encoding.FPS)
 			}
 		case "ripping", "ripped":
-			// Append ETA
-			if eta := m.estimateETA(item); eta != "" {
-				msg += " • " + eta
-			}
+			// ETA now shown on progress bar line
 		}
 		b.WriteString(bg.Render("   ", styles.Text)) // Indent to align with progress bar
 		b.WriteString(bg.Render(msg, styles.Text))
