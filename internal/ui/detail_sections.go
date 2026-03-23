@@ -54,7 +54,16 @@ func (m *Model) renderVideoSpecs(b *strings.Builder, item spindle.QueueItem, sty
 	}
 	var parts []string
 
-	parts = append(parts, enc.Resolution)
+	// Show cropped resolution if crop was applied, otherwise source resolution
+	res := enc.Resolution
+	if enc.CropRequired && enc.CropFilter != "" {
+		if dims := strings.TrimPrefix(enc.CropFilter, "crop="); dims != enc.CropFilter {
+			if fields := strings.SplitN(dims, ":", 3); len(fields) >= 2 {
+				res = fields[0] + "x" + fields[1]
+			}
+		}
+	}
+	parts = append(parts, res)
 	if enc.DynamicRange != "" {
 		parts = append(parts, strings.ToUpper(enc.DynamicRange))
 	}
