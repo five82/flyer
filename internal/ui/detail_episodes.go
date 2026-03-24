@@ -135,18 +135,15 @@ func (m *Model) describeEpisodeWithExtras(ep spindle.EpisodeStatus, titles map[i
 
 	// Subtitle source
 	source := strings.ToLower(strings.TrimSpace(ep.GeneratedSubtitleSource))
-	switch source {
-	case "whisperx":
+	if source == "whisperx" {
 		extras = append(extras, "AI")
-		// Check for decision type
+		// Check for forced subtitle decision
 		switch strings.ToLower(strings.TrimSpace(ep.GeneratedSubtitleDecision)) {
 		case "no_match":
 			extras = append(extras, "NO-MATCH")
 		case "error":
 			extras = append(extras, "OS-ERR")
 		}
-	case "opensubtitles":
-		extras = append(extras, "OS")
 	}
 
 	info := m.lookupRipTitleInfo(&ep, titles, keyLookup)

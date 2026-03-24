@@ -182,35 +182,23 @@ func (m *Model) renderSubtitleSummary(b *strings.Builder, item spindle.QueueItem
 		return
 	}
 
-	osCount := 0
-	aiCount := 0
+	count := 0
 	for _, ep := range episodes {
 		source := strings.ToLower(strings.TrimSpace(ep.GeneratedSubtitleSource))
 		if source == "" {
 			source = strings.ToLower(strings.TrimSpace(ep.SubtitleSource))
 		}
-		switch source {
-		case "opensubtitles":
-			osCount++
-		case "whisperx":
-			aiCount++
+		if source == "whisperx" {
+			count++
 		}
 	}
 
-	if osCount == 0 && aiCount == 0 {
+	if count == 0 {
 		return
 	}
 
-	var parts []string
-	if osCount > 0 {
-		parts = append(parts, fmt.Sprintf("%d OpenSubtitles", osCount))
-	}
-	if aiCount > 0 {
-		parts = append(parts, fmt.Sprintf("%d WhisperX", aiCount))
-	}
-
 	b.WriteString(bg.Render("Subs:      ", styles.MutedText))
-	b.WriteString(bg.Render(strings.Join(parts, " • "), styles.AccentText))
+	b.WriteString(bg.Render(fmt.Sprintf("%d WhisperX", count), styles.AccentText))
 	b.WriteString("\n")
 }
 
@@ -221,20 +209,12 @@ func (m *Model) renderSubtitleInfo(b *strings.Builder, item spindle.QueueItem, s
 		return
 	}
 
-	// Determine the source used
-	var source string
-	if sg.OpenSubtitles > 0 {
-		source = "OpenSubtitles"
-	} else if sg.WhisperX > 0 {
-		source = "WhisperX"
-	}
-
-	if source == "" {
+	if sg.WhisperX == 0 {
 		return
 	}
 
 	b.WriteString(bg.Render("Subs:      ", styles.MutedText))
-	b.WriteString(bg.Render(source, styles.AccentText))
+	b.WriteString(bg.Render("WhisperX", styles.AccentText))
 	b.WriteString("\n")
 }
 

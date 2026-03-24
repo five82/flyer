@@ -191,9 +191,7 @@ type EpisodeTotals struct {
 }
 
 type SubtitleGenerationStatus struct {
-	OpenSubtitles         int  `json:"opensubtitles"`
-	WhisperX              int  `json:"whisperx"`
-	ExpectedOpenSubtitles bool `json:"expectedOpenSubtitles"`
+	WhisperX int `json:"whisperx"`
 }
 
 // LogEvent represents a single log entry from /api/logs.
