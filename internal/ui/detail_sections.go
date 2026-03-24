@@ -227,9 +227,6 @@ func (m *Model) renderSubtitleInfo(b *strings.Builder, item spindle.QueueItem, s
 		source = "OpenSubtitles"
 	} else if sg.WhisperX > 0 {
 		source = "WhisperX"
-		if sg.FallbackUsed {
-			source += " (fallback)"
-		}
 	}
 
 	if source == "" {

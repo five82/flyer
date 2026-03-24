@@ -218,20 +218,6 @@ func (m *Model) renderStatusChips(item spindle.QueueItem, bg BgStyle) string {
 		chips = append(chips, cacheChip)
 	}
 
-	// AI/AI2 badge (WhisperX fallback)
-	if item.SubtitleGeneration != nil && item.SubtitleGeneration.FallbackUsed {
-		label := "AI"
-		if item.SubtitleGeneration.WhisperX > 1 {
-			label = fmt.Sprintf("AI%d", item.SubtitleGeneration.WhisperX)
-		}
-		aiChip := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(m.theme.Background)).
-			Background(lipgloss.Color(m.theme.Warning)).
-			Padding(0, 1).
-			Render(label)
-		chips = append(chips, aiChip)
-	}
-
 	return strings.Join(chips, bg.Space())
 }
 

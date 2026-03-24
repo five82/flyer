@@ -194,7 +194,6 @@ type SubtitleGenerationStatus struct {
 	OpenSubtitles         int  `json:"opensubtitles"`
 	WhisperX              int  `json:"whisperx"`
 	ExpectedOpenSubtitles bool `json:"expectedOpenSubtitles"`
-	FallbackUsed          bool `json:"fallbackUsed"`
 }
 
 // LogEvent represents a single log entry from /api/logs.
