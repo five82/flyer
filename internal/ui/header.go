@@ -102,18 +102,53 @@ func (m Model) countProcessingItems() int {
 	return count
 }
 
-// buildProcessingPart builds the active encoding or processing count display.
+// buildProcessingPart builds a compact pipeline summary of all active items.
 func (m Model) buildProcessingPart(compact bool, processing int, styles Styles, bg BgStyle) string {
-	if encodingItem := m.activeEncodingItem(); encodingItem != nil {
-		return m.formatEncodingMini(encodingItem, compact, styles, bg)
+	var parts []string
+
+	// Encoding item gets priority with full mini-progress.
+	encItem := m.activeEncodingItem()
+	if encItem != nil {
+		parts = append(parts, m.formatEncodingMini(encItem, compact, styles, bg))
 	}
-	if processing > 0 {
-		color := lipgloss.Color(m.theme.StatusColors["encoding"])
-		activeStyle := lipgloss.NewStyle().Foreground(color)
-		return bg.Render("Active:", styles.MutedText) + bg.Space() +
-			bg.Render(fmt.Sprintf("%d", processing), activeStyle)
+
+	// Other active (non-encoding) items.
+	maxOthers := 2
+	if compact {
+		maxOthers = 1
 	}
-	return ""
+	titleLen := maxLen(compact, 16, 8)
+
+	for i := range m.snapshot.Queue {
+		if len(parts) >= maxOthers+1 {
+			break
+		}
+		item := &m.snapshot.Queue[i]
+		if !item.InProgress {
+			continue
+		}
+		if strings.EqualFold(item.Stage, "encoding") {
+			continue // already shown above
+		}
+		icon := stageIcon(item.Stage)
+		title := truncate(composeTitle(*item), titleLen)
+		colorHex := m.colorForStatus(item.Stage)
+		iconStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colorHex))
+		parts = append(parts, bg.Render(icon, iconStyle)+bg.Space()+bg.Render(title, styles.Text))
+	}
+
+	if len(parts) == 0 {
+		if processing > 0 {
+			color := lipgloss.Color(m.theme.StatusColors["encoding"])
+			activeStyle := lipgloss.NewStyle().Foreground(color)
+			return bg.Render("Active:", styles.MutedText) + bg.Space() +
+				bg.Render(fmt.Sprintf("%d", processing), activeStyle)
+		}
+		return ""
+	}
+
+	sep := bg.Space() + bg.Render("|", styles.FaintText) + bg.Space()
+	return strings.Join(parts, sep)
 }
 
 // buildProblemCountsPart builds the failed/review counts display.
