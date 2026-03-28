@@ -341,8 +341,8 @@ func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem,
 		b.WriteString(bg.Render(eta, styles.MutedText))
 	}
 
-	// Add byte progress for organizing stage
-	if stage == "organizing" && item.Progress.TotalBytes > 0 {
+	// Add byte progress for stages that report it.
+	if (stage == "organizing" || stage == "ripping") && item.Progress.TotalBytes > 0 {
 		b.WriteString(bg.Spaces(2))
 		b.WriteString(bg.Render(fmt.Sprintf("%s / %s",
 			formatBytes(item.Progress.BytesCopied),
