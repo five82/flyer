@@ -187,7 +187,7 @@ func itemCurrentStage(item spindle.QueueItem) string {
 // isKnownPipelineStage returns true if the stage maps to a pipeline stage.
 func isKnownPipelineStage(stage string) bool {
 	switch stage {
-	case "planned", "pending", "identifying", "identified", "ripping", "ripped",
+	case "planned", "identifying", "identified", "ripping", "ripped",
 		"episode_identifying", "episode_identified",
 		"audio_analyzing", "audio_analyzed",
 		"encoding", "encoded", "subtitling", "subtitled",
@@ -206,8 +206,6 @@ func normalizeEpisodeStage(stage string) string {
 	switch stage {
 	case "completed":
 		return "final"
-	case "pending":
-		return "planned"
 	case "identification":
 		return "identifying"
 	case "episode_identification":
@@ -222,7 +220,7 @@ func normalizeEpisodeStage(stage string) string {
 // pipelineStageForStatus maps a status to a pipeline stage ID.
 func pipelineStageForStatus(status string) string {
 	switch normalizeEpisodeStage(status) {
-	case "planned", "pending":
+	case "planned":
 		return "planned"
 	case "identifying", "identified":
 		return "identifying"

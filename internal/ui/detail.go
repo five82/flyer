@@ -246,7 +246,7 @@ func determineDetailContext(item spindle.QueueItem) detailContext {
 	if status == "completed" {
 		return contextCompleted
 	}
-	if status == "pending" {
+	if status == "identification" && !item.InProgress {
 		return contextPending
 	}
 	return contextActive

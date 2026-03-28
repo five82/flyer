@@ -55,6 +55,7 @@ type QueueItem struct {
 	ID                      int64                     `json:"id"`
 	DiscTitle               string                    `json:"discTitle"`
 	Stage                   string                    `json:"stage"`
+	InProgress              bool                      `json:"inProgress"`
 	Progress                QueueProgress             `json:"progress"`
 	Encoding                *EncodingStatus           `json:"encoding,omitempty"`
 	ErrorMessage            string                    `json:"errorMessage"`

@@ -226,7 +226,7 @@ func nightfoxTheme() Theme {
 		Info:    "#63cdcf", // cyan
 
 		StatusColors: map[string]string{
-			"pending":             "#738091", // comment
+			"identification":      "#738091", // comment
 			"identifying":         "#63cdcf", // cyan
 			"identified":          "#71839b", // fg3
 			"ripping":             "#719cd6", // blue
@@ -278,7 +278,7 @@ func kanagawaTheme() Theme {
 		Info:    "#7FB4CA", // springBlue
 
 		StatusColors: map[string]string{
-			"pending":             "#727169", // fujiGray
+			"identification":      "#727169", // fujiGray
 			"identifying":         "#7FB4CA", // springBlue
 			"identified":          "#727169", // fujiGray
 			"ripping":             "#7E9CD8", // crystalBlue
@@ -331,7 +331,7 @@ func slateTheme() Theme {
 		Info:    "#06b6d4", // cyan-500
 
 		StatusColors: map[string]string{
-			"pending":             "#64748b", // slate-500 (muted)
+			"identification":      "#64748b", // slate-500 (muted)
 			"identifying":         "#38bdf8", // sky-400 (active)
 			"identified":          "#0284c7", // sky-600 (completed)
 			"ripping":             "#0ea5e9", // sky-500 (active)

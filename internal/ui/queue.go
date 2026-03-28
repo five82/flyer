@@ -210,7 +210,6 @@ func (m Model) formatQueueRowContent(item spindle.QueueItem, width int, bgColor 
 
 // stageIcons maps status to display icon.
 var stageIcons = map[string]string{
-	"pending":                "~",
 	"identifying":            "*",
 	"identification":         "*",
 	"episode_identifying":    "*",
@@ -336,7 +335,6 @@ func statusRank(status string) int {
 		"audio_analyzed":         12,
 		"identified":             13,
 		"episode_identified":     14,
-		"pending":                15,
 		"completed":              16,
 	}
 	if r, ok := ranks[strings.ToLower(status)]; ok {
