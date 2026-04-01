@@ -174,6 +174,21 @@ func (m *Model) renderStatusChips(item spindle.QueueItem, bg BgStyle) string {
 		Render(strings.ToUpper(titleCase(item.Stage)))
 	chips = append(chips, statusChip)
 
+	// Media type chip
+	mediaType := detectMediaType(item.Metadata)
+	if mediaType != "" {
+		label := "MOVIE"
+		if mediaType == "tv" {
+			label = "TV"
+		}
+		mediaChip := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(m.theme.Background)).
+			Background(lipgloss.Color(m.theme.Accent)).
+			Padding(0, 1).
+			Render(label)
+		chips = append(chips, mediaChip)
+	}
+
 	// Review badge
 	if item.NeedsReview {
 		reviewChip := lipgloss.NewStyle().
