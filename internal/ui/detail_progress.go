@@ -296,7 +296,9 @@ func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem,
 		label = "ENCODING"
 		icon = "⚙"
 		color = styles.WarningText
-		// Check for encoding substage from Drapto
+		// Check for encoding substage from Drapto. Keep the bar percent sourced
+		// from item.Progress.Percent so multi-file encoding shows whole-stage
+		// progress instead of only the current file's frame progress.
 		if enc := item.Encoding; enc != nil {
 			substage := strings.ToLower(strings.TrimSpace(enc.Substage))
 			switch {
@@ -306,13 +308,6 @@ func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem,
 			case strings.Contains(substage, "valid"):
 				label = "VALIDATING"
 				icon = "✓"
-			}
-			// Use specific encoding percent if valid
-			if enc.TotalFrames > 0 && enc.CurrentFrame > 0 {
-				p := (float64(enc.CurrentFrame) / float64(enc.TotalFrames)) * 100
-				if p > 0 {
-					percent = p
-				}
 			}
 		}
 	case "subtitling", "subtitled":
@@ -375,10 +370,16 @@ func (m *Model) estimateETA(item spindle.QueueItem) string {
 	}
 
 	stage := itemCurrentStage(item)
-	// Check encoding ETA first
+	// Check encoding ETA first for single-job items. For multi-file encoding,
+	// Drapto's ETA is for the current file only, so prefer the aggregate stage
+	// estimate from item.Progress.Percent below.
 	if enc := item.Encoding; enc != nil && (stage == "encoding" || stage == "encoded" || stage == "final") {
-		if eta := enc.ETADuration(); eta > 0 {
-			return "ETA " + formatDuration(eta)
+		_, totals := item.EpisodeSnapshot()
+		planned := totals.Planned
+		if planned <= 1 {
+			if eta := enc.ETADuration(); eta > 0 {
+				return "ETA " + formatDuration(eta)
+			}
 		}
 	}
 	// Estimate from percent

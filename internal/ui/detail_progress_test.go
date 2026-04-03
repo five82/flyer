@@ -129,3 +129,49 @@ func TestEstimateETA_UsesStageEntryTime(t *testing.T) {
 		}
 	}
 }
+
+func TestEstimateETA_EncodingSingleFilePrefersEncoderETA(t *testing.T) {
+	m := Model{stageFirstSeen: make(map[int64]stageObservation)}
+	m.stageFirstSeen[1] = stageObservation{
+		stage:     "encoding",
+		firstSeen: time.Now().Add(-10 * time.Minute),
+	}
+	item := spindle.QueueItem{
+		ID:       1,
+		Progress: spindle.QueueProgress{Stage: "encoding", Percent: 50},
+		Encoding: &spindle.EncodingStatus{ETASeconds: 90},
+	}
+	got := m.estimateETA(item)
+	if got == "" {
+		t.Fatal("expected encoding ETA")
+	}
+	if got != "ETA 1m 30s" {
+		t.Fatalf("estimateETA() = %q, want %q", got, "ETA 1m 30s")
+	}
+}
+
+func TestEstimateETA_EncodingMultiFileIgnoresPerFileETA(t *testing.T) {
+	m := Model{stageFirstSeen: make(map[int64]stageObservation)}
+	m.stageFirstSeen[1] = stageObservation{
+		stage:     "encoding",
+		firstSeen: time.Now().Add(-10 * time.Minute),
+	}
+	item := spindle.QueueItem{
+		ID:       1,
+		Progress: spindle.QueueProgress{Stage: "encoding", Percent: 50},
+		Encoding: &spindle.EncodingStatus{ETASeconds: 90},
+		Episodes: []spindle.EpisodeStatus{{Key: "s01e01"}, {Key: "s01e02"}},
+	}
+	got := m.estimateETA(item)
+	if got == "" {
+		t.Fatal("expected aggregate encoding ETA")
+	}
+	if got == "ETA 1m 30s" {
+		t.Fatalf("estimateETA() = %q, want aggregate stage ETA instead of per-file ETA", got)
+	}
+	for _, ch := range got {
+		if ch == 'h' {
+			t.Fatalf("ETA %q looks too large; stage-based ETA should be minutes, not hours", got)
+		}
+	}
+}
