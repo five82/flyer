@@ -141,6 +141,13 @@ func countEpisodesForPipelineStage(stageID, threshold string, episodes []spindle
 	if stageID == "planned" {
 		return episodePlanned
 	}
+	// Identification and audio analysis are item-level stages in Spindle, not
+	// per-episode pipeline steps. Once the item advances beyond them, the whole
+	// batch should read as complete instead of showing a misleading partial count
+	// derived from later per-episode asset stages.
+	if isItemLevelPipelineStage(stageID) {
+		return singleItemPipelineCount(stageID, activePipelineStage, plannedCount)
+	}
 	// Episode matching completion is data-driven (resolved episode numbers/scores),
 	// not asset-stage-driven. During encoding, matched episodes may still report
 	// stage="ripped" until encode output exists.
@@ -163,6 +170,15 @@ func countEpisodesForPipelineStage(stageID, threshold string, episodes []spindle
 		}
 	}
 	return count
+}
+
+func isItemLevelPipelineStage(stageID string) bool {
+	switch stageID {
+	case "identifying", "audio_analyzed":
+		return true
+	default:
+		return false
+	}
 }
 
 func isEpisodeMapped(ep spindle.EpisodeStatus) bool {

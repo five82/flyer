@@ -28,6 +28,24 @@ func TestCountEpisodesForPipelineStage_EpisodeIdentifiedUsesMappedFields(t *test
 	}
 }
 
+func TestCountEpisodesForPipelineStage_ItemLevelStagesUseGlobalProgression(t *testing.T) {
+	episodes := []spindle.EpisodeStatus{
+		{Key: "s02_001", Stage: "ripped"},
+		{Key: "s02_002", Stage: "planned"},
+		{Key: "s02_003", Stage: "planned"},
+	}
+
+	gotIdentification := countEpisodesForPipelineStage("identifying", "identified", episodes, 3, 0, "ripped", 3)
+	if gotIdentification != 3 {
+		t.Fatalf("identifying count = %d, want 3 after item advanced to ripping", gotIdentification)
+	}
+
+	gotAudio := countEpisodesForPipelineStage("audio_analyzed", "audio_analyzed", episodes, 3, 0, "subtitled", 3)
+	if gotAudio != 3 {
+		t.Fatalf("audio_analyzed count = %d, want 3 after item advanced past analysis", gotAudio)
+	}
+}
+
 func TestCountEpisodesForPipelineStage_EpisodeIdentifiedPrefersExplicitCount(t *testing.T) {
 	episodes := []spindle.EpisodeStatus{
 		{Key: "s02_001", Stage: "encoded", Episode: 29, MatchScore: 0.94},
