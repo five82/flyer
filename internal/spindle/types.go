@@ -185,10 +185,11 @@ func FilterFailed(episodes []EpisodeStatus) []EpisodeStatus {
 }
 
 type EpisodeTotals struct {
-	Planned int `json:"planned"`
-	Ripped  int `json:"ripped"`
-	Encoded int `json:"encoded"`
-	Final   int `json:"final"`
+	Planned   int `json:"planned"`
+	Ripped    int `json:"ripped"`
+	Encoded   int `json:"encoded"`
+	Subtitled int `json:"subtitled"`
+	Final     int `json:"final"`
 }
 
 type SubtitleGenerationStatus struct {
@@ -324,6 +325,9 @@ func tallyEpisodeTotals(list []EpisodeStatus) EpisodeTotals {
 		if strings.TrimSpace(ep.EncodedPath) != "" {
 			totals.Encoded++
 		}
+		if strings.TrimSpace(ep.SubtitledPath) != "" {
+			totals.Subtitled++
+		}
 		if strings.TrimSpace(ep.FinalPath) != "" {
 			totals.Final++
 		}
@@ -372,6 +376,7 @@ func deriveEpisodesFromRipSpec(raw json.RawMessage) ([]EpisodeStatus, EpisodeTot
 				status.Stage = "encoded"
 			}
 			if asset.Subtitled != "" {
+				status.SubtitledPath = asset.Subtitled
 				status.Stage = "subtitled"
 			}
 			if asset.Final != "" {

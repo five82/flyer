@@ -23,12 +23,11 @@ func (m *Model) renderEstimatedSize(b *strings.Builder, item spindle.QueueItem, 
 		return
 	}
 
-	b.WriteString(bg.Render("Est. size: ", styles.MutedText))
-	b.WriteString(bg.Render("~"+formatBytes(enc.EstimatedTotalBytes), styles.AccentText))
+	value := "~" + formatBytes(enc.EstimatedTotalBytes)
 	if enc.CurrentOutputBytes > 0 {
-		b.WriteString(bg.Render(fmt.Sprintf(" (%s written)", formatBytes(enc.CurrentOutputBytes)), styles.FaintText))
+		value += fmt.Sprintf(" (%s written)", formatBytes(enc.CurrentOutputBytes))
 	}
-	b.WriteString("\n")
+	renderDetailField(b, bg, "Est", styles.MutedText, value, styles.AccentText)
 }
 
 // renderSizeResult renders the file size comparison (input → output with reduction %).
@@ -38,12 +37,8 @@ func (m *Model) renderSizeResult(b *strings.Builder, item spindle.QueueItem, sty
 		return
 	}
 
-	b.WriteString(bg.Render("Size:      ", styles.MutedText))
-	b.WriteString(bg.Render(formatBytes(enc.OriginalSize), styles.Text))
-	b.WriteString(bg.Render(" → ", styles.FaintText))
-	b.WriteString(bg.Render(formatBytes(enc.EncodedSize), styles.AccentText))
-	b.WriteString(bg.Render(fmt.Sprintf(" (%.0f%% reduction)", enc.SizeReductionPercent), styles.MutedText))
-	b.WriteString("\n")
+	value := formatBytes(enc.OriginalSize) + " -> " + formatBytes(enc.EncodedSize) + fmt.Sprintf(" (%.0f%% reduction)", enc.SizeReductionPercent)
+	renderDetailField(b, bg, "Size", styles.MutedText, value, styles.Text)
 }
 
 // renderVideoSpecs renders the video specs line (resolution + HDR status).
@@ -68,9 +63,7 @@ func (m *Model) renderVideoSpecs(b *strings.Builder, item spindle.QueueItem, sty
 		parts = append(parts, strings.ToUpper(enc.DynamicRange))
 	}
 
-	b.WriteString(bg.Render("Video:     ", styles.MutedText))
-	b.WriteString(bg.Render(strings.Join(parts, " "), styles.AccentText))
-	b.WriteString("\n")
+	renderDetailField(b, bg, "Video", styles.MutedText, strings.Join(parts, " "), styles.AccentText)
 }
 
 // renderAudioInfo renders the source audio format.
@@ -79,9 +72,7 @@ func (m *Model) renderAudioInfo(b *strings.Builder, item spindle.QueueItem, styl
 		return
 	}
 
-	b.WriteString(bg.Render("Audio:     ", styles.MutedText))
-	b.WriteString(bg.Render(item.PrimaryAudioDescription, styles.Text))
-	b.WriteString("\n")
+	renderDetailField(b, bg, "Audio", styles.MutedText, item.PrimaryAudioDescription, styles.Text)
 }
 
 // renderEncodingConfig renders the encoding config line (preset + CRF + tune).
@@ -100,9 +91,7 @@ func (m *Model) renderEncodingConfig(b *strings.Builder, item spindle.QueueItem,
 		parts = append(parts, fmt.Sprintf("Tune %s", enc.Tune))
 	}
 
-	b.WriteString(bg.Render("Config:    ", styles.MutedText))
-	b.WriteString(bg.Render(strings.Join(parts, " • "), styles.AccentText))
-	b.WriteString("\n")
+	renderDetailField(b, bg, "Config", styles.MutedText, strings.Join(parts, " • "), styles.AccentText)
 }
 
 // renderEncodeStats renders duration and average speed (for completed).
@@ -121,9 +110,7 @@ func (m *Model) renderEncodeStats(b *strings.Builder, item spindle.QueueItem, st
 		parts = append(parts, fmt.Sprintf("%.1fx avg", enc.AverageSpeed))
 	}
 
-	b.WriteString(bg.Render("Encoded:   ", styles.MutedText))
-	b.WriteString(bg.Render(strings.Join(parts, " @ "), styles.Text))
-	b.WriteString("\n")
+	renderDetailField(b, bg, "Encode", styles.MutedText, strings.Join(parts, " @ "), styles.Text)
 }
 
 // renderValidationSummary renders a one-line validation summary for completed items.
@@ -144,14 +131,12 @@ func (m *Model) renderValidationSummary(b *strings.Builder, item spindle.QueueIt
 		}
 	}
 
-	b.WriteString(bg.Render("Validation:", styles.MutedText) + bg.Space())
+	value := fmt.Sprintf("%d/%d checks", passed, total)
 	if v.Passed {
-		b.WriteString(bg.Render("✓ Passed", styles.SuccessText))
+		renderDetailField(b, bg, "Checks", styles.MutedText, "Passed · "+value, styles.SuccessText)
 	} else {
-		b.WriteString(bg.Render("✗ Failed", styles.DangerText))
+		renderDetailField(b, bg, "Checks", styles.MutedText, "Failed · "+value, styles.DangerText)
 	}
-	b.WriteString(bg.Render(fmt.Sprintf(" (%d/%d checks)", passed, total), styles.FaintText))
-	b.WriteString("\n")
 }
 
 // renderCropInfo renders the crop detection line.
@@ -164,14 +149,10 @@ func (m *Model) renderCropInfo(b *strings.Builder, item spindle.QueueItem, style
 	if enc.CropRequired && enc.CropFilter != "" {
 		// Strip "crop=" prefix for cleaner display
 		cropVal := strings.TrimPrefix(enc.CropFilter, "crop=")
-		b.WriteString(bg.Render("Crop:      ", styles.MutedText))
-		b.WriteString(bg.Render(cropVal, styles.AccentText))
-		b.WriteString("\n")
+		renderDetailField(b, bg, "Crop", styles.MutedText, cropVal, styles.AccentText)
 	} else if enc.CropMessage != "" {
 		// Detection complete but no cropping needed
-		b.WriteString(bg.Render("Crop:      ", styles.MutedText))
-		b.WriteString(bg.Render("None", styles.FaintText))
-		b.WriteString("\n")
+		renderDetailField(b, bg, "Crop", styles.MutedText, "None", styles.FaintText)
 	}
 }
 
@@ -197,9 +178,7 @@ func (m *Model) renderSubtitleSummary(b *strings.Builder, item spindle.QueueItem
 		return
 	}
 
-	b.WriteString(bg.Render("Subs:      ", styles.MutedText))
-	b.WriteString(bg.Render(fmt.Sprintf("%d WhisperX", count), styles.AccentText))
-	b.WriteString("\n")
+	renderDetailField(b, bg, "Subs", styles.MutedText, fmt.Sprintf("%d WhisperX", count), styles.AccentText)
 }
 
 // renderSubtitleInfo renders subtitle source for movies and single items.
@@ -213,9 +192,7 @@ func (m *Model) renderSubtitleInfo(b *strings.Builder, item spindle.QueueItem, s
 		return
 	}
 
-	b.WriteString(bg.Render("Subs:      ", styles.MutedText))
-	b.WriteString(bg.Render("WhisperX", styles.AccentText))
-	b.WriteString("\n")
+	renderDetailField(b, bg, "Subs", styles.MutedText, "WhisperX", styles.AccentText)
 }
 
 // renderValidationDetails renders detailed validation step results for failed items.

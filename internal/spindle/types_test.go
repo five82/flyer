@@ -66,8 +66,8 @@ func TestEpisodeSnapshot_UsesAPIFieldsWhenPresent(t *testing.T) {
 	if len(episodes) != 2 {
 		t.Fatalf("episodes len = %d, want 2", len(episodes))
 	}
-	if totals.Planned != 2 || totals.Ripped != 1 || totals.Encoded != 1 || totals.Final != 0 {
-		t.Fatalf("totals = %#v, want planned=2 ripped=1 encoded=1 final=0", totals)
+	if totals.Planned != 2 || totals.Ripped != 1 || totals.Encoded != 1 || totals.Subtitled != 0 || totals.Final != 0 {
+		t.Fatalf("totals = %#v, want planned=2 ripped=1 encoded=1 subtitled=0 final=0", totals)
 	}
 	episodes[0].Key = "mutated"
 	episodes2, _ := item.EpisodeSnapshot()
@@ -107,8 +107,8 @@ func TestEpisodeSnapshot_DerivesFromRipSpec(t *testing.T) {
 	if episodes[1].Stage != "final" || episodes[1].FinalPath != "/final2.mkv" {
 		t.Fatalf("episode2 = %#v, want final", episodes[1])
 	}
-	if totals.Planned != 2 || totals.Ripped != 1 || totals.Encoded != 1 || totals.Final != 1 {
-		t.Fatalf("totals = %#v, want planned=2 ripped=1 encoded=1 final=1", totals)
+	if totals.Planned != 2 || totals.Ripped != 1 || totals.Encoded != 1 || totals.Subtitled != 0 || totals.Final != 1 {
+		t.Fatalf("totals = %#v, want planned=2 ripped=1 encoded=1 subtitled=0 final=1", totals)
 	}
 }
 
@@ -124,11 +124,17 @@ func TestEpisodeSnapshot_DerivesSubtitledFromRipSpec(t *testing.T) {
 }`)
 
 	item := QueueItem{RipSpec: raw}
-	episodes, _ := item.EpisodeSnapshot()
+	episodes, totals := item.EpisodeSnapshot()
 	if len(episodes) != 1 {
 		t.Fatalf("episodes len = %d, want 1", len(episodes))
 	}
 	if episodes[0].Stage != "subtitled" {
 		t.Fatalf("episode stage = %q, want subtitled", episodes[0].Stage)
+	}
+	if episodes[0].SubtitledPath != "/encoded1.mkv" {
+		t.Fatalf("episode subtitled path = %q, want /encoded1.mkv", episodes[0].SubtitledPath)
+	}
+	if totals.Subtitled != 1 {
+		t.Fatalf("totals subtitled = %d, want 1", totals.Subtitled)
 	}
 }

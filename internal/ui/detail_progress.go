@@ -42,20 +42,21 @@ func stageAtOrBeyond(epStage, threshold string) bool {
 // Each entry's threshold is the earliest stage that counts as "complete" for that row.
 var pipelineStages = []struct {
 	id          string
+	group       string
 	activeLabel string // present tense (shown when incomplete)
 	doneLabel   string // past tense (shown when complete)
 	threshold   string // episode stage at which this pipeline step is considered done
 	tvOnly      bool   // only shown for TV shows (multi-episode items)
 }{
-	{"planned", "Planning", "Planned", "", false},
-	{"identifying", "Identifying", "Identified", "identified", false},
-	{"ripped", "Ripping", "Ripped", "ripped", false},
-	{"episode_identified", "Ep. Matching", "Ep. Matched", "episode_identified", true},
-	{"encoded", "Encoding", "Encoded", "encoded", false},
-	{"audio_analyzed", "Analyzing", "Analyzed", "audio_analyzed", false},
-	{"subtitled", "Subtitling", "Subtitled", "subtitled", false},
-	{"organizing", "Organizing", "Organized", "final", false},
-	{"final", "Completed", "Completed", "final", false},
+	{"planned", "item", "Planning", "Planned", "", false},
+	{"identifying", "item", "Identifying", "Identified", "identified", false},
+	{"ripped", "throughput", "Ripping", "Ripped", "ripped", false},
+	{"episode_identified", "throughput", "Ep. Matching", "Ep. Matched", "episode_identified", true},
+	{"encoded", "throughput", "Encoding", "Encoded", "encoded", false},
+	{"audio_analyzed", "item", "Analyzing", "Analyzed", "audio_analyzed", false},
+	{"subtitled", "throughput", "Subtitling", "Subtitled", "subtitled", false},
+	{"organizing", "item", "Organizing", "Organized", "final", false},
+	{"final", "item", "Completed", "Completed", "final", false},
 }
 
 // renderPipelineStatus renders the pipeline progress visualization,
@@ -80,58 +81,72 @@ func (m *Model) renderPipelineStatus(b *strings.Builder, item spindle.QueueItem,
 	// Pre-compute count width for right-aligned display
 	countWidth := len(strconv.Itoa(plannedCount))
 
+	hasTV := totals.Planned > 0
 	for _, stage := range pipelineStages {
-		if stage.tvOnly && totals.Planned <= 0 {
+		if stage.tvOnly && !hasTV {
 			continue
 		}
-
-		// Calculate count for this stage
-		count := countEpisodesForPipelineStage(stage.id, stage.threshold, episodes, totals.Planned, item.EpisodeIdentifiedCount, activePipelineStage, plannedCount)
-
-		isComplete := count >= plannedCount
-		isCurrent := !isComplete && stage.id == activePipelineStage
-
-		// Determine icon and style
-		icon := "○"
-		style := styles.MutedText
-		labelStyle := styles.MutedText
-
-		switch {
-		case isComplete:
-			icon = "✓"
-			style = styles.SuccessText
-			labelStyle = styles.Text.Bold(true)
-		case isCurrent:
-			icon = "◉"
-			style = styles.AccentText
-			labelStyle = styles.AccentText.Bold(true)
-		case count > 0:
-			// Partial progress indicator
-			icon = "◐"
-			style = styles.WarningText
-		}
-
-		// Indent + icon
-		b.WriteString(bg.Spaces(2))
-		b.WriteString(bg.Render(icon, style))
-		b.WriteString(bg.Space())
-
-		// Pick label based on completion state
-		label := stage.activeLabel
-		if isComplete {
-			label = stage.doneLabel
-		}
-		paddedLabel := fmt.Sprintf("%-12s", label)
-		b.WriteString(bg.Render(paddedLabel, labelStyle))
-
-		// Right-aligned count (TV shows only)
-		if plannedCount > 1 {
-			countStr := fmt.Sprintf("%*d/%d", countWidth, count, plannedCount)
-			b.WriteString(bg.Render(countStr, styles.MutedText))
-		}
-
-		b.WriteString("\n")
+		showCounts := plannedCount > 1 && stage.group == "throughput"
+		m.renderPipelineRow(b, stage, episodes, totals, item, activePipelineStage, plannedCount, countWidth, showCounts, styles, bg)
 	}
+}
+
+func (m *Model) renderPipelineRow(b *strings.Builder, stage struct {
+	id          string
+	group       string
+	activeLabel string
+	doneLabel   string
+	threshold   string
+	tvOnly      bool
+}, episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, item spindle.QueueItem, activePipelineStage string, plannedCount int, countWidth int, showCounts bool, styles Styles, bg BgStyle) {
+	count := countEpisodesForPipelineStage(stage.id, stage.threshold, episodes, totals.Planned, item.EpisodeIdentifiedCount, activePipelineStage, plannedCount)
+
+	isComplete := count >= plannedCount
+	isCurrent := !isComplete && stage.id == activePipelineStage
+
+	icon := "○"
+	style := styles.MutedText
+	labelStyle := styles.MutedText
+	rightText := ""
+	rightStyle := styles.FaintText
+
+	switch {
+	case isComplete:
+		icon = "✓"
+		style = styles.SuccessText
+		labelStyle = styles.Text
+	case isCurrent:
+		icon = "◉"
+		style = styles.AccentText
+		labelStyle = styles.AccentText.Bold(true)
+		if !showCounts {
+			rightText = "active"
+			rightStyle = styles.AccentText
+		}
+	case count > 0:
+		icon = "◐"
+		style = styles.WarningText
+	}
+
+	if showCounts {
+		rightText = fmt.Sprintf("%*d/%d", countWidth, count, plannedCount)
+		rightStyle = styles.MutedText
+	}
+
+	b.WriteString(bg.Spaces(2))
+	b.WriteString(bg.Render(icon, style))
+	b.WriteString(bg.Space())
+
+	label := stage.activeLabel
+	if isComplete {
+		label = stage.doneLabel
+	}
+	b.WriteString(bg.Render(fmt.Sprintf("%-11s", label), labelStyle))
+	if rightText != "" {
+		b.WriteString(bg.Space())
+		b.WriteString(bg.Render(fmt.Sprintf("%7s", rightText), rightStyle))
+	}
+	b.WriteString("\n")
 }
 
 func countEpisodesForPipelineStage(stageID, threshold string, episodes []spindle.EpisodeStatus, episodePlanned int, episodeIdentifiedCount int, activePipelineStage string, plannedCount int) int {
