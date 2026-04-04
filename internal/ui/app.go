@@ -388,14 +388,18 @@ func (m *Model) toggleFocus() {
 	}
 }
 
+func toggleDetailBoolState(state map[int64]bool, itemID int64, current bool) {
+	state[itemID] = !current
+}
+
 // toggleEpisodesCollapsed toggles episode list visibility for current item.
 func (m *Model) toggleEpisodesCollapsed() {
 	item := m.getSelectedItem()
 	if item == nil {
 		return
 	}
-	current := m.detailState.episodeCollapsed[item.ID]
-	m.detailState.episodeCollapsed[item.ID] = !current
+	episodes, totals := item.EpisodeSnapshot()
+	toggleDetailBoolState(m.detailState.episodeCollapsed, item.ID, m.isEpisodesCollapsed(*item, episodes, totals))
 	m.updateDetailViewport()
 }
 
@@ -405,8 +409,7 @@ func (m *Model) togglePathExpanded() {
 	if item == nil {
 		return
 	}
-	current := m.detailState.pathExpanded[item.ID]
-	m.detailState.pathExpanded[item.ID] = !current
+	toggleDetailBoolState(m.detailState.pathExpanded, item.ID, m.detailState.pathExpanded[item.ID])
 	m.updateDetailViewport()
 }
 

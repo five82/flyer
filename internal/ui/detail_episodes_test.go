@@ -68,6 +68,50 @@ func TestMatchedEpisodeCount(t *testing.T) {
 	}
 }
 
+func TestToggleEpisodesCollapsed_UsesEffectiveDefaultState(t *testing.T) {
+	m := New(Options{ThemeName: "slate"})
+	m.snapshot.Queue = []spindle.QueueItem{{
+		ID:       1,
+		Episodes: make([]spindle.EpisodeStatus, 10),
+		EpisodeTotals: &spindle.EpisodeTotals{
+			Planned: 10,
+			Final:   10,
+		},
+	}}
+
+	item := m.getSelectedItem()
+	if item == nil {
+		t.Fatal("getSelectedItem() = nil")
+	}
+	episodes, totals := item.EpisodeSnapshot()
+	if !m.isEpisodesCollapsed(*item, episodes, totals) {
+		t.Fatal("isEpisodesCollapsed() before toggle = false, want true")
+	}
+
+	m.toggleEpisodesCollapsed()
+
+	item = m.getSelectedItem()
+	episodes, totals = item.EpisodeSnapshot()
+	if m.isEpisodesCollapsed(*item, episodes, totals) {
+		t.Fatal("isEpisodesCollapsed() after one toggle = true, want false")
+	}
+}
+
+func TestTogglePathExpanded_TogglesOnFirstPress(t *testing.T) {
+	m := New(Options{ThemeName: "slate"})
+	m.snapshot.Queue = []spindle.QueueItem{{ID: 1}}
+
+	if got := m.detailState.pathExpanded[1]; got {
+		t.Fatal("pathExpanded before toggle = true, want false")
+	}
+
+	m.togglePathExpanded()
+
+	if got := m.detailState.pathExpanded[1]; !got {
+		t.Fatal("pathExpanded after one toggle = false, want true")
+	}
+}
+
 func TestActiveEpisodeDescriptor(t *testing.T) {
 	m := Model{theme: GetTheme("slate")}
 	episodes := []spindle.EpisodeStatus{{Key: "a", Active: true}, {Key: "b"}}
