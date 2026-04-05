@@ -507,7 +507,7 @@ func (m *Model) renderDetailFocus(b *strings.Builder, item spindle.QueueItem, su
 		if files := m.describeEpisodeFileStates(&ep); files != "" {
 			renderDetailField(b, bg, "Files", styles.MutedText, files, styles.Text)
 		}
-		if issue := describeEpisodeIssue(ep); issue != "" {
+		if issue := describeEpisodeIssue(ep, currentStage); issue != "" {
 			renderDetailField(b, bg, "Issue", styles.MutedText, issue, styles.WarningText)
 		}
 		return

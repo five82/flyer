@@ -144,7 +144,7 @@ func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, ep spindle.EpisodeS
 		b.WriteString("\n")
 	}
 
-	if status := compactEpisodeStatus(m.describeEpisodeFileStates(&ep), describeEpisodeIssue(ep)); status != "" {
+	if status := compactEpisodeStatus(m.describeEpisodeFileStates(&ep), describeEpisodeIssue(ep, stageName)); status != "" {
 		b.WriteString(bg.Spaces(4))
 		b.WriteString(bg.Render(status, styles.MutedText))
 		b.WriteString("\n")
@@ -431,7 +431,7 @@ func describeEpisodeMapping(ep spindle.EpisodeStatus) string {
 	}
 }
 
-func describeEpisodeIssue(ep spindle.EpisodeStatus) string {
+func describeEpisodeIssue(ep spindle.EpisodeStatus, stageName string) string {
 	if ep.IsFailed() {
 		return "failed"
 	}
@@ -441,10 +441,17 @@ func describeEpisodeIssue(ep spindle.EpisodeStatus) string {
 	case "error":
 		return "subtitle lookup error"
 	}
-	if !isEpisodeMapped(ep) {
+	if isEpisodeMapped(ep) {
+		return ""
+	}
+	switch strings.ToLower(strings.TrimSpace(stageName)) {
+	case "planned", "identifying", "identified", "ripping", "ripped":
+		return ""
+	case "episode_identifying":
+		return "matching in progress"
+	default:
 		return "unconfirmed mapping"
 	}
-	return ""
 }
 
 func compactEpisodeMeta(track string, mapping string, extras []string) string {

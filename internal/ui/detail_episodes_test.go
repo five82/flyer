@@ -146,11 +146,17 @@ func TestDescribeEpisodeHelpers(t *testing.T) {
 		t.Fatalf("describeEpisodeMapping() = %q, want %q", got, "Match 0.93")
 	}
 	ep = spindle.EpisodeStatus{GeneratedSubtitleDecision: "no_match"}
-	if got := describeEpisodeIssue(ep); got != "subtitle no-match" {
+	if got := describeEpisodeIssue(ep, "subtitling"); got != "subtitle no-match" {
 		t.Fatalf("describeEpisodeIssue() = %q, want %q", got, "subtitle no-match")
 	}
 	ep = spindle.EpisodeStatus{}
-	if got := describeEpisodeIssue(ep); got != "unconfirmed mapping" {
+	if got := describeEpisodeIssue(ep, "ripping"); got != "" {
+		t.Fatalf("describeEpisodeIssue() pre-match = %q, want empty", got)
+	}
+	if got := describeEpisodeIssue(ep, "episode_identifying"); got != "matching in progress" {
+		t.Fatalf("describeEpisodeIssue() matching = %q, want %q", got, "matching in progress")
+	}
+	if got := describeEpisodeIssue(ep, "encoding"); got != "unconfirmed mapping" {
 		t.Fatalf("describeEpisodeIssue() unmatched = %q, want %q", got, "unconfirmed mapping")
 	}
 }
