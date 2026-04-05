@@ -25,6 +25,20 @@ Flyer is a **read-only TUI** for monitoring Spindle. Single-developer hobby proj
 
 GitHub: [flyer](https://github.com/five82/flyer) | [spindle](https://github.com/five82/spindle) | [drapto](https://github.com/five82/drapto)
 
+## Critical Expectations
+
+**Architectural churn is embraced.** Optimize for clarity, not backwards compatibility.
+
+- Do not just look for the easiest solution or fix. Find the best and most maintainable path forward.
+- Break things forward. Remove deprecated paths; no compatibility shims.
+- Prefer maintainable architecture and explicit logging over clever tricks.
+- Prefer minimalism. Identify and close real gaps. Simplify. Avoid overengineering. Avoid chasing edge cases that we are unlikely to encounter.
+- Coordinate major trade-offs with the user; never unilaterally defer functionality.
+- Keep edits ASCII unless the file already uses extended characters.
+- When troubleshooting, gather evidence and test. Do not blindly guess.
+- Observability is key. We can not understand what is happening if we can not see it.
+- Simplification must not remove user-visible functionality. Eliminating a subprocess or code path that produces distinct output (log messages, CLI feedback, status indicators) is a behavior change, not a simplification.
+
 ## Build, Test, Lint
 
 ```bash
