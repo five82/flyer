@@ -193,9 +193,9 @@ func (m *Model) activeEpisodeIndex(item spindle.QueueItem, episodes []spindle.Ep
 	return idx
 }
 
-// activeEpisodeDescriptor describes the best current episode candidate and whether
+// describeActiveEpisode describes the best current episode candidate and whether
 // it was inferred rather than reported explicitly.
-func (m *Model) activeEpisodeDescriptor(item spindle.QueueItem, episodes []spindle.EpisodeStatus) (idx int, inferred bool, reason string) {
+func describeActiveEpisode(item spindle.QueueItem, episodes []spindle.EpisodeStatus) (idx int, inferred bool, reason string) {
 	if len(episodes) == 0 {
 		return -1, false, ""
 	}
@@ -210,7 +210,7 @@ func (m *Model) activeEpisodeDescriptor(item spindle.QueueItem, episodes []spind
 	if (stage == "encoding" || stage == "subtitling") && item.Encoding != nil && item.Encoding.InputFile != "" {
 		input := item.Encoding.InputFile
 		for i, ep := range episodes {
-			if checkMatch(input, ep.RippedPath) || checkMatch(input, ep.OutputBasename) {
+			if checkMatch(input, ep.RippedPath) || checkMatch(input, ep.EncodedPath) || checkMatch(input, ep.OutputBasename) {
 				return i, true, "input match"
 			}
 		}
@@ -247,6 +247,12 @@ func (m *Model) activeEpisodeDescriptor(item spindle.QueueItem, episodes []spind
 	}
 
 	return len(episodes) - 1, true, "last"
+}
+
+// activeEpisodeDescriptor describes the best current episode candidate and whether
+// it was inferred rather than reported explicitly.
+func (m *Model) activeEpisodeDescriptor(item spindle.QueueItem, episodes []spindle.EpisodeStatus) (idx int, inferred bool, reason string) {
+	return describeActiveEpisode(item, episodes)
 }
 
 // episodeStage returns the display stage for an episode.

@@ -17,12 +17,12 @@ func TestCountEpisodesForPipelineStage_EpisodeIdentifiedUsesMappedFields(t *test
 		{Key: "s02_006", Stage: "ripped", Episode: 30, MatchScore: 0.96},
 	}
 
-	gotMatched := countEpisodesForPipelineStage("episode_identified", "episode_identified", episodes, 6, 0, "encoded", 6)
+	gotMatched := countEpisodesForPipelineStage("episode_identified", "episode_identified", episodes, spindle.QueueItem{}, "encoded", 6)
 	if gotMatched != 6 {
 		t.Fatalf("episode_identified count = %d, want 6", gotMatched)
 	}
 
-	gotEncoded := countEpisodesForPipelineStage("encoded", "encoded", episodes, 6, 0, "encoded", 6)
+	gotEncoded := countEpisodesForPipelineStage("encoded", "encoded", episodes, spindle.QueueItem{}, "encoded", 6)
 	if gotEncoded != 3 {
 		t.Fatalf("encoded count = %d, want 3", gotEncoded)
 	}
@@ -35,12 +35,12 @@ func TestCountEpisodesForPipelineStage_ItemLevelStagesUseGlobalProgression(t *te
 		{Key: "s02_003", Stage: "planned"},
 	}
 
-	gotIdentification := countEpisodesForPipelineStage("identifying", "identified", episodes, 3, 0, "ripped", 3)
+	gotIdentification := countEpisodesForPipelineStage("identifying", "identified", episodes, spindle.QueueItem{}, "ripped", 3)
 	if gotIdentification != 3 {
 		t.Fatalf("identifying count = %d, want 3 after item advanced to ripping", gotIdentification)
 	}
 
-	gotAudio := countEpisodesForPipelineStage("audio_analyzed", "audio_analyzed", episodes, 3, 0, "subtitled", 3)
+	gotAudio := countEpisodesForPipelineStage("audio_analyzed", "audio_analyzed", episodes, spindle.QueueItem{}, "subtitled", 3)
 	if gotAudio != 3 {
 		t.Fatalf("audio_analyzed count = %d, want 3 after item advanced past analysis", gotAudio)
 	}
@@ -56,7 +56,7 @@ func TestCountEpisodesForPipelineStage_EpisodeIdentifiedPrefersExplicitCount(t *
 		{Key: "s02_006", Stage: "ripped", Episode: 30, MatchScore: 0.96},
 	}
 
-	got := countEpisodesForPipelineStage("episode_identified", "episode_identified", episodes, 6, 3, "encoded", 6)
+	got := countEpisodesForPipelineStage("episode_identified", "episode_identified", episodes, spindle.QueueItem{EpisodeIdentifiedCount: 3}, "encoded", 6)
 	if got != 3 {
 		t.Fatalf("episode_identified count = %d, want 3", got)
 	}
@@ -81,6 +81,25 @@ func TestIsEpisodeMapped(t *testing.T) {
 				t.Fatalf("isEpisodeMapped() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestCountEpisodesForPipelineStage_EncodedIncludesActiveEpisode(t *testing.T) {
+	episodes := []spindle.EpisodeStatus{
+		{Key: "s01e01", Stage: "encoded", EncodedPath: "/encoded1.mkv"},
+		{Key: "s01e02", Stage: "ripped", RippedPath: "/ripped2.mkv"},
+		{Key: "s01e03", Stage: "ripped", RippedPath: "/ripped3.mkv"},
+	}
+	item := spindle.QueueItem{
+		Stage: "encoding",
+		Encoding: &spindle.EncodingStatus{
+			InputFile: "/ripped2.mkv",
+		},
+	}
+
+	got := countEpisodesForPipelineStage("encoded", "encoded", episodes, item, "encoded", len(episodes))
+	if got != 2 {
+		t.Fatalf("encoded count = %d, want 2 including active encode", got)
 	}
 }
 

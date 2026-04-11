@@ -99,7 +99,7 @@ func (m *Model) renderPipelineRow(b *strings.Builder, stage struct {
 	threshold   string
 	tvOnly      bool
 }, episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, item spindle.QueueItem, activePipelineStage string, plannedCount int, countWidth int, showCounts bool, styles Styles, bg BgStyle) {
-	count := countEpisodesForPipelineStage(stage.id, stage.threshold, episodes, totals.Planned, item.EpisodeIdentifiedCount, activePipelineStage, plannedCount)
+	count := countEpisodesForPipelineStage(stage.id, stage.threshold, episodes, item, activePipelineStage, plannedCount)
 
 	isComplete := count >= plannedCount
 	isCurrent := !isComplete && stage.id == activePipelineStage
@@ -149,7 +149,8 @@ func (m *Model) renderPipelineRow(b *strings.Builder, stage struct {
 	b.WriteString("\n")
 }
 
-func countEpisodesForPipelineStage(stageID, threshold string, episodes []spindle.EpisodeStatus, episodePlanned int, episodeIdentifiedCount int, activePipelineStage string, plannedCount int) int {
+func countEpisodesForPipelineStage(stageID, threshold string, episodes []spindle.EpisodeStatus, item spindle.QueueItem, activePipelineStage string, plannedCount int) int {
+	episodePlanned := len(episodes)
 	if episodePlanned <= 0 {
 		return singleItemPipelineCount(stageID, activePipelineStage, plannedCount)
 	}
@@ -167,8 +168,8 @@ func countEpisodesForPipelineStage(stageID, threshold string, episodes []spindle
 	// not asset-stage-driven. During encoding, matched episodes may still report
 	// stage="ripped" until encode output exists.
 	if stageID == "episode_identified" {
-		if episodeIdentifiedCount > 0 {
-			return min(episodeIdentifiedCount, episodePlanned)
+		if item.EpisodeIdentifiedCount > 0 {
+			return min(item.EpisodeIdentifiedCount, episodePlanned)
 		}
 		count := 0
 		for _, ep := range episodes {
@@ -184,7 +185,26 @@ func countEpisodesForPipelineStage(stageID, threshold string, episodes []spindle
 			count++
 		}
 	}
-	return count
+	if stageID != activePipelineStage || !isInFlightThroughputStage(stageID) || count >= episodePlanned {
+		return count
+	}
+	idx, _, _ := describeActiveEpisode(item, episodes)
+	if idx < 0 || idx >= len(episodes) {
+		return count
+	}
+	if stageAtOrBeyond(normalizeEpisodeStage(episodes[idx].Stage), threshold) {
+		return count
+	}
+	return min(count+1, episodePlanned)
+}
+
+func isInFlightThroughputStage(stageID string) bool {
+	switch stageID {
+	case "ripped", "encoded", "subtitled":
+		return true
+	default:
+		return false
+	}
 }
 
 func isItemLevelPipelineStage(stageID string) bool {
