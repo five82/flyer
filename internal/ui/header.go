@@ -185,6 +185,14 @@ func (m Model) buildProblemCountsPart(compact bool, failed, review int, styles S
 func (m Model) buildErrorParts(compact bool, styles Styles, bg BgStyle) []string {
 	var parts []string
 
+	if workflowErr := strings.TrimSpace(m.snapshot.Status.Workflow.LastError); workflowErr != "" {
+		errText := truncate(workflowErr, maxLen(compact, 80, 40))
+		parts = append(parts,
+			bg.Render("WORKFLOW", styles.DangerText.Bold(true))+bg.Space()+
+				bg.Render(errText, styles.DangerText),
+		)
+	}
+
 	if m.snapshot.LastError != nil {
 		errText := truncate(fmt.Sprintf("%v", m.snapshot.LastError), maxLen(compact, 80, 40))
 		parts = append(parts,
