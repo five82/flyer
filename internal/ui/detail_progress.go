@@ -347,7 +347,7 @@ func (m *Model) renderActiveProgress(b *strings.Builder, item spindle.QueueItem,
 		label = "ENCODING"
 		icon = "⚙"
 		color = styles.WarningText
-		// Check for encoding substage from Drapto. Keep the bar percent sourced
+		// Check for encoding substage from Reel. Keep the bar percent sourced
 		// from item.Progress.Percent so multi-file encoding shows whole-stage
 		// progress instead of only the current file's frame progress.
 		if enc := item.Encoding; enc != nil {
@@ -422,7 +422,7 @@ func (m *Model) estimateETA(item spindle.QueueItem) string {
 
 	stage := itemCurrentStage(item)
 	// Check encoding ETA first for single-job items. For multi-file encoding,
-	// Drapto's ETA is for the current file only, so prefer the aggregate stage
+	// Reel's ETA is for the current file only, so prefer the aggregate stage
 	// estimate from item.Progress.Percent below.
 	if enc := item.Encoding; enc != nil && (stage == "encoding" || stage == "encoded" || stage == "final") {
 		_, totals := item.EpisodeSnapshot()

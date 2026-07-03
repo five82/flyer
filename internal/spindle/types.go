@@ -101,7 +101,6 @@ type EncodingStatus struct {
 	Quality               string              `json:"quality,omitempty"`
 	Tune                  string              `json:"tune,omitempty"`
 	AudioCodec            string              `json:"audio_codec,omitempty"`
-	DraptoPreset          string              `json:"drapto_preset,omitempty"`
 	CropFilter            string              `json:"crop_filter,omitempty"`
 	CropRequired          bool                `json:"crop_required,omitempty"`
 	CropMessage           string              `json:"crop_message,omitempty"`

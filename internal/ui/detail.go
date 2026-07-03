@@ -446,7 +446,7 @@ func (m *Model) renderFailedDetail(b *strings.Builder, item spindle.QueueItem, s
 		renderDetailField(b, bg, "Error", styles.DangerText, msg, styles.Text)
 	}
 
-	// Detailed error from Drapto
+	// Detailed error from Reel
 	if item.Encoding != nil && item.Encoding.Error != nil {
 		err := item.Encoding.Error
 		if title := strings.TrimSpace(err.Title); title != "" && title != strings.TrimSpace(item.ErrorMessage) {

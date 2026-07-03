@@ -18,9 +18,9 @@ Flyer is a **read-only TUI** for monitoring Spindle. Single-developer hobby proj
 |------|------|------|
 | flyer | `~/projects/flyer/` | Read-only TUI for Spindle (this repo) |
 | spindle | `~/projects/spindle/` | Daemon + CLI; Flyer polls its `api_bind` endpoint |
-| drapto | `~/projects/drapto/` | Encoder invoked by Spindle; Flyer does not call directly |
+| reel | `~/projects/reel/` | Encoder invoked by Spindle; Flyer does not call directly |
 
-GitHub: [flyer](https://github.com/five82/flyer) | [spindle](https://github.com/five82/spindle) | [drapto](https://github.com/five82/drapto)
+GitHub: [flyer](https://github.com/five82/flyer) | [spindle](https://github.com/five82/spindle) | [reel](https://codeberg.org/five82/reel)
 
 ## Critical Expectations
 

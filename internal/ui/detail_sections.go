@@ -75,7 +75,7 @@ func (m *Model) renderAudioInfo(b *strings.Builder, item spindle.QueueItem, styl
 	renderDetailField(b, bg, "Audio", styles.MutedText, item.PrimaryAudioDescription, styles.Text)
 }
 
-// renderEncodingConfig renders the encoding config line (preset + CRF + tune).
+// renderEncodingConfig renders the encoding config line (preset + quality + tune).
 func (m *Model) renderEncodingConfig(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
 	enc := item.Encoding
 	if enc == nil || enc.Preset == "" {
