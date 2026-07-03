@@ -10,7 +10,7 @@ This file provides guidance when working with code in this repository.
 
 ## Project
 
-Flyer is a **read-only TUI** for monitoring Spindle. Single-developer hobby project - avoid over-engineering.
+Flyer is a **read-only TUI** for monitoring Spindle. Single-developer hobby project.
 
 ## Related Repos
 
@@ -26,15 +26,15 @@ GitHub: [flyer](https://github.com/five82/flyer) | [spindle](https://github.com/
 
 **Architectural churn is embraced.** Optimize for clarity, not backwards compatibility.
 
+- Apply YAGNI ("You Aren't Gonna Need It") and KISS ("Keep It Simple, Stupid"): build only what the current task requires; when two approaches work, take the simpler one.
 - Do not just look for the easiest solution or fix. Find the best and most maintainable path forward.
-- Break things forward. Remove deprecated paths; no compatibility shims.
 - Prefer maintainable architecture and explicit logging over clever tricks.
-- Prefer minimalism. Identify and close real gaps. Simplify. Avoid overengineering. Avoid chasing edge cases that we are unlikely to encounter.
-- Coordinate major trade-offs with the user; never unilaterally defer functionality.
-- Keep edits ASCII unless the file already uses extended characters.
-- When troubleshooting, gather evidence and test. Do not blindly guess.
-- Observability is key. We can not understand what is happening if we can not see it.
+- Break things forward. Remove deprecated paths; no compatibility shims.
 - Simplification must not remove user-visible functionality. Eliminating a subprocess or code path that produces distinct output (log messages, CLI feedback, status indicators) is a behavior change, not a simplification.
+- Coordinate major trade-offs with the user; never unilaterally defer functionality.
+- Observability is key. We can not understand what is happening if we can not see it.
+- When troubleshooting, gather evidence and test. Do not blindly guess.
+- Keep edits ASCII unless the file already uses extended characters.
 
 ## Build, Test, Lint
 
