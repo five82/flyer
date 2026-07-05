@@ -62,11 +62,10 @@ func TestFormatLogEventIncludesComponentAndDetails(t *testing.T) {
 func TestStyleLogEventMatchesPlainTextContent(t *testing.T) {
 	theme := GetTheme("Nightfox")
 	styles := theme.Styles()
-	bg := NewBgStyle(theme.FocusBg)
 	m := &Model{theme: theme}
 
 	evt := sampleLogEvent()
-	styled := stripANSI(m.styleLogEvent(evt, styles, bg))
+	styled := stripANSI(m.styleLogEvent(evt, styles))
 
 	for _, want := range []string{
 		logEventTimestamp(evt),
@@ -89,11 +88,10 @@ func TestStyleLogEventMatchesPlainTextContent(t *testing.T) {
 func TestStyleLogEventDefaultsMissingLevelToInfo(t *testing.T) {
 	theme := GetTheme("Nightfox")
 	styles := theme.Styles()
-	bg := NewBgStyle(theme.FocusBg)
 	m := &Model{theme: theme}
 
 	evt := spindle.LogEvent{Message: "hello"}
-	styled := stripANSI(m.styleLogEvent(evt, styles, bg))
+	styled := stripANSI(m.styleLogEvent(evt, styles))
 	if !strings.Contains(styled, "INFO") {
 		t.Fatalf("styleLogEvent() = %q, want default level INFO", styled)
 	}
@@ -102,11 +100,10 @@ func TestStyleLogEventDefaultsMissingLevelToInfo(t *testing.T) {
 func TestStyleLogEventOmitsSubjectAndMessageWhenEmpty(t *testing.T) {
 	theme := GetTheme("Nightfox")
 	styles := theme.Styles()
-	bg := NewBgStyle(theme.FocusBg)
 	m := &Model{theme: theme}
 
 	evt := spindle.LogEvent{Level: "info"}
-	styled := stripANSI(m.styleLogEvent(evt, styles, bg))
+	styled := stripANSI(m.styleLogEvent(evt, styles))
 	if strings.Contains(styled, "–") {
 		t.Fatalf("styleLogEvent() = %q, should not render a message separator with no message", styled)
 	}

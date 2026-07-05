@@ -5,161 +5,99 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
 
 	"github.com/five82/flyer/internal/spindle"
 )
 
-// detailContext represents the contextual state for detail view rendering.
-type detailContext int
-
-const (
-	contextPending detailContext = iota
-	contextActive
-	contextCompleted
-	contextFailed
-)
-
-// initDetailViewport initializes the detail viewport.
-func (m *Model) initDetailViewport() {
-	m.detailViewport = viewport.New(
-		viewport.WithWidth(m.width-4),
-		viewport.WithHeight(m.height-6),
-	)
-	m.detailViewport.Style = lipgloss.NewStyle()
+// fieldWriter renders aligned label/value rows with word-wrapped values.
+type fieldWriter struct {
+	b      *strings.Builder
+	styles Styles
+	width  int
 }
 
-// updateDetailViewport updates the detail viewport content.
-func (m *Model) updateDetailViewport() {
-	if m.detailViewport.Width() == 0 {
-		m.initDetailViewport()
-	}
+// detailFieldLabelWidth is the fixed label column of the overview rows,
+// sized so the widest label ("Comment.") keeps a trailing space.
+const detailFieldLabelWidth = 9
 
-	// Compute split-pane dimensions matching renderQueue layout
-	contentHeight := m.height - 2 // header + cmdbar
-	var tableWidth int
-	if m.width >= 160 {
-		tableWidth = m.width * 30 / 100
-	} else {
-		tableWidth = m.width * 40 / 100
-	}
-	detailWidth := m.width - tableWidth
+// field writes one label/value row with a muted label.
+func (w fieldWriter) field(label, value string, valueStyle lipgloss.Style) {
+	w.fieldStyled(label, w.styles.MutedText, value, valueStyle)
+}
 
-	m.detailViewport.SetWidth(detailWidth - 2)    // minus box side borders
-	m.detailViewport.SetHeight(contentHeight - 2) // minus box top/bottom borders
-
-	// Use focus-aware background
-	bgColor := m.theme.SurfaceAlt
-	if m.focusedPane == 1 {
-		bgColor = m.theme.FocusBg
-	}
-
-	// Viewport style covers empty lines below content
-	m.detailViewport.Style = lipgloss.NewStyle().Background(lipgloss.Color(bgColor))
-
-	// Get selected item
-	item := m.getSelectedItem()
-	if item == nil {
-		bg := NewBgStyle(bgColor)
-		m.detailViewport.SetContent(bg.FillLine(m.theme.Styles().MutedText.Render("Select an item to view details"), m.detailViewport.Width()))
+// fieldStyled writes one label/value row; long values wrap with
+// continuation lines indented under the value column.
+func (w fieldWriter) fieldStyled(label string, labelStyle lipgloss.Style, value string, valueStyle lipgloss.Style) {
+	if strings.TrimSpace(value) == "" {
 		return
 	}
-
-	// Render detail content and fill each line to viewport width
-	content := m.renderDetailContent(*item, detailWidth-4, bgColor)
-	bg := NewBgStyle(bgColor)
-	lines := strings.Split(content, "\n")
-	for i, line := range lines {
-		lines[i] = bg.FillLine(line, m.detailViewport.Width())
+	lines := wrapText(value, max(w.width-detailFieldLabelWidth, 20))
+	w.b.WriteString(labelStyle.Render(fmt.Sprintf("%-*s", detailFieldLabelWidth, label)))
+	w.b.WriteString(valueStyle.Render(lines[0]))
+	w.b.WriteString("\n")
+	for _, line := range lines[1:] {
+		w.b.WriteString(strings.Repeat(" ", detailFieldLabelWidth))
+		w.b.WriteString(valueStyle.Render(line))
+		w.b.WriteString("\n")
 	}
-	m.detailViewport.SetContent(strings.Join(lines, "\n"))
 }
 
-// getSelectedItem returns the currently selected queue item.
-func (m *Model) getSelectedItem() *spindle.QueueItem {
-	items := m.getSortedItems()
-	if m.selectedRow < 0 || m.selectedRow >= len(items) {
-		return nil
-	}
-	return &items[m.selectedRow]
-}
-
-// renderDetailContent renders the full detail content for an item.
-// The width parameter controls text wrapping (0 means use default m.width).
-// The bgColor parameter sets the background color for all styled text.
-func (m *Model) renderDetailContent(item spindle.QueueItem, width int, bgColor string) string {
+// renderDetailContent renders the inspector Overview tab. The layout is a
+// fixed skeleton -- same sections, same order, for every item state; rows
+// appear or disappear by data presence, never by state branching:
+//
+//	Meta      timestamps
+//	Pipeline  scheduler task board
+//	Attention review/error details (only when something needs the operator)
+//	Media     source, video, audio, crop, encoder config, identification
+//	Output    size estimate/result, encode stats, validation, subtitles
+//	Episodes  batch summary (full list lives on the Episodes tab)
+func (m *Model) renderDetailContent(item spindle.QueueItem, width int) string {
 	if width <= 0 {
-		width = m.width - 4
+		width = m.width
 	}
-	_ = width // TODO: use for text wrapping
+	styles := m.theme.Styles()
 	var b strings.Builder
-	styles := m.theme.Styles().WithBackground(bgColor)
-	bg := NewBgStyle(bgColor)
+	w := fieldWriter{b: &b, styles: styles, width: width}
 
-	// Header section
-	m.renderDetailHeader(&b, item, styles, bg)
+	// Meta line: timestamps (title/chips/id live in the inspector item line).
+	m.renderDetailMeta(&b, item, styles)
 
-	// Pipeline status: one row per scheduler task, in pipeline order, with
-	// inline progress for whatever is currently running (including
-	// concurrent branches during rip/encode overlap).
-	m.writeSection(&b, "Pipeline", styles, bg)
-	m.renderTaskBoard(&b, item, styles, bg)
+	m.writeSection(&b, "Pipeline", styles)
+	m.renderTaskBoard(&b, item, styles, width)
 
-	// Context-specific content
-	ctx := determineDetailContext(item)
-	switch ctx {
-	case contextPending:
-		m.renderPendingDetail(&b, item, styles, bg)
-	case contextActive:
-		m.renderActiveDetail(&b, item, styles, bg)
-	case contextCompleted:
-		m.renderCompletedDetail(&b, item, styles, bg)
-	case contextFailed:
-		m.renderFailedDetail(&b, item, styles, bg)
-	}
+	m.renderAttention(w, item, styles)
+	m.renderMedia(w, item, styles)
+	m.renderOutput(w, item, styles)
+	m.renderEpisodeSummarySection(&b, item, styles)
 
 	return b.String()
 }
 
-// renderDetailHeader renders the item header (title, timestamps, chips).
-func (m *Model) renderDetailHeader(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
+// renderDetailMeta renders the created/updated timestamp line.
+func (m *Model) renderDetailMeta(b *strings.Builder, item spindle.QueueItem, styles Styles) {
 	now := time.Now()
-
-	title := composeTitle(item)
-	b.WriteString(bg.Render(title, styles.Text.Bold(true)))
-	b.WriteString("\n")
-
-	// Timestamps and ID
-	metaParts := []string{
-		bg.Render(fmt.Sprintf("#%d", item.ID), styles.MutedText),
-	}
+	var parts []string
 
 	if created := parseTimestamp(item.CreatedAt); !created.IsZero() {
-		metaParts = append(metaParts,
-			bg.Render("created", styles.FaintText)+bg.Space()+
-				bg.Render(formatTimestamp(created, now), styles.Text))
+		parts = append(parts,
+			styles.FaintText.Render("created")+" "+styles.Text.Render(formatTimestamp(created, now)))
 	}
-
 	if updated := parseTimestamp(item.UpdatedAt); !updated.IsZero() {
-		ago := now.Sub(updated)
-		metaParts = append(metaParts,
-			bg.Render("updated", styles.FaintText)+bg.Space()+
-				bg.Render(formatTimestamp(updated, now), styles.Text)+bg.Space()+
-				bg.Render("("+humanizeDuration(ago)+")", styles.MutedText))
+		parts = append(parts,
+			styles.FaintText.Render("updated")+" "+styles.Text.Render(formatTimestamp(updated, now))+" "+
+				styles.MutedText.Render("("+humanizeDuration(now.Sub(updated))+")"))
 	}
-
-	b.WriteString(bg.Join(metaParts, " • "))
-	b.WriteString("\n")
-
-	// Status chips
-	chips := m.renderStatusChips(item, styles, bg)
-	b.WriteString(chips)
+	if len(parts) == 0 {
+		return
+	}
+	b.WriteString(strings.Join(parts, styles.FaintText.Render(" • ")))
 	b.WriteString("\n")
 }
 
 // renderStatusChips renders the status badges for an item.
-func (m *Model) renderStatusChips(item spindle.QueueItem, styles Styles, bg BgStyle) string {
+func (m *Model) renderStatusChips(item spindle.QueueItem, styles Styles) string {
 	var chips []string
 
 	// Status chip: role-colored text from the task/stage registry, so an
@@ -173,51 +111,30 @@ func (m *Model) renderStatusChips(item spindle.QueueItem, styles Styles, bg BgSt
 	chips = append(chips, roleStyle(info.role, styles).Bold(true).Render(strings.ToUpper(label)))
 
 	// Media type chip
-	mediaType := detectMediaType(item.Metadata)
-	if mediaType != "" {
+	if mediaType := detectMediaType(item.Metadata); mediaType != "" {
 		label := "MOVIE"
 		if mediaType == "tv" {
 			label = "TV"
 		}
-		mediaChip := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(m.theme.Background)).
-			Background(lipgloss.Color(m.theme.Accent)).
-			Padding(0, 1).
-			Render(label)
-		chips = append(chips, mediaChip)
+		chips = append(chips, chip(label, m.theme.Accent, m.theme))
 	}
 
 	// Review badge
 	if item.NeedsReview {
-		reviewChip := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(m.theme.Background)).
-			Background(lipgloss.Color(m.theme.Warning)).
-			Padding(0, 1).
-			Render("REVIEW")
-		chips = append(chips, reviewChip)
+		chips = append(chips, chip("REVIEW", m.theme.Warning, m.theme))
 	}
 
 	// Error badge
 	if strings.TrimSpace(item.ErrorMessage) != "" {
-		errorChip := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(m.theme.Background)).
-			Background(lipgloss.Color(m.theme.Danger)).
-			Padding(0, 1).
-			Render("ERROR")
-		chips = append(chips, errorChip)
+		chips = append(chips, chip("ERROR", m.theme.Danger, m.theme))
 	}
 
 	// CACHE badge (rip cache hit, reported via the ripping task's message)
 	if isRipCacheHit(item) {
-		cacheChip := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(m.theme.Background)).
-			Background(lipgloss.Color(m.theme.Info)).
-			Padding(0, 1).
-			Render("CACHE")
-		chips = append(chips, cacheChip)
+		chips = append(chips, chip("CACHE", m.theme.Info, m.theme))
 	}
 
-	return strings.Join(chips, bg.Space())
+	return strings.Join(chips, " ")
 }
 
 // isRipCacheHit reports whether any task's progress message indicates a rip
@@ -232,250 +149,45 @@ func isRipCacheHit(item spindle.QueueItem) bool {
 }
 
 // writeSection writes a section header.
-func (m *Model) writeSection(b *strings.Builder, title string, styles Styles, bg BgStyle) {
+func (m *Model) writeSection(b *strings.Builder, title string, styles Styles) {
 	b.WriteString("\n")
-	b.WriteString(bg.Render(titleCase(title), styles.MutedText.Bold(true)))
+	b.WriteString(styles.MutedText.Bold(true).Render(titleCase(title)))
 	b.WriteString("\n")
-	b.WriteString(bg.Render(strings.Repeat("─", 24), styles.FaintText))
-	b.WriteString("\n")
-}
-
-func renderDetailField(b *strings.Builder, bg BgStyle, label string, labelStyle lipgloss.Style, value string, valueStyle lipgloss.Style) {
-	if strings.TrimSpace(value) == "" {
-		return
-	}
-	b.WriteString(bg.Render(fmt.Sprintf("%-8s", label), labelStyle))
-	b.WriteString(bg.Render(value, valueStyle))
+	b.WriteString(styles.RuleText.Render(strings.Repeat("─", 24)))
 	b.WriteString("\n")
 }
 
-// determineDetailContext returns the appropriate context for rendering.
-func determineDetailContext(item spindle.QueueItem) detailContext {
-	status := strings.ToLower(strings.TrimSpace(item.Stage))
-
-	if status == "failed" || item.NeedsReview || strings.TrimSpace(item.ErrorMessage) != "" {
-		return contextFailed
-	}
-	if status == "completed" {
-		return contextCompleted
-	}
-	if status == "identification" && !item.InProgress {
-		return contextPending
-	}
-	return contextActive
-}
-
-// renderPendingDetail renders detail for pending items.
-func (m *Model) renderPendingDetail(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	m.writeSection(b, "Status", styles, bg)
-	renderDetailField(b, bg, "State", styles.MutedText, "Waiting in queue...", styles.MutedText)
-
-	if detectMediaType(item.Metadata) == "movie" {
-		m.renderMovieScope(b, item, styles, bg)
-	}
-
-	// Metadata section (if available)
-	if metaRows := summarizeMetadata(item.Metadata); len(metaRows) > 0 {
-		m.writeSection(b, "Metadata", styles, bg)
-		m.renderMetadata(b, metaRows, styles, bg)
-	}
-}
-
-// renderActiveDetail renders detail for active/processing items: one
-// section per RUNNING task, so overlap windows show every live branch's
-// context at once (the right details at the right time).
-func (m *Model) renderActiveDetail(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	episodes, totals := item.EpisodeSnapshot()
-	mediaType := detectMediaType(item.Metadata)
-
-	running := item.RunningTasks()
-	for _, task := range running {
-		m.renderTaskSection(b, item, task, episodes, styles, bg)
-	}
-	if len(running) == 0 {
-		m.writeSection(b, "Status", styles, bg)
-		renderDetailField(b, bg, "State", styles.MutedText, "Waiting for scheduler...", styles.MutedText)
-	}
-
-	if mediaType == "movie" {
-		m.renderMovieScope(b, item, styles, bg)
-	}
-
-	m.renderEpisodeList(b, item, styles, bg, totals)
-}
-
-// renderTaskSection renders one running task's working context. The task
-// board above already shows the bar/percent/message; this section adds the
-// data that matters for that task type.
-func (m *Model) renderTaskSection(b *strings.Builder, item spindle.QueueItem, task spindle.Task, episodes []spindle.EpisodeStatus, styles Styles, bg BgStyle) {
-	info := stageDisplay(task.Type)
-	m.writeSection(b, info.label, styles, bg)
-
-	// The episode this task reports working on, when it names one.
-	if key := strings.ToLower(strings.TrimSpace(task.ActiveAssetKey)); key != "" {
-		for i := range episodes {
-			if strings.ToLower(episodes[i].Key) != key {
-				continue
-			}
-			ep := episodes[i]
-			renderDetailField(b, bg, "Episode", styles.MutedText, strings.TrimSpace(formatEpisodeLabel(ep)+" "+episodeDisplayTitle(ep)), styles.Text)
-			if track := describeEpisodeTrackInfo(&ep); track != "" {
-				renderDetailField(b, bg, "Track", styles.MutedText, track, styles.Text)
-			}
-			break
-		}
-	}
-
-	switch task.Type {
-	case "encoding":
-		m.renderEstimatedSize(b, item, styles, bg)
-		m.renderVideoSpecs(b, item, styles, bg)
-		m.renderAudioInfo(b, item, styles, bg)
-		m.renderEncodingConfig(b, item, styles, bg)
-		m.renderCropInfo(b, item, styles, bg)
-	case "episode_identification":
-		if cid := item.ContentID; cid != nil {
-			renderDetailField(b, bg, "Method", styles.MutedText, cid.Method, styles.Text)
-			if cid.TranscribedEpisodes > 0 || cid.MatchedEpisodes > 0 {
-				renderDetailField(b, bg, "Matched", styles.MutedText,
-					fmt.Sprintf("%d matched · %d unresolved · %d low confidence",
-						cid.MatchedEpisodes, cid.UnresolvedEpisodes, cid.LowConfidenceCount), styles.Text)
-			}
-		}
-	case "analysis":
-		m.renderAudioInfo(b, item, styles, bg)
-		if item.CommentaryCount > 0 {
-			renderDetailField(b, bg, "Comment.", styles.MutedText,
-				fmt.Sprintf("%d commentary track(s) detected", item.CommentaryCount), styles.Text)
-		}
-	case "subtitling":
-		done := 0
-		for _, ep := range episodes {
-			if strings.TrimSpace(ep.SubtitleSource) != "" {
-				done++
-			}
-		}
-		if done > 0 {
-			renderDetailField(b, bg, "Subs", styles.MutedText,
-				fmt.Sprintf("%d of %d generated", done, max(len(episodes), 1)), styles.Text)
-		}
-	case "organizing":
-		if files := m.describeItemFileStates(item); files != "" {
-			renderDetailField(b, bg, "Files", styles.MutedText, files, styles.Text)
-		}
-	}
-}
-
-// renderRecoverySummary renders leftover file state for a stopped/failed
-// item. Stage, attempts, and error are already visible in the Pipeline task
-// board above -- this section only adds what that board doesn't show.
-func (m *Model) renderRecoverySummary(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	files := m.describeItemFileStates(item)
-	if files == "" {
-		return
-	}
-	m.writeSection(b, "Recovery", styles, bg)
-	renderDetailField(b, bg, "Files", styles.MutedText, files, styles.Text)
-}
-
-func (m *Model) renderCompletionAudit(b *strings.Builder, item spindle.QueueItem, episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, mediaType string, styles Styles, bg BgStyle) {
-	m.writeSection(b, "Audit", styles, bg)
-	if mediaType == "movie" {
-		if files := m.describeItemFileStates(item); files != "" {
-			renderDetailField(b, bg, "Files", styles.MutedText, files, styles.Text)
-		}
-		m.renderValidationSummary(b, item, styles, bg)
-		m.renderSubtitleInfo(b, item, styles, bg)
-		return
-	}
-	if len(episodes) == 0 {
-		return
-	}
-	renderDetailField(b, bg, "Batch", styles.MutedText, fmt.Sprintf("%d planned · %d matched · %d final", totals.Planned, matchedEpisodeCount(item, episodes), totals.Final), styles.Text)
-	if totals.Final < totals.Planned {
-		renderDetailField(b, bg, "Missing", styles.WarningText, fmt.Sprintf("%d final outputs", totals.Planned-totals.Final), styles.Text)
-	}
-	m.renderSubtitleSummary(b, item, styles, bg)
-}
-
-func isHealthyCompletedTV(item spindle.QueueItem, episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals) bool {
-	if len(episodes) <= 1 {
-		return false
-	}
-	if detectMediaType(item.Metadata) != "tv" {
-		return false
-	}
+// needsAttention reports whether the item has anything for the operator.
+func needsAttention(item spindle.QueueItem) bool {
 	if item.NeedsReview || strings.TrimSpace(item.ErrorMessage) != "" {
-		return false
+		return true
 	}
-	if totals.Planned == 0 || totals.Final != totals.Planned {
-		return false
+	if item.FailedTask() != nil || strings.EqualFold(item.Stage, "failed") {
+		return true
 	}
-	if matchedEpisodeCount(item, episodes) != totals.Planned {
-		return false
+	if item.Encoding != nil && item.Encoding.Error != nil {
+		return true
 	}
-	if len(spindle.FilterFailed(episodes)) > 0 {
-		return false
+	if v := itemValidation(item); v != nil && !v.Passed && len(v.Steps) > 0 {
+		return true
 	}
-	if item.Encoding != nil && item.Encoding.Validation != nil && !item.Encoding.Validation.Passed {
-		return false
-	}
-	return true
+	return false
 }
 
-func (m *Model) renderCompletedTVSummary(b *strings.Builder, item spindle.QueueItem, episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, styles Styles, bg BgStyle) {
-	m.writeSection(b, "Summary", styles, bg)
-	renderDetailField(b, bg, "Batch", styles.MutedText, fmt.Sprintf("%d planned · %d matched · %d final", totals.Planned, matchedEpisodeCount(item, episodes), totals.Final), styles.Text)
-	m.renderValidationSummary(b, item, styles, bg)
-	m.renderSubtitleSummary(b, item, styles, bg)
-	m.renderSizeResult(b, item, styles, bg)
-	m.renderEncodeStats(b, item, styles, bg)
-	m.renderVideoSpecs(b, item, styles, bg)
-	m.renderAudioInfo(b, item, styles, bg)
-	m.renderEncodingConfig(b, item, styles, bg)
+func itemValidation(item spindle.QueueItem) *spindle.EncodingValidation {
+	if item.Encoding == nil {
+		return nil
+	}
+	return item.Encoding.Validation
 }
 
-// renderCompletedDetail renders detail for completed items. No Focus
-// section: nothing is active, and Summary/Results carry the outcome.
-func (m *Model) renderCompletedDetail(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	episodes, totals := item.EpisodeSnapshot()
-	mediaType := detectMediaType(item.Metadata)
-
-	if isHealthyCompletedTV(item, episodes, totals) {
-		m.renderCompletedTVSummary(b, item, episodes, totals, styles, bg)
-		m.renderEpisodeList(b, item, styles, bg, totals)
+// renderAttention renders the single home for review/error information.
+// Renders nothing when the item is healthy.
+func (m *Model) renderAttention(w fieldWriter, item spindle.QueueItem, styles Styles) {
+	if !needsAttention(item) {
 		return
 	}
-
-	m.writeSection(b, "Results", styles, bg)
-	m.renderSizeResult(b, item, styles, bg)
-	m.renderVideoSpecs(b, item, styles, bg)
-	m.renderAudioInfo(b, item, styles, bg)
-	m.renderEncodingConfig(b, item, styles, bg)
-	m.renderEncodeStats(b, item, styles, bg)
-	m.renderValidationSummary(b, item, styles, bg)
-	if len(episodes) > 1 && mediaType != "movie" {
-		m.renderSubtitleSummary(b, item, styles, bg)
-	} else {
-		m.renderSubtitleInfo(b, item, styles, bg)
-	}
-
-	if mediaType == "movie" {
-		m.renderMovieScope(b, item, styles, bg)
-	}
-	m.renderCompletionAudit(b, item, episodes, totals, mediaType, styles, bg)
-	m.renderEpisodeList(b, item, styles, bg, totals)
-}
-
-// renderFailedDetail renders detail for failed/review items.
-func (m *Model) renderFailedDetail(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	episodes, totals := item.EpisodeSnapshot()
-	mediaType := detectMediaType(item.Metadata)
-
-	m.renderDetailFocus(b, item, episodes, styles, bg)
-
-	// Attention section (always show for failed)
-	m.writeSection(b, "Attention", styles, bg)
+	m.writeSection(w.b, "Attention", styles)
 
 	// Review reason(s)
 	if item.NeedsReview {
@@ -483,106 +195,137 @@ func (m *Model) renderFailedDetail(b *strings.Builder, item spindle.QueueItem, s
 		if reason == "" {
 			reason = "Needs operator review"
 		}
-		renderDetailField(b, bg, "Review", styles.WarningText, reason, styles.Text)
+		w.fieldStyled("Review", styles.WarningText, reason, styles.Text)
 	}
 
 	// Error message
 	if msg := strings.TrimSpace(item.ErrorMessage); msg != "" {
-		renderDetailField(b, bg, "Error", styles.DangerText, msg, styles.Text)
+		w.fieldStyled("Error", styles.DangerText, msg, styles.Text)
 	}
 
 	// Detailed error from Reel
 	if item.Encoding != nil && item.Encoding.Error != nil {
 		err := item.Encoding.Error
 		if title := strings.TrimSpace(err.Title); title != "" && title != strings.TrimSpace(item.ErrorMessage) {
-			renderDetailField(b, bg, "Cause", styles.MutedText, title, styles.Text)
+			w.field("Cause", title, styles.Text)
 		}
-		if ctx := strings.TrimSpace(err.Context); ctx != "" {
-			renderDetailField(b, bg, "Context", styles.MutedText, ctx, styles.Text)
-		}
-		if suggestion := strings.TrimSpace(err.Suggestion); suggestion != "" {
-			renderDetailField(b, bg, "Suggest", styles.MutedText, suggestion, styles.SuccessText)
-		}
+		w.field("Context", strings.TrimSpace(err.Context), styles.Text)
+		w.field("Suggest", strings.TrimSpace(err.Suggestion), styles.SuccessText)
 	}
 
-	m.renderRecoverySummary(b, item, styles, bg)
-	if mediaType == "movie" {
-		m.renderMovieScope(b, item, styles, bg)
-	} else {
-		m.renderEpisodeList(b, item, styles, bg, totals)
+	// Leftover file state helps recovery decisions after a failure.
+	if item.FailedTask() != nil || strings.EqualFold(item.Stage, "failed") {
+		w.field("Files", m.describeItemFileStates(item), styles.Text)
 	}
 
-	// Validation details (show all steps if there are failures)
-	m.renderValidationDetails(b, item, styles, bg)
+	// Failing validation steps
+	if v := itemValidation(item); v != nil && !v.Passed && len(v.Steps) > 0 {
+		for _, step := range v.Steps {
+			icon, iconStyle := "✓", styles.SuccessText
+			if !step.Passed {
+				icon, iconStyle = "✗", styles.DangerText
+			}
+			name := strings.TrimSpace(step.Name)
+			if name == "" {
+				name = "Check"
+			}
+			w.b.WriteString(iconStyle.Render(icon))
+			w.b.WriteString(" ")
+			w.b.WriteString(styles.Text.Render(name))
+			if details := strings.TrimSpace(step.Details); details != "" {
+				w.b.WriteString(" ")
+				w.b.WriteString(styles.FaintText.Render(details))
+			}
+			w.b.WriteString("\n")
+		}
+	}
 }
 
-// renderDetailFocus renders the "Focus" section: the single most relevant
-// episode or movie-level line for what's happening right now. Renders
-// nothing (no header, no placeholder) when there is nothing to focus on.
-func (m *Model) renderDetailFocus(b *strings.Builder, item spindle.QueueItem, episodes []spindle.EpisodeStatus, styles Styles, bg BgStyle) {
-	mediaType := detectMediaType(item.Metadata)
-	if len(episodes) > 0 && mediaType != "movie" {
-		idx, ok := activeEpisodeIndex(item, episodes)
-		if !ok {
-			return
+// renderMedia renders the stable media facts block: what is being processed
+// and how it will be encoded. Identical shape whether running or done.
+func (m *Model) renderMedia(w fieldWriter, item spindle.QueueItem, styles Styles) {
+	var b strings.Builder
+	inner := fieldWriter{b: &b, styles: w.styles, width: w.width}
+
+	inner.field("Source", sourceSummary(item.Source), styles.Text)
+	renderVideoSpecs(inner, item)
+	renderAudioInfo(inner, item)
+	if item.CommentaryCount > 0 {
+		inner.field("Comment.", fmt.Sprintf("%d commentary track(s) detected", item.CommentaryCount), styles.Text)
+	}
+	renderCropInfo(inner, item)
+	renderEncodingConfig(inner, item)
+	renderContentID(inner, item)
+
+	// Identification metadata (year, ids, ...) when present.
+	for _, r := range summarizeMetadata(item.Metadata) {
+		label := metadataFieldLabel(r.key)
+		if label == "" {
+			continue
 		}
-		ep := episodes[idx]
-		m.writeSection(b, "Focus", styles, bg)
-		m.renderEpisodeFocusLine(b, ep, styles, bg)
+		inner.field(label, truncate(r.value, 60), styles.AccentText)
+	}
+
+	if b.Len() == 0 {
+		return
+	}
+	m.writeSection(w.b, "Media", styles)
+	w.b.WriteString(b.String())
+}
+
+// metadataFieldLabel maps a metadata key to a compact row label. Returns ""
+// for keys already carried by the item line and chips.
+func metadataFieldLabel(key string) string {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "title", "show_title", "media_type":
+		return ""
+	case "id":
+		return "TMDB"
+	case "season_number":
+		return "Season"
+	default:
+		return truncate(titleCase(key), detailFieldLabelWidth-1)
+	}
+}
+
+// renderOutput renders produced-artifact facts: size estimate while
+// encoding, then results, stats, validation, and subtitles once available.
+func (m *Model) renderOutput(w fieldWriter, item spindle.QueueItem, styles Styles) {
+	var b strings.Builder
+	inner := fieldWriter{b: &b, styles: w.styles, width: w.width}
+
+	renderEstimatedSize(inner, item)
+	renderSizeResult(inner, item)
+	renderEncodeStats(inner, item)
+	renderValidationSummary(inner, item)
+	renderSubtitleSummary(inner, item)
+	if !strings.EqualFold(item.Stage, "failed") {
+		inner.field("Files", m.describeItemFileStates(item), styles.Text)
+	}
+
+	if b.Len() == 0 {
+		return
+	}
+	m.writeSection(w.b, "Output", styles)
+	w.b.WriteString(b.String())
+}
+
+// renderEpisodeSummarySection renders the episode batch summary; the full
+// per-episode list lives on the Episodes tab.
+func (m *Model) renderEpisodeSummarySection(b *strings.Builder, item spindle.QueueItem, styles Styles) {
+	episodes, totals := item.EpisodeSnapshot()
+	if len(episodes) <= 1 && detectMediaType(item.Metadata) != "tv" {
+		return
+	}
+
+	m.writeSection(b, "Episodes", styles)
+	m.renderEpisodeSummary(b, item, episodes, totals, styles)
+	if matched := matchedEpisodeCount(item, episodes); matched > 0 && matched < len(episodes) {
+		b.WriteString(styles.WarningText.Render("⚠ Episode numbers not confirmed"))
 		b.WriteString("\n")
-		renderDetailField(b, bg, "Episode", styles.MutedText, formatEpisodeLabel(ep), styles.Text)
-		if track := describeEpisodeTrackInfo(&ep); track != "" {
-			renderDetailField(b, bg, "Track", styles.MutedText, track, styles.Text)
-		}
-		if files := m.describeEpisodeFileStates(&ep); files != "" {
-			renderDetailField(b, bg, "Files", styles.MutedText, files, styles.Text)
-		}
-		if issue := describeEpisodeIssue(ep); issue != "" {
-			renderDetailField(b, bg, "Issue", styles.MutedText, issue, styles.WarningText)
-		}
-		return
 	}
-	m.writeSection(b, "Focus", styles, bg)
-	m.renderMovieFocus(b, item, styles, bg)
-}
-
-// renderMovieFocus renders the focus line for a movie item: current
-// activity (from the stage/task registry) plus its source title.
-func (m *Model) renderMovieFocus(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	info := stageDisplay(itemDisplayStage(item))
-	label := info.label
-	if item.IsTerminal() {
-		label = info.doneLabel
-	}
-	b.WriteString(bg.Render(strings.ToUpper(label), roleStyle(info.role, styles).Bold(true)))
+	b.WriteString(styles.FaintText.Render("Press 2 for the episode list"))
 	b.WriteString("\n")
-
-	if value := sourceSummary(item.Source); value != "" {
-		renderDetailField(b, bg, "Source", styles.MutedText, value, styles.Text)
-	}
-	if files := m.describeItemFileStates(item); files != "" {
-		renderDetailField(b, bg, "Files", styles.MutedText, files, styles.Text)
-	}
-}
-
-// renderMovieScope renders the "Scope" section for a movie item: source
-// title and, while the item is still in flight, subtitle/validation status.
-func (m *Model) renderMovieScope(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	if detectMediaType(item.Metadata) != "movie" {
-		return
-	}
-
-	m.writeSection(b, "Scope", styles, bg)
-	if value := sourceSummary(item.Source); value != "" {
-		renderDetailField(b, bg, "Source", styles.MutedText, value, styles.Text)
-	}
-	if files := m.describeItemFileStates(item); files != "" {
-		renderDetailField(b, bg, "Files", styles.MutedText, files, styles.Text)
-	}
-	if !strings.EqualFold(item.Stage, "completed") {
-		m.renderSubtitleInfo(b, item, styles, bg)
-		m.renderValidationSummary(b, item, styles, bg)
-	}
 }
 
 // sourceSummary formats a movie's primary source title, e.g.

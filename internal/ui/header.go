@@ -18,30 +18,101 @@ func isProcessingItem(item spindle.QueueItem) bool {
 	return len(item.RunningTasks()) > 0
 }
 
-// renderHeader renders the status bar with all information.
+// headerPart is one header segment with a drop rank: when the line
+// overflows, parts with the highest rank are dropped first.
+type headerPart struct {
+	text string
+	rank int
+}
+
+// renderHeader renders the top status line.
 func (m Model) renderHeader() string {
-	// Header uses Surface background
-	styles := m.theme.Styles().WithBackground(m.theme.Surface)
-	bg := NewBgStyle(m.theme.Surface)
+	styles := m.theme.Styles()
 
 	if !m.snapshot.HasStatus || m.snapshot.IsOffline() {
-		return m.renderConnectingHeader(styles, bg)
+		return m.renderConnectingHeader(styles)
 	}
 
-	// Build status parts
-	content := m.buildStatusContent(styles, bg)
+	compact := m.width < compactWidthThreshold
+	failed, review := m.countProblemCounts()
 
-	// Header bar with background - simple render without complex styling
-	return lipgloss.NewStyle().
-		Background(lipgloss.Color(m.theme.Surface)).
-		Foreground(lipgloss.Color(m.theme.Text)).
-		Width(m.width).
-		Render(content)
+	var parts []headerPart
+
+	// Logo and daemon status: never dropped.
+	parts = append(parts, headerPart{styles.Logo.Render("flyer"), 0})
+	if m.snapshot.Status.Running {
+		parts = append(parts, headerPart{styles.SuccessText.Render("● ON"), 0})
+	} else {
+		parts = append(parts, headerPart{styles.DangerText.Render("● OFF"), 0})
+	}
+
+	// Queue count
+	parts = append(parts, headerPart{
+		styles.MutedText.Render("Queue:") + " " + styles.Text.Render(fmt.Sprintf("%d", len(m.snapshot.Queue))),
+		3,
+	})
+
+	// Failed and review counts (only shown when non-zero)
+	if p := m.buildProblemCountsPart(compact, failed, review, styles); p != "" {
+		parts = append(parts, headerPart{p, 2})
+	}
+
+	// Timestamp
+	if timeStr := m.formatTimestamp(); timeStr != "" {
+		parts = append(parts, headerPart{styles.MutedText.Render(timeStr), 4})
+	}
+
+	// Health warnings
+	if healthWarning := m.formatHealthWarning(compact, styles); healthWarning != "" {
+		parts = append(parts, headerPart{healthWarning, 2})
+	}
+
+	// Error indicators: keep over counts/clock but below logo.
+	for _, p := range m.buildErrorParts(compact, styles) {
+		parts = append(parts, headerPart{p, 1})
+	}
+
+	return joinHeaderParts(parts, m.width)
+}
+
+// joinHeaderParts joins parts with two-space separators, dropping the
+// highest-rank parts until the line fits the width.
+func joinHeaderParts(parts []headerPart, width int) string {
+	const sep = "  "
+	for rank := 4; rank >= 1; rank-- {
+		if headerPartsWidth(parts, sep) <= width {
+			break
+		}
+		kept := parts[:0]
+		for _, p := range parts {
+			if p.rank < rank {
+				kept = append(kept, p)
+			}
+		}
+		parts = kept
+	}
+
+	texts := make([]string, len(parts))
+	for i, p := range parts {
+		texts[i] = p.text
+	}
+	return strings.Join(texts, sep)
+}
+
+func headerPartsWidth(parts []headerPart, sep string) int {
+	w := 0
+	for i, p := range parts {
+		if i > 0 {
+			w += len(sep)
+		}
+		w += lipgloss.Width(p.text)
+	}
+	return w
 }
 
 // renderConnectingHeader shows the connecting/error state.
-func (m Model) renderConnectingHeader(styles Styles, bg BgStyle) string {
-	sep := bg.Spaces(2)
+func (m Model) renderConnectingHeader(styles Styles) string {
+	const sep = "  "
 
 	if m.snapshot.LastError != nil {
 		last := "soon"
@@ -50,33 +121,27 @@ func (m Model) renderConnectingHeader(styles Styles, bg BgStyle) string {
 		}
 		errorMsg := classifyConnectionError(m.snapshot.LastError)
 
-		// Build parts: error + retrying + timestamp + log path
 		parts := []string{
-			bg.Render("flyer", styles.Logo),
-			bg.Render("SPINDLE "+errorMsg, styles.DangerText.Bold(true)),
-			bg.Render("Retrying...", styles.WarningText.Bold(true)),
-			bg.Render(last, styles.MutedText),
+			styles.Logo.Render("flyer"),
+			styles.DangerText.Bold(true).Render("SPINDLE " + errorMsg),
+			styles.WarningText.Bold(true).Render("Retrying..."),
+			styles.MutedText.Render(last),
 		}
 
 		// Add log path hint if config is available
 		if m.config != nil {
-			logPath := m.config.DaemonLogPath()
-			if logPath != "" {
-				// Truncate path for display
+			if logPath := m.config.DaemonLogPath(); logPath != "" {
 				displayPath := truncateMiddle(logPath, 50)
 				parts = append(parts,
-					bg.Render("logs", styles.FaintText)+bg.Space()+
-						bg.Render(displayPath, styles.MutedText))
+					styles.FaintText.Render("logs")+" "+styles.MutedText.Render(displayPath))
 			}
 		}
 
-		return styles.Header.Width(m.width).Render(bg.Join(parts, sep))
+		return strings.Join(parts, sep)
 	}
 
-	return styles.Header.Width(m.width).Render(
-		bg.Render("flyer", styles.Logo) + sep +
-			bg.Render("Connecting to Spindle...", styles.WarningText.Bold(true)),
-	)
+	return styles.Logo.Render("flyer") + sep +
+		styles.WarningText.Bold(true).Render("Connecting to Spindle...")
 }
 
 // countProcessingItems returns the number of items with running tasks.
@@ -90,81 +155,12 @@ func (m Model) countProcessingItems() int {
 	return count
 }
 
-// buildResourceStrip renders the scheduler's resource occupancy: which
-// task of which item holds each resource, with live percent, and the
-// drive-free indicator when the drive is idle. Ordering follows the
-// daemon's pipeline template.
-func (m Model) buildResourceStrip(compact bool, styles Styles, bg BgStyle) string {
-	sched := m.snapshot.Status.Scheduler
-	if sched == nil || len(sched.Resources) == 0 {
-		// Old daemon or no scheduler info: fall back to a bare active count.
-		if n := m.countProcessingItems(); n > 0 {
-			return bg.Render("Active:", styles.MutedText) + bg.Space() +
-				bg.Render(fmt.Sprintf("%d", n), styles.AccentText)
-		}
-		return ""
-	}
-
-	taskPercent := func(itemID int64, taskType string) (float64, bool) {
-		for i := range m.snapshot.Queue {
-			if m.snapshot.Queue[i].ID != itemID {
-				continue
-			}
-			for _, t := range m.snapshot.Queue[i].Tasks {
-				if t.Type == taskType && t.IsRunning() {
-					return t.Progress.Percent, true
-				}
-			}
-		}
-		return 0, false
-	}
-
-	var parts []string
-	for _, name := range resourceOrder(m.snapshot.Status.Pipeline, sched.Resources) {
-		res := sched.Resources[name]
-		label := resourceLabel(name)
-
-		if res.Used == 0 {
-			// Idle resources stay quiet, except the drive: "insert the next
-			// disc" is the single most useful signal this header carries.
-			if name == "drive" {
-				state, style := "FREE", styles.SuccessText
-				if disc := m.snapshot.Status.Disc; disc != nil && disc.Paused {
-					state, style = "PAUSED", styles.WarningText
-				}
-				parts = append(parts, bg.Render(label+":", styles.MutedText)+bg.Space()+
-					bg.Render(state, style.Bold(true)))
-			}
-			continue
-		}
-
-		for _, h := range res.Holders {
-			info := stageDisplay(h.Task)
-			seg := bg.Render(label+":", styles.MutedText) + bg.Space() +
-				bg.Render(fmt.Sprintf("#%d", h.ItemID), styles.Text) + bg.Space() +
-				bg.Render(strings.ToLower(info.label), roleStyle(info.role, styles))
-			if pct, ok := taskPercent(h.ItemID, h.Task); ok && pct > 0 && !compact {
-				seg += bg.Space() + bg.Render(fmt.Sprintf("%.0f%%", pct), styles.AccentText)
-			}
-			parts = append(parts, seg)
-		}
-	}
-
-	if len(parts) == 0 {
-		return ""
-	}
-	sep := bg.Space() + bg.Render("|", styles.FaintText) + bg.Space()
-	return strings.Join(parts, sep)
-}
-
 // buildProblemCountsPart builds the failed/review counts display.
 // Returns empty string when both counts are zero.
-func (m Model) buildProblemCountsPart(compact bool, failed, review int, styles Styles, bg BgStyle) string {
+func (m Model) buildProblemCountsPart(compact bool, failed, review int, styles Styles) string {
 	if failed == 0 && review == 0 {
 		return ""
 	}
-
-	sep := bg.Spaces(2)
 
 	failedStyle := styles.MutedText
 	if failed > 0 {
@@ -182,86 +178,33 @@ func (m Model) buildProblemCountsPart(compact bool, failed, review int, styles S
 		reviewLabel = "R:"
 	}
 
-	return bg.Render(failedLabel, styles.MutedText) + bg.Space() + bg.Render(fmt.Sprintf("%d", failed), failedStyle) +
-		sep + bg.Render("•", styles.FaintText) + sep +
-		bg.Render(reviewLabel, styles.MutedText) + bg.Space() + bg.Render(fmt.Sprintf("%d", review), reviewStyle)
+	return styles.MutedText.Render(failedLabel) + " " + failedStyle.Render(fmt.Sprintf("%d", failed)) +
+		"  " + styles.FaintText.Render("•") + "  " +
+		styles.MutedText.Render(reviewLabel) + " " + reviewStyle.Render(fmt.Sprintf("%d", review))
 }
 
 // buildErrorParts builds error indicator parts for the header.
-func (m Model) buildErrorParts(compact bool, styles Styles, bg BgStyle) []string {
+func (m Model) buildErrorParts(compact bool, styles Styles) []string {
 	var parts []string
 
 	if workflowErr := strings.TrimSpace(m.snapshot.Status.Workflow.LastError); workflowErr != "" {
 		errText := truncate(workflowErr, maxLen(compact, 80, 40))
 		parts = append(parts,
-			bg.Render("WORKFLOW", styles.DangerText.Bold(true))+bg.Space()+
-				bg.Render(errText, styles.DangerText),
-		)
+			styles.DangerText.Bold(true).Render("WORKFLOW")+" "+styles.DangerText.Render(errText))
 	}
 
 	if m.snapshot.LastError != nil {
 		errText := truncate(fmt.Sprintf("%v", m.snapshot.LastError), maxLen(compact, 80, 40))
 		parts = append(parts,
-			bg.Render("ERROR", styles.DangerText.Bold(true))+bg.Space()+
-				bg.Render(errText, styles.DangerText),
-		)
+			styles.DangerText.Bold(true).Render("ERROR")+" "+styles.DangerText.Render(errText))
 	}
 
 	if m.errorMsg != "" {
 		parts = append(parts,
-			bg.Render("!", styles.WarningText.Bold(true))+bg.Space()+
-				bg.Render(m.errorMsg, styles.WarningText),
-		)
+			styles.WarningText.Bold(true).Render("!")+" "+styles.WarningText.Render(m.errorMsg))
 	}
 
 	return parts
-}
-
-// buildStatusContent builds the status bar content string.
-func (m Model) buildStatusContent(styles Styles, bg BgStyle) string {
-	compact := m.width < compactWidthThreshold
-	failed, review := m.countProblemCounts()
-
-	var parts []string
-
-	// Logo and daemon status
-	parts = append(parts, bg.Render("flyer", styles.Logo))
-	if m.snapshot.Status.Running {
-		parts = append(parts, bg.Render("● ON", styles.SuccessText))
-	} else {
-		parts = append(parts, bg.Render("● OFF", styles.DangerText))
-	}
-
-	// Queue count
-	parts = append(parts,
-		bg.Render("Queue:", styles.MutedText)+bg.Space()+
-			bg.Render(fmt.Sprintf("%d", len(m.snapshot.Queue)), styles.Text),
-	)
-
-	// Resource occupancy strip (drive/gpu/encode tiers with holders).
-	if strip := m.buildResourceStrip(compact, styles, bg); strip != "" {
-		parts = append(parts, strip)
-	}
-
-	// Failed and review counts (only shown when non-zero)
-	if problemsPart := m.buildProblemCountsPart(compact, failed, review, styles, bg); problemsPart != "" {
-		parts = append(parts, problemsPart)
-	}
-
-	// Timestamp
-	if timeStr := m.formatTimestamp(); timeStr != "" {
-		parts = append(parts, bg.Render(timeStr, styles.MutedText))
-	}
-
-	// Health warnings
-	if healthWarning := m.formatHealthWarning(compact, styles, bg); healthWarning != "" {
-		parts = append(parts, healthWarning)
-	}
-
-	// Error indicators
-	parts = append(parts, m.buildErrorParts(compact, styles, bg)...)
-
-	return bg.Join(parts, "  ")
 }
 
 // countProblemCounts returns the number of failed and review items.
@@ -304,7 +247,7 @@ func (m Model) formatTimestamp() string {
 }
 
 // formatHealthWarning formats health warnings if any.
-func (m Model) formatHealthWarning(compact bool, styles Styles, bg BgStyle) string {
+func (m Model) formatHealthWarning(compact bool, styles Styles) string {
 	var unhealthy []string
 	for _, dep := range m.snapshot.Status.Dependencies {
 		if !dep.Available {
@@ -326,8 +269,7 @@ func (m Model) formatHealthWarning(compact bool, styles Styles, bg BgStyle) stri
 	}
 	detail = truncate(detail, maxLen(compact, 80, 40))
 
-	return bg.Render("HEALTH", styles.DangerText.Bold(true)) + bg.Space() +
-		bg.Render(detail, styles.DangerText)
+	return styles.DangerText.Bold(true).Render("HEALTH") + " " + styles.DangerText.Render(detail)
 }
 
 // classifyConnectionError returns a short description of the connection error.
@@ -350,15 +292,35 @@ func classifyConnectionError(err error) string {
 
 // renderCommandBar renders the command hints bar.
 func (m Model) renderCommandBar() string {
-	// Command bar uses Surface background
-	styles := m.theme.Styles().WithBackground(m.theme.Surface)
-	bg := NewBgStyle(m.theme.Surface)
+	styles := m.theme.Styles()
 
 	type cmd struct{ key, desc string }
 	var commands []cmd
 
-	switch m.currentView {
-	case ViewLogs:
+	switch {
+	case m.inspecting:
+		commands = []cmd{
+			{"1-4", "Tabs"},
+			{"Tab", "Next tab"},
+			{"j/k", "Scroll"},
+		}
+		if m.inspectorTab == tabLogs {
+			followLabel := "Pause"
+			if !m.logState.follow {
+				followLabel = "Follow"
+			}
+			commands = append(commands,
+				cmd{"Space", followLabel},
+				cmd{"/", "Search"},
+				cmd{"F", "Filters"},
+			)
+		}
+		if m.inspectorTab == tabOverview || m.inspectorTab == tabEpisodes {
+			commands = append(commands, cmd{"t", "Episodes"})
+		}
+		commands = append(commands, cmd{"Esc", "Back"}, cmd{"?", "More"})
+
+	case m.currentView == ViewLogs:
 		followLabel := "Pause"
 		if !m.logState.follow {
 			followLabel = "Follow"
@@ -368,55 +330,48 @@ func (m Model) renderCommandBar() string {
 			{"/", "Search"},
 			{"n/N", "Next/Prev"},
 			{"F", "Filters"},
-			{"l", "Daemon"},
-			{"i", "Item"},
 			{"q", "Queue"},
 			{"?", "More"},
 		}
-	case ViewProblems:
+
+	case m.currentView == ViewProblems:
 		commands = []cmd{
 			{"j/k", "Navigate"},
-			{"l", "Daemon"},
-			{"i", "Item"},
+			{"Enter", "Inspect"},
 			{"q", "Queue"},
-			{"Tab", "Focus"},
 			{"?", "More"},
 		}
+
 	default: // ViewQueue
 		commands = []cmd{
 			{"f", m.filterLabel()}, // Shows current filter state
-			{"t", "Episodes"},
-			{"P", "Paths"},
 			{"j/k", "Navigate"},
+			{"Enter", "Inspect"},
+			{"i", "Item logs"},
 			{"l", "Daemon"},
-			{"i", "Item"},
 			{"p", "Problems"},
-			{"Tab", "Focus"},
 			{"?", "More"},
 		}
 	}
 
-	colon := bg.Sep(":")
-	sep := bg.Spaces(2)
-
-	segments := make([]string, 0, len(commands))
+	segments := make([]string, 0, len(commands)+2)
 	for _, c := range commands {
 		segments = append(segments,
-			bg.Render(c.key, styles.AccentText)+colon+bg.Render(c.desc, styles.MutedText))
+			styles.AccentText.Render(c.key)+":"+styles.MutedText.Render(c.desc))
 	}
 
 	// Show active log search pattern
-	if m.currentView == ViewLogs && m.logState.searchQuery != "" {
+	logsActive := (m.currentView == ViewLogs && !m.inspecting) || (m.inspecting && m.inspectorTab == tabLogs)
+	if logsActive && m.logState.searchQuery != "" {
 		pattern := truncate(m.logState.searchQuery, 18)
-		segments = append(segments,
-			bg.Render("/"+pattern, styles.AccentText))
+		segments = append(segments, styles.AccentText.Render("/"+pattern))
 	}
 
 	// Add theme indicator
 	segments = append(segments,
-		bg.Render("T", styles.AccentText)+colon+bg.Render(m.theme.Name, styles.FaintText))
+		styles.AccentText.Render("T")+":"+styles.FaintText.Render(m.theme.Name))
 
-	return styles.Header.Width(m.width).Render(strings.Join(segments, sep))
+	return strings.Join(segments, "  ")
 }
 
 // maxLen returns compactLen if compact is true, otherwise normalLen.

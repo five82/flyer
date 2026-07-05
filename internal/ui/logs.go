@@ -82,11 +82,22 @@ func (m *Model) initLogState() {
 	m.logState.searchInput = ti
 }
 
+// logViewportHeight returns the height left for log lines. The daemon view
+// surrounds the viewport with header, command bar, title rule, and status
+// line; the inspector logs tab swaps the rule for its item and tab lines,
+// costing one extra row.
+func (m *Model) logViewportHeight() int {
+	if m.inspecting {
+		return max(m.height-5, 1)
+	}
+	return max(m.height-4, 1)
+}
+
 // initLogViewport initializes the log viewport.
 func (m *Model) initLogViewport() {
 	m.logViewport = viewport.New(
-		viewport.WithWidth(m.width-4),
-		viewport.WithHeight(m.height-5),
+		viewport.WithWidth(m.width),
+		viewport.WithHeight(m.logViewportHeight()),
 	)
 	m.logViewport.Style = lipgloss.NewStyle()
 }
@@ -97,14 +108,9 @@ func (m *Model) updateLogViewport() {
 		m.initLogViewport()
 	}
 
-	// Update dimensions
-	// Box height = m.height - 3 (header, cmdbar, status bar below)
-	// Box inner = box height - 2 (top and bottom borders) = m.height - 5
-	m.logViewport.SetWidth(m.width - 4)
-	m.logViewport.SetHeight(m.height - 5)
-
-	// Ensure viewport has focus background
-	m.logViewport.Style = lipgloss.NewStyle().Background(lipgloss.Color(m.theme.FocusBg))
+	m.logViewport.SetWidth(m.width)
+	m.logViewport.SetHeight(m.logViewportHeight())
+	m.logViewport.Style = lipgloss.NewStyle()
 
 	// Only re-render content if it changed (version mismatch or first render)
 	if m.logState.lastRendered == 0 || m.logState.contentVersion != m.logState.lastRendered {
@@ -124,62 +130,43 @@ func (m *Model) updateLogViewport() {
 
 // renderLogs renders the log view.
 func (m Model) renderLogs() string {
-	// Logs view is always focused when shown, so use FocusBg
-	bg := NewBgStyle(m.theme.FocusBg)
 	styles := m.theme.Styles()
-	contentHeight := m.height - 3 // Account for header + cmdbar + status bar below
-
-	// Title for the box
-	title := m.getLogTitle()
-
-	// Viewport content only (no status bar inside)
-	content := m.logViewport.View()
-
-	// Logs view is always focused when shown
-	box := m.renderBox(title, content, m.width, contentHeight, true)
-
-	// Status bar below the box
-	status := m.renderLogStatus(styles, bg)
-	return box + "\n" + status
+	rule := renderRule(m.getLogTitle(), m.width, styles)
+	status := m.renderLogStatus(styles)
+	return rule + "\n" + m.logViewport.View() + "\n" + status
 }
 
-// getLogTitle returns the plain text title for the log view.
+// getLogTitle returns the plain text title for the log view. This view now
+// only ever shows the daemon log; item logs are rendered by the per-item
+// inspector instead.
 func (m Model) getLogTitle() string {
-	switch m.logState.mode {
-	case logSourceItem:
-		if item := m.getSelectedItem(); item != nil {
-			return fmt.Sprintf("Item #%d Log", item.ID)
-		}
-		return "Item Log"
-	default:
-		if m.logFiltersActive() {
-			return "Daemon Log (filtered)"
-		}
-		return "Daemon Log"
+	if m.logFiltersActive() {
+		return "Daemon Log (filtered)"
 	}
+	return "Daemon Log"
 }
 
 // renderLogStatus renders the log status bar.
-func (m *Model) renderLogStatus(styles Styles, bg BgStyle) string {
+func (m *Model) renderLogStatus(styles Styles) string {
 	// If we have an active search with matches, show search status instead
 	if m.logState.searchRegex != nil && len(m.logState.searchMatches) > 0 {
 		matchNum := m.logState.searchMatchIdx + 1
 		totalMatches := len(m.logState.searchMatches)
-		return bg.Render(fmt.Sprintf("/%s", m.logState.searchQuery), styles.AccentText) +
-			bg.Render(" - ", styles.FaintText) +
-			bg.Render(fmt.Sprintf("%d/%d", matchNum, totalMatches), styles.WarningText) +
-			bg.Render(" - Press ", styles.FaintText) +
-			bg.Render("n", styles.AccentText) +
-			bg.Render(" for next, ", styles.FaintText) +
-			bg.Render("N", styles.AccentText) +
-			bg.Render(" for previous, ", styles.FaintText) +
-			bg.Render("Esc", styles.AccentText) +
-			bg.Render(" to clear", styles.FaintText)
+		return styles.AccentText.Render(fmt.Sprintf("/%s", m.logState.searchQuery)) +
+			styles.FaintText.Render(" - ") +
+			styles.WarningText.Render(fmt.Sprintf("%d/%d", matchNum, totalMatches)) +
+			styles.FaintText.Render(" - Press ") +
+			styles.AccentText.Render("n") +
+			styles.FaintText.Render(" for next, ") +
+			styles.AccentText.Render("N") +
+			styles.FaintText.Render(" for previous, ") +
+			styles.AccentText.Render("Esc") +
+			styles.FaintText.Render(" to clear")
 	}
 
 	// If search regex exists but no matches
 	if m.logState.searchRegex != nil && len(m.logState.searchMatches) == 0 {
-		return bg.Render("Pattern not found: "+m.logState.searchQuery, styles.DangerText)
+		return styles.DangerText.Render("Pattern not found: " + m.logState.searchQuery)
 	}
 
 	// Source label
@@ -187,8 +174,10 @@ func (m *Model) renderLogStatus(styles Styles, bg BgStyle) string {
 	switch m.logState.mode {
 	case logSourceItem:
 		src = "Item"
-		if item := m.getSelectedItem(); item != nil {
-			apiPath = fmt.Sprintf("api logs item=%d", item.ID)
+		if m.logState.lastItemID > 0 {
+			apiPath = fmt.Sprintf("api logs item=%d", m.logState.lastItemID)
+		} else {
+			apiPath = "api logs"
 		}
 	default:
 		src = "Daemon"
@@ -203,11 +192,11 @@ func (m *Model) renderLogStatus(styles Styles, bg BgStyle) string {
 	status := fmt.Sprintf("%s log %d lines auto-tail %s", src, len(m.logState.rawLines), autoTail)
 
 	var parts []string
-	parts = append(parts, bg.Render(status, styles.FaintText))
+	parts = append(parts, styles.FaintText.Render(status))
 
 	// Search input mode
 	if m.logState.searchActive {
-		parts = append(parts, bg.Render("search: "+m.logState.searchInput.Value(), styles.AccentText))
+		parts = append(parts, styles.AccentText.Render("search: "+m.logState.searchInput.Value()))
 	}
 
 	// Filters
@@ -226,35 +215,26 @@ func (m *Model) renderLogStatus(styles Styles, bg BgStyle) string {
 			filterParts = append(filterParts, "req="+m.logState.filterRequest)
 		}
 		if len(filterParts) > 0 {
-			parts = append(parts, bg.Render("filter: "+strings.Join(filterParts, " "), styles.MutedText))
+			parts = append(parts, styles.MutedText.Render("filter: "+strings.Join(filterParts, " ")))
 		}
 	}
 
 	// API path at the end
 	if apiPath != "" {
-		parts = append(parts, bg.Render(apiPath, styles.AccentText))
+		parts = append(parts, styles.AccentText.Render(apiPath))
 	}
 
 	// Join with styled bullet separator
-	sep := bg.Space() + bg.Render("•", styles.FaintText) + bg.Space()
-	content := strings.Join(parts, sep)
-	return content
+	sep := " " + styles.FaintText.Render("•") + " "
+	return strings.Join(parts, sep)
 }
 
 // renderLogContent renders the colorized log lines.
 func (m *Model) renderLogContent() string {
-	// Logs view is always focused when shown, so use FocusBg
-	bg := NewBgStyle(m.theme.FocusBg)
 	styles := m.theme.Styles()
-	width := m.logViewport.Width()
-
-	// Empty state for item logs with no item selected
-	if m.logState.mode == logSourceItem && m.getSelectedItem() == nil {
-		return bg.FillLine(bg.Render("Select an item to view logs", styles.MutedText), width)
-	}
 
 	if len(m.logState.rawLines) == 0 {
-		return bg.FillLine(bg.Render("No log entries", styles.MutedText), width)
+		return styles.MutedText.Render("No log entries")
 	}
 
 	// Build a set of matching line indices for quick lookup
@@ -280,22 +260,24 @@ func (m *Model) renderLogContent() string {
 		var lineContent string
 		switch {
 		case isActiveMatch:
-			// Active match: highlighted background
-			highlightBg := NewBgStyle(m.theme.Warning)
-			lineContent = highlightBg.Render(fmt.Sprintf("%4d │ ", lineNum), styles.FaintText.Background(lipgloss.Color(m.theme.Warning))) +
+			// Active match: full line (including the line-number prefix)
+			// highlighted with the warning background.
+			prefixStyle := lipgloss.NewStyle().
+				Background(lipgloss.Color(m.theme.Warning)).
+				Foreground(lipgloss.Color(m.theme.Background))
+			lineContent = prefixStyle.Render(fmt.Sprintf("%4d │ ", lineNum)) +
 				m.colorizeLineForSearch(formatLogEvent(evt), m.theme.Warning)
 		case isPassiveMatch:
 			// Passive match: accent foreground
-			lineContent = bg.Render(fmt.Sprintf("%4d │ ", lineNum), styles.AccentText) +
-				m.colorizeLineWithHighlight(formatLogEvent(evt), styles, bg)
+			lineContent = styles.AccentText.Render(fmt.Sprintf("%4d │ ", lineNum)) +
+				m.colorizeLineWithHighlight(formatLogEvent(evt), styles)
 		default:
 			// Normal line: styled directly from the structured event fields
-			lineContent = bg.Render(fmt.Sprintf("%4d │ ", lineNum), styles.FaintText) +
-				m.styleLogEvent(evt, styles, bg)
+			lineContent = styles.FaintText.Render(fmt.Sprintf("%4d │ ", lineNum)) +
+				m.styleLogEvent(evt, styles)
 		}
 
-		// Pad to fill viewport width
-		b.WriteString(bg.FillLine(lineContent, width))
+		b.WriteString(lineContent)
 		if i < len(m.logState.rawLines)-1 {
 			b.WriteString("\n")
 		}
@@ -313,8 +295,8 @@ func (m *Model) colorizeLineForSearch(line string, bgColor string) string {
 }
 
 // colorizeLineWithHighlight renders a line with accent foreground for passive matches.
-func (m *Model) colorizeLineWithHighlight(line string, styles Styles, bg BgStyle) string {
-	return bg.Render(line, styles.AccentText)
+func (m *Model) colorizeLineWithHighlight(line string, styles Styles) string {
+	return styles.AccentText.Render(line)
 }
 
 // styleLogEvent builds the styled log line directly from the structured
@@ -322,30 +304,30 @@ func (m *Model) colorizeLineWithHighlight(line string, styles Styles, bg BgStyle
 // subject highlighted, message in normal text, and details appended below,
 // matching the visual treatment previously produced by re-parsing
 // formatLogEvent's output with regexes.
-func (m *Model) styleLogEvent(evt spindle.LogEvent, styles Styles, bg BgStyle) string {
+func (m *Model) styleLogEvent(evt spindle.LogEvent, styles Styles) string {
 	level := strings.ToUpper(strings.TrimSpace(evt.Level))
 	if level == "" {
 		level = "INFO"
 	}
 
 	var result strings.Builder
-	result.WriteString(bg.Render(logEventTimestamp(evt), styles.FaintText))
-	result.WriteString(bg.Space())
-	result.WriteString(bg.Render(level, m.getLevelStyle(level, styles).Bold(true)))
+	result.WriteString(styles.FaintText.Render(logEventTimestamp(evt)))
+	result.WriteString(" ")
+	result.WriteString(m.getLevelStyle(level, styles).Bold(true).Render(level))
 
 	// Note: the [component] tag is part of formatLogEvent's plain text (for
 	// search) but is not shown here, since the stage is already surfaced via
 	// the subject below.
 	if subject := composeLogSubject(evt.ItemID, evt.Stage); subject != "" {
-		result.WriteString(bg.Space())
-		result.WriteString(bg.Render(subject, styles.AccentText))
+		result.WriteString(" ")
+		result.WriteString(styles.AccentText.Render(subject))
 	}
 
 	if message := strings.TrimSpace(evt.Message); message != "" {
-		result.WriteString(bg.Space())
-		result.WriteString(bg.Render("–", styles.FaintText))
-		result.WriteString(bg.Space())
-		result.WriteString(bg.Render(message, styles.Text))
+		result.WriteString(" ")
+		result.WriteString(styles.FaintText.Render("–"))
+		result.WriteString(" ")
+		result.WriteString(styles.Text.Render(message))
 	}
 
 	for _, detail := range evt.Details {
@@ -355,7 +337,7 @@ func (m *Model) styleLogEvent(evt spindle.LogEvent, styles Styles, bg BgStyle) s
 			continue
 		}
 		result.WriteString("\n")
-		result.WriteString(bg.Render(fmt.Sprintf("    - %s: %s", label, value), styles.Text))
+		result.WriteString(styles.Text.Render(fmt.Sprintf("    - %s: %s", label, value)))
 	}
 
 	return result.String()
@@ -398,18 +380,6 @@ func (m Model) handleLogsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.updateLogViewport()
 		return m, nil
 
-	case key.Matches(msg, m.keys.ToggleLogSource):
-		if m.logState.mode == logSourceDaemon {
-			m.logState.mode = logSourceItem
-		} else {
-			m.logState.mode = logSourceDaemon
-		}
-		m.logState.rawLines = nil
-		m.logState.streamCursor = 0
-		m.logState.itemCursor = 0
-		m.clearLogSearch()
-		return m, nil
-
 	case key.Matches(msg, m.keys.Search):
 		m.logState.searchActive = true
 		m.logState.searchInput.Focus()
@@ -429,12 +399,16 @@ func (m Model) handleLogsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Escape):
-		// Clear search if active
+		// Clear search if active, otherwise return to the queue
 		if m.logState.searchRegex != nil {
 			m.clearLogSearch()
 			m.updateLogViewport()
 			return m, nil
 		}
+		if !m.inspecting {
+			m.currentView = ViewQueue
+		}
+		return m, nil
 
 	case key.Matches(msg, m.keys.Top):
 		m.logViewport.GotoTop()
@@ -592,8 +566,10 @@ func (m *Model) scrollToSearchMatch() {
 	m.logViewport.SetYOffset(scrollTo)
 }
 
-// refreshLogs fetches new log entries from the API.
-func (m *Model) refreshLogs() tea.Cmd {
+// refreshLogs fetches new log entries from the API. In daemon mode item is
+// ignored; in item mode it identifies the item whose logs to fetch (the
+// per-item inspector is the caller in that case).
+func (m *Model) refreshLogs(item *spindle.QueueItem) tea.Cmd {
 	if m.client == nil {
 		return nil
 	}
@@ -611,7 +587,7 @@ func (m *Model) refreshLogs() tea.Cmd {
 
 	switch m.logState.mode {
 	case logSourceItem:
-		return m.fetchItemLogs()
+		return m.fetchItemLogs(item)
 	default:
 		return m.fetchDaemonLogs()
 	}
@@ -651,8 +627,7 @@ func (m *Model) fetchDaemonLogs() tea.Cmd {
 
 // fetchItemLogs fetches item-specific logs from the streaming API.
 // Uses /api/logs with item filter for structured log events.
-func (m *Model) fetchItemLogs() tea.Cmd {
-	item := m.getSelectedItem()
+func (m *Model) fetchItemLogs(item *spindle.QueueItem) tea.Cmd {
 	if item == nil {
 		return nil
 	}
@@ -722,8 +697,7 @@ func (m *Model) handleLogBatch(msg logBatchMsg) {
 
 	// For item logs, verify we're still looking at the same item
 	if msg.source == logSourceItem {
-		item := m.getSelectedItem()
-		if item == nil || item.ID != msg.itemID {
+		if msg.itemID != m.logState.lastItemID {
 			return
 		}
 		m.logState.itemCursor = msg.next

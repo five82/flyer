@@ -10,7 +10,7 @@ import (
 
 // renderEstimatedSize renders the estimated output size during encoding.
 // Only displays when progress >= 10% for estimate accuracy.
-func (m *Model) renderEstimatedSize(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
+func renderEstimatedSize(w fieldWriter, item spindle.QueueItem) {
 	enc := item.Encoding
 	if enc == nil {
 		return
@@ -22,27 +22,32 @@ func (m *Model) renderEstimatedSize(b *strings.Builder, item spindle.QueueItem, 
 	if enc.EstimatedTotalBytes <= 0 {
 		return
 	}
+	// Once the final size is known the estimate is stale noise.
+	if enc.EncodedSize > 0 {
+		return
+	}
 
 	value := "~" + formatBytes(enc.EstimatedTotalBytes)
 	if enc.CurrentOutputBytes > 0 {
 		value += fmt.Sprintf(" (%s written)", formatBytes(enc.CurrentOutputBytes))
 	}
-	renderDetailField(b, bg, "Est", styles.MutedText, value, styles.AccentText)
+	w.field("Est", value, w.styles.AccentText)
 }
 
-// renderSizeResult renders the file size comparison (input → output with reduction %).
-func (m *Model) renderSizeResult(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
+// renderSizeResult renders the file size comparison (input -> output with reduction %).
+func renderSizeResult(w fieldWriter, item spindle.QueueItem) {
 	enc := item.Encoding
 	if enc == nil || enc.OriginalSize <= 0 || enc.EncodedSize <= 0 {
 		return
 	}
 
-	value := formatBytes(enc.OriginalSize) + " -> " + formatBytes(enc.EncodedSize) + fmt.Sprintf(" (%.0f%% reduction)", enc.SizeReductionPercent)
-	renderDetailField(b, bg, "Size", styles.MutedText, value, styles.Text)
+	value := formatBytes(enc.OriginalSize) + " -> " + formatBytes(enc.EncodedSize) +
+		fmt.Sprintf(" (%.0f%% reduction)", enc.SizeReductionPercent)
+	w.field("Size", value, w.styles.Text)
 }
 
 // renderVideoSpecs renders the video specs line (resolution + HDR status).
-func (m *Model) renderVideoSpecs(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
+func renderVideoSpecs(w fieldWriter, item spindle.QueueItem) {
 	enc := item.Encoding
 	if enc == nil || enc.Resolution == "" {
 		return
@@ -63,26 +68,26 @@ func (m *Model) renderVideoSpecs(b *strings.Builder, item spindle.QueueItem, sty
 		parts = append(parts, strings.ToUpper(enc.DynamicRange))
 	}
 
-	renderDetailField(b, bg, "Video", styles.MutedText, strings.Join(parts, " "), styles.AccentText)
+	w.field("Video", strings.Join(parts, " "), w.styles.AccentText)
 }
 
 // renderAudioInfo renders the source audio format.
-func (m *Model) renderAudioInfo(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	if item.PrimaryAudioDescription == "" {
-		return
-	}
-
-	renderDetailField(b, bg, "Audio", styles.MutedText, item.PrimaryAudioDescription, styles.Text)
+func renderAudioInfo(w fieldWriter, item spindle.QueueItem) {
+	w.field("Audio", item.PrimaryAudioDescription, w.styles.Text)
 }
 
-// renderEncodingConfig renders the encoding config line (preset + quality + tune).
-func (m *Model) renderEncodingConfig(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
+// renderEncodingConfig renders the encoding config line
+// (encoder + preset + quality + tune).
+func renderEncodingConfig(w fieldWriter, item spindle.QueueItem) {
 	enc := item.Encoding
 	if enc == nil || enc.Preset == "" {
 		return
 	}
 	var parts []string
 
+	if enc.Encoder != "" {
+		parts = append(parts, enc.Encoder)
+	}
 	parts = append(parts, fmt.Sprintf("Preset %s", enc.Preset))
 	if enc.Quality != "" {
 		parts = append(parts, enc.Quality)
@@ -91,11 +96,25 @@ func (m *Model) renderEncodingConfig(b *strings.Builder, item spindle.QueueItem,
 		parts = append(parts, fmt.Sprintf("Tune %s", enc.Tune))
 	}
 
-	renderDetailField(b, bg, "Config", styles.MutedText, strings.Join(parts, " • "), styles.AccentText)
+	w.field("Config", strings.Join(parts, " • "), w.styles.AccentText)
+}
+
+// renderContentID renders the episode identification summary.
+func renderContentID(w fieldWriter, item spindle.QueueItem) {
+	cid := item.ContentID
+	if cid == nil || strings.TrimSpace(cid.Method) == "" {
+		return
+	}
+	value := cid.Method
+	if cid.TranscribedEpisodes > 0 || cid.MatchedEpisodes > 0 {
+		value += fmt.Sprintf(" · %d matched · %d unresolved · %d low confidence",
+			cid.MatchedEpisodes, cid.UnresolvedEpisodes, cid.LowConfidenceCount)
+	}
+	w.field("ID", value, w.styles.Text)
 }
 
 // renderEncodeStats renders duration and average speed (for completed).
-func (m *Model) renderEncodeStats(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
+func renderEncodeStats(w fieldWriter, item spindle.QueueItem) {
 	enc := item.Encoding
 	if enc == nil || (enc.EncodeDurationSeconds <= 0 && enc.AverageSpeed <= 0) {
 		return
@@ -110,11 +129,11 @@ func (m *Model) renderEncodeStats(b *strings.Builder, item spindle.QueueItem, st
 		parts = append(parts, fmt.Sprintf("%.1fx avg", enc.AverageSpeed))
 	}
 
-	renderDetailField(b, bg, "Encode", styles.MutedText, strings.Join(parts, " @ "), styles.Text)
+	w.field("Encode", strings.Join(parts, " @ "), w.styles.Text)
 }
 
-// renderValidationSummary renders a one-line validation summary for completed items.
-func (m *Model) renderValidationSummary(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
+// renderValidationSummary renders a one-line validation summary.
+func renderValidationSummary(w fieldWriter, item spindle.QueueItem) {
 	if item.Encoding == nil || item.Encoding.Validation == nil {
 		return
 	}
@@ -133,14 +152,14 @@ func (m *Model) renderValidationSummary(b *strings.Builder, item spindle.QueueIt
 
 	value := fmt.Sprintf("%d/%d checks", passed, total)
 	if v.Passed {
-		renderDetailField(b, bg, "Checks", styles.MutedText, "Passed · "+value, styles.SuccessText)
+		w.field("Checks", "Passed · "+value, w.styles.SuccessText)
 	} else {
-		renderDetailField(b, bg, "Checks", styles.MutedText, "Failed · "+value, styles.DangerText)
+		w.field("Checks", "Failed · "+value, w.styles.DangerText)
 	}
 }
 
 // renderCropInfo renders the crop detection line.
-func (m *Model) renderCropInfo(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
+func renderCropInfo(w fieldWriter, item spindle.QueueItem) {
 	enc := item.Encoding
 	if enc == nil {
 		return
@@ -148,16 +167,16 @@ func (m *Model) renderCropInfo(b *strings.Builder, item spindle.QueueItem, style
 
 	if enc.CropRequired && enc.CropFilter != "" {
 		// Strip "crop=" prefix for cleaner display
-		cropVal := strings.TrimPrefix(enc.CropFilter, "crop=")
-		renderDetailField(b, bg, "Crop", styles.MutedText, cropVal, styles.AccentText)
+		w.field("Crop", strings.TrimPrefix(enc.CropFilter, "crop="), w.styles.AccentText)
 	} else if enc.CropMessage != "" {
 		// Detection complete but no cropping needed
-		renderDetailField(b, bg, "Crop", styles.MutedText, "None", styles.FaintText)
+		w.field("Crop", "None", w.styles.FaintText)
 	}
 }
 
-// renderSubtitleSummary renders the subtitle source summary for TV shows.
-func (m *Model) renderSubtitleSummary(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
+// renderSubtitleSummary renders the subtitle source summary: a count for
+// multi-episode items, a plain source label for movies and single items.
+func renderSubtitleSummary(w fieldWriter, item spindle.QueueItem) {
 	episodes, _ := item.EpisodeSnapshot()
 	if len(episodes) == 0 {
 		return
@@ -169,64 +188,13 @@ func (m *Model) renderSubtitleSummary(b *strings.Builder, item spindle.QueueItem
 			count++
 		}
 	}
-
 	if count == 0 {
 		return
 	}
 
-	renderDetailField(b, bg, "Subs", styles.MutedText, fmt.Sprintf("%d WhisperX", count), styles.AccentText)
-}
-
-// renderSubtitleInfo renders subtitle source for movies and single items.
-func (m *Model) renderSubtitleInfo(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	episodes, _ := item.EpisodeSnapshot()
-	if len(episodes) == 0 || !strings.EqualFold(strings.TrimSpace(episodes[0].SubtitleSource), "whisperx") {
+	if len(episodes) == 1 {
+		w.field("Subs", "WhisperX", w.styles.AccentText)
 		return
 	}
-
-	renderDetailField(b, bg, "Subs", styles.MutedText, "WhisperX", styles.AccentText)
-}
-
-// renderValidationDetails renders detailed validation step results for failed items.
-func (m *Model) renderValidationDetails(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	if item.Encoding == nil || item.Encoding.Validation == nil {
-		return
-	}
-	v := item.Encoding.Validation
-	if len(v.Steps) == 0 || v.Passed {
-		return
-	}
-
-	m.writeSection(b, "Validation", styles, bg)
-
-	for _, step := range v.Steps {
-		icon, iconStyle := "✓", styles.SuccessText
-		if !step.Passed {
-			icon, iconStyle = "✗", styles.DangerText
-		}
-		name := strings.TrimSpace(step.Name)
-		if name == "" {
-			name = "Check"
-		}
-		b.WriteString(bg.Render(icon, iconStyle))
-		b.WriteString(bg.Space())
-		b.WriteString(bg.Render(name, styles.Text))
-		if details := strings.TrimSpace(step.Details); details != "" {
-			b.WriteString(bg.Space())
-			b.WriteString(bg.Render(details, styles.FaintText))
-		}
-		b.WriteString("\n")
-	}
-}
-
-// renderMetadata renders metadata rows.
-func (m *Model) renderMetadata(b *strings.Builder, rows []metadataRow, styles Styles, bg BgStyle) {
-	for _, r := range rows {
-		key := titleCase(r.key)
-		b.WriteString(bg.Spaces(2))
-		b.WriteString(bg.Render(key+":", styles.MutedText))
-		b.WriteString(bg.Space())
-		b.WriteString(bg.Render(truncate(r.value, 60), styles.AccentText))
-		b.WriteString("\n")
-	}
+	w.field("Subs", fmt.Sprintf("%d WhisperX", count), w.styles.AccentText)
 }

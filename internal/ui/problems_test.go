@@ -18,7 +18,6 @@ func stripANSI(s string) string {
 func TestRenderStructuredProblems_LeadsWithFailedTask(t *testing.T) {
 	m := &Model{theme: GetTheme("slate")}
 	styles := m.theme.Styles()
-	bg := NewBgStyle(m.theme.Background)
 
 	item := &spindle.QueueItem{
 		NeedsReview:   true,
@@ -29,7 +28,7 @@ func TestRenderStructuredProblems_LeadsWithFailedTask(t *testing.T) {
 	}
 
 	var b strings.Builder
-	m.renderStructuredProblems(&b, item, styles, bg)
+	m.renderStructuredProblems(&b, item, styles)
 	got := stripANSI(b.String())
 
 	failedIdx := strings.Index(got, "Failed Task")
@@ -57,14 +56,13 @@ func TestRenderStructuredProblems_LeadsWithFailedTask(t *testing.T) {
 func TestRenderStructuredProblems_FailedAtStageFallbackWhenTasksAbsent(t *testing.T) {
 	m := &Model{theme: GetTheme("slate")}
 	styles := m.theme.Styles()
-	bg := NewBgStyle(m.theme.Background)
 
 	item := &spindle.QueueItem{
 		FailedAtStage: "ripping",
 	}
 
 	var b strings.Builder
-	m.renderStructuredProblems(&b, item, styles, bg)
+	m.renderStructuredProblems(&b, item, styles)
 	got := stripANSI(b.String())
 
 	if !strings.Contains(got, "Failed Task") {
@@ -78,7 +76,6 @@ func TestRenderStructuredProblems_FailedAtStageFallbackWhenTasksAbsent(t *testin
 func TestRenderStructuredProblems_NoFailedTaskComposesAsBefore(t *testing.T) {
 	m := &Model{theme: GetTheme("slate")}
 	styles := m.theme.Styles()
-	bg := NewBgStyle(m.theme.Background)
 
 	item := &spindle.QueueItem{
 		NeedsReview:   true,
@@ -89,7 +86,7 @@ func TestRenderStructuredProblems_NoFailedTaskComposesAsBefore(t *testing.T) {
 	}
 
 	var b strings.Builder
-	m.renderStructuredProblems(&b, item, styles, bg)
+	m.renderStructuredProblems(&b, item, styles)
 	got := stripANSI(b.String())
 
 	if strings.Contains(got, "Failed Task") {

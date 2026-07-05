@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -43,6 +44,15 @@ func (m *Model) updateQueueTable() {
 	}
 }
 
+// getSelectedItem returns the currently selected queue item.
+func (m *Model) getSelectedItem() *spindle.QueueItem {
+	items := m.getSortedItems()
+	if m.selectedRow < 0 || m.selectedRow >= len(items) {
+		return nil
+	}
+	return &items[m.selectedRow]
+}
+
 // getSortedItems returns queue items filtered and sorted by priority.
 func (m *Model) getSortedItems() []spindle.QueueItem {
 	items := make([]spindle.QueueItem, 0, len(m.snapshot.Queue))
@@ -79,143 +89,180 @@ func (m *Model) getSortedItems() []spindle.QueueItem {
 	return items
 }
 
-// renderQueue renders the queue view with split layout (table + detail).
-func (m Model) renderQueue() string {
-	styles := m.theme.Styles()
-	contentHeight := m.height - 2 // Account for header + cmdbar
-
-	if len(m.snapshot.Queue) == 0 {
-		emptyMsg := styles.MutedText.Render("No items in queue")
-		return lipgloss.Place(m.width, contentHeight, lipgloss.Center, lipgloss.Center, emptyMsg)
-	}
-
-	// Calculate pane dimensions (responsive)
-	// Extra wide (>= 160): 30% table, 70% detail
-	// Default: 40% table, 60% detail
-	var tableWidth, detailWidth int
-	if m.width >= 160 {
-		tableWidth = m.width * 30 / 100
-	} else {
-		tableWidth = m.width * 40 / 100
-	}
-	detailWidth = m.width - tableWidth
-
-	// Get selected item
-	item := m.getSelectedItem()
-
-	// === Table Pane ===
-	tableTitle := m.getQueueTitle()
-	tableFocused := m.focusedPane == 0
-	tableBg := m.theme.SurfaceAlt
-	if tableFocused {
-		tableBg = m.theme.FocusBg
-	}
-	tableContent := m.renderQueueTable(tableWidth-2, tableBg) // -2 for borders
-	tablePane := m.renderBox(tableTitle, tableContent, tableWidth, contentHeight, tableFocused)
-
-	// === Detail Pane ===
-	detailTitle := "Details"
-	detailFocused := m.focusedPane == 1
-	detailBg := m.theme.SurfaceAlt
-	if detailFocused {
-		detailBg = m.theme.FocusBg
-	}
-	var detailContent string
-	if item != nil {
-		detailContent = m.detailViewport.View()
-	} else {
-		detailContent = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(m.theme.Muted)).
-			Background(lipgloss.Color(detailBg)).
-			Render("Select an item")
-	}
-	detailPane := m.renderBox(detailTitle, detailContent, detailWidth, contentHeight, detailFocused)
-
-	// Join side-by-side
-	return lipgloss.JoinHorizontal(lipgloss.Top, tablePane, detailPane)
+// queueColumns holds the computed fixed column widths for the queue table.
+type queueColumns struct {
+	strip int
+	id    int
+	stage int
+	pct   int
+	ago   int
+	title int
 }
 
-// renderQueueTable renders the queue as styled rows.
-func (m Model) renderQueueTable(width int, bgColor string) string {
-	items := m.getSortedItems()
-	if len(items) == 0 {
-		return ""
-	}
-
-	// Build rows directly (no table component overhead)
-	var lines []string
-	for i, item := range items {
-		if i == m.selectedRow {
-			// Selected row: use selection background and text color
-			content := m.formatQueueRowContent(item, width, m.theme.SelectionBg, true)
-			line := lipgloss.NewStyle().
-				Background(lipgloss.Color(m.theme.SelectionBg)).
-				Width(width).
-				Render(content)
-			lines = append(lines, line)
-		} else {
-			// Non-selected row: use pane background with themed colors
-			content := m.formatQueueRowContent(item, width, bgColor, false)
-			line := lipgloss.NewStyle().
-				Background(lipgloss.Color(bgColor)).
-				Width(width).
-				Render(content)
-			lines = append(lines, line)
+// computeQueueColumns derives column widths from the item set and terminal
+// width. The title column absorbs the slack.
+func computeQueueColumns(items []spindle.QueueItem, width int) queueColumns {
+	cols := queueColumns{strip: 1, id: 2, stage: 12, pct: 4, ago: 8}
+	for _, item := range items {
+		if n := len(item.Tasks); n > cols.strip {
+			cols.strip = n
+		}
+		idLen := len(fmt.Sprintf("#%d", item.ID)) + 1 // room for review "?"
+		if idLen > cols.id {
+			cols.id = idLen
 		}
 	}
 
-	return strings.Join(lines, "\n")
+	// strip + id + stage + pct + ago + 5 separators (2 spaces each)
+	fixed := cols.strip + cols.id + cols.stage + cols.pct + cols.ago + 10
+	cols.title = max(width-fixed, 10)
+	return cols
 }
 
-// formatQueueRowContent formats a queue item row with inline colors.
-// Format: "[task strip] #ID Title" -- the strip is one glyph per scheduler
-// task in pipeline order, so concurrent work is visible in the list itself.
-// When selected is true, uses SelectionText color for all text to ensure contrast.
-func (m Model) formatQueueRowContent(item spindle.QueueItem, width int, bgColor string, selected bool) string {
-	bg := NewBgStyle(bgColor)
+// renderQueue renders the dashboard queue table (full width).
+// Chrome above: header, NOW band, command bar; plus the title rule here.
+func (m Model) renderQueue() string {
 	styles := m.theme.Styles()
+	visibleRows := max(m.height-4, 1)
 
-	title := composeTitle(item)
+	var b strings.Builder
+	b.WriteString(renderRule(m.getQueueTitle(), m.width, styles))
+	b.WriteString("\n")
+
+	items := m.getSortedItems()
+	if len(items) == 0 {
+		msg := "No items in queue"
+		if m.filterMode != FilterAll {
+			msg = "No items match filter: " + m.filterLabel()
+		}
+		b.WriteString(styles.MutedText.Render(msg))
+		return b.String()
+	}
+
+	// Keep the selection visible within the scroll window. The stored
+	// offset is maintained on key handling; re-derive here defensively so a
+	// resize between keypresses cannot hide the selection.
+	scroll := clampQueueScroll(m.queueScroll, m.selectedRow, visibleRows, len(items))
+
+	cols := computeQueueColumns(items, m.width)
+	end := min(scroll+visibleRows, len(items))
+	for i := scroll; i < end; i++ {
+		b.WriteString(m.renderQueueRow(items[i], cols, i == m.selectedRow, styles))
+		if i < end-1 {
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
+// clampQueueScroll adjusts a scroll offset so the selection stays visible
+// and the window stays within bounds.
+func clampQueueScroll(scroll, selected, visible, total int) int {
+	if selected < scroll {
+		scroll = selected
+	}
+	if selected >= scroll+visible {
+		scroll = selected - visible + 1
+	}
+	return max(min(scroll, total-visible), 0)
+}
+
+// ensureQueueVisible updates the stored scroll offset after selection moves.
+func (m *Model) ensureQueueVisible() {
+	visible := max(m.height-4, 1)
+	m.queueScroll = clampQueueScroll(m.queueScroll, m.selectedRow, visible, len(m.getSortedItems()))
+}
+
+// renderQueueRow renders one queue table row:
+// strip  id  title  stage  pct  ago
+// The selected row renders as one selection-colored bar (no per-cell colors,
+// guaranteeing contrast); other rows use per-cell styling.
+func (m Model) renderQueueRow(item spindle.QueueItem, cols queueColumns, selected bool, styles Styles) string {
 	idStr := fmt.Sprintf("#%d", item.ID)
 	if item.NeedsReview {
 		idStr += "?"
 	}
-
-	var selText lipgloss.Style
-	if selected {
-		selText = lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.SelectionText))
+	title := truncate(composeTitle(item), cols.title)
+	stage, stageStyle := queueStageCell(item, styles)
+	pct := queuePercentCell(item)
+	ago := ""
+	if updated := parseTimestamp(item.UpdatedAt); !updated.IsZero() {
+		ago = humanizeDuration(time.Since(updated))
 	}
 
-	strip, stripWidth := m.renderTaskStrip(item, selected, selText, styles, bg)
-
-	// Calculate available title width: total - strip - space - id - space
-	fixedLen := stripWidth + 1 + len(idStr) + 1
-	titleWidth := max(width-fixedLen, 10)
-
-	idStyle, titleStyle := styles.MutedText, styles.Text
-	if selected {
-		idStyle, titleStyle = selText, selText
-	} else if item.NeedsReview {
-		idStyle = styles.WarningText
-	}
-
-	idPart := bg.Render(idStr, idStyle)
-	titlePart := bg.Render(truncate(title, titleWidth), titleStyle)
-
-	return strip + bg.Space() + idPart + bg.Space() + titlePart
-}
-
-// renderTaskStrip renders one glyph per task, colored by task state (with
-// the running glyph in its stage's role color). Terminal or task-less items
-// collapse to a single summary glyph. Returns the strip and its cell width.
-func (m Model) renderTaskStrip(item spindle.QueueItem, selected bool, selText lipgloss.Style, styles Styles, bg BgStyle) (string, int) {
-	styleFor := func(s lipgloss.Style) lipgloss.Style {
-		if selected {
-			return selText
+	pad := func(s string, w int) string {
+		if n := w - lipgloss.Width(s); n > 0 {
+			return s + strings.Repeat(" ", n)
 		}
 		return s
 	}
 
+	if selected {
+		line := fmt.Sprintf("%s  %s  %s  %s  %s  %s",
+			pad(plainTaskStrip(item), cols.strip),
+			pad(idStr, cols.id),
+			pad(title, cols.title),
+			pad(stage, cols.stage),
+			pad(pct, cols.pct),
+			ago)
+		if n := m.width - lipgloss.Width(line); n > 0 {
+			line += strings.Repeat(" ", n)
+		}
+		return styles.Selected.Render(line)
+	}
+
+	idStyle := styles.MutedText
+	if item.NeedsReview {
+		idStyle = styles.WarningText
+	}
+
+	parts := []string{
+		pad(m.renderTaskStrip(item, styles), cols.strip),
+		idStyle.Render(pad(idStr, cols.id)),
+		styles.Text.Render(pad(title, cols.title)),
+		stageStyle.Render(pad(stage, cols.stage)),
+		styles.AccentText.Render(pad(pct, cols.pct)),
+		styles.FaintText.Render(ago),
+	}
+	return strings.Join(parts, "  ")
+}
+
+// queueStageCell returns the stage column text and style for an item.
+func queueStageCell(item spindle.QueueItem, styles Styles) (string, lipgloss.Style) {
+	if item.NeedsReview {
+		return "REVIEW", styles.WarningText
+	}
+	if strings.EqualFold(item.Stage, "failed") {
+		return "FAILED", styles.DangerText
+	}
+	info := stageDisplay(itemDisplayStage(item))
+	label := info.label
+	style := roleStyle(info.role, styles)
+	if item.IsTerminal() {
+		label = info.doneLabel
+		style = styles.MutedText
+	} else if len(item.RunningTasks()) == 0 {
+		label = "waiting"
+		style = styles.FaintText
+	}
+	return strings.ToLower(label), style
+}
+
+// queuePercentCell returns the progress column text for an item: the primary
+// running task's percent, or blank.
+func queuePercentCell(item spindle.QueueItem) string {
+	for _, t := range item.Tasks {
+		if t.IsRunning() && t.Progress.Percent > 0 {
+			return fmt.Sprintf("%3.0f%%", clampPercent(t.Progress.Percent))
+		}
+	}
+	return ""
+}
+
+// renderTaskStrip renders one glyph per task, colored by task state (with
+// the running glyph in its stage's role color). Terminal or task-less items
+// collapse to a single summary glyph.
+func (m Model) renderTaskStrip(item spindle.QueueItem, styles Styles) string {
 	if len(item.Tasks) == 0 {
 		glyph, style := "○", styles.FaintText
 		switch {
@@ -224,7 +271,7 @@ func (m Model) renderTaskStrip(item spindle.QueueItem, selected bool, selText li
 		case strings.EqualFold(item.Stage, "failed"):
 			glyph, style = "✗", styles.DangerText
 		}
-		return bg.Render(glyph, styleFor(style)), 1
+		return style.Render(glyph)
 	}
 
 	var b strings.Builder
@@ -238,75 +285,28 @@ func (m Model) renderTaskStrip(item spindle.QueueItem, selected bool, selText li
 		case "failed":
 			style = styles.DangerText
 		}
-		b.WriteString(bg.Render(taskStateGlyph(t.State), styleFor(style)))
+		b.WriteString(style.Render(taskStateGlyph(t.State)))
 	}
-	return b.String(), len(item.Tasks)
+	return b.String()
 }
 
-// renderBox renders content in a titled box with the title embedded in the top border.
-// Example: ╭─── Title ─────────────────────────────╮
-// When focused is true, uses BorderFocus color and FocusBg background.
-func (m Model) renderBox(title, content string, width, height int, focused bool) string {
-	var borderColor, bgColor string
-	if focused {
-		borderColor = m.theme.BorderFocus
-		bgColor = m.theme.FocusBg
-	} else {
-		borderColor = m.theme.Border
-		bgColor = m.theme.SurfaceAlt
-	}
-
-	borderStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(borderColor)).
-		Background(lipgloss.Color(bgColor))
-
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(m.theme.Text)).
-		Background(lipgloss.Color(bgColor))
-
-	contentBgStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color(bgColor))
-
-	// Build top border: ╭─── Title ─────────────────────────────╮
-	titleText := " " + title + " "
-	innerWidth := width - 2 // minus corners
-	titleLen := lipgloss.Width(titleText)
-	leftDashes := 3
-	rightDashes := max(innerWidth-leftDashes-titleLen, 0)
-
-	topLine := borderStyle.Render("╭"+strings.Repeat("─", leftDashes)) +
-		titleStyle.Render(titleText) +
-		borderStyle.Render(strings.Repeat("─", rightDashes)+"╮")
-
-	// Build content lines with side borders
-	// Available height for content: total height - 2 (top/bottom border)
-	contentHeight := height - 2
-	contentWidth := width - 2 // minus side borders
-
-	contentLines := strings.Split(content, "\n")
-	var middleLines []string
-
-	for i := range contentHeight {
-		var line string
-		if i < len(contentLines) {
-			line = contentLines[i]
+// plainTaskStrip renders the task strip without styling (for selected rows).
+func plainTaskStrip(item spindle.QueueItem) string {
+	if len(item.Tasks) == 0 {
+		switch {
+		case strings.EqualFold(item.Stage, "completed"):
+			return "✓"
+		case strings.EqualFold(item.Stage, "failed"):
+			return "✗"
+		default:
+			return "○"
 		}
-
-		// Pad line to fill width, accounting for ANSI sequences
-		lineWidth := lipgloss.Width(line)
-		if lineWidth < contentWidth {
-			line += contentBgStyle.Render(strings.Repeat(" ", contentWidth-lineWidth))
-		}
-
-		middleLine := borderStyle.Render("│") + line + borderStyle.Render("│")
-		middleLines = append(middleLines, middleLine)
 	}
-
-	// Build bottom border: ╰─────────────────────────────────────╯
-	bottomLine := borderStyle.Render("╰" + strings.Repeat("─", innerWidth) + "╯")
-
-	return topLine + "\n" + strings.Join(middleLines, "\n") + "\n" + bottomLine
+	var b strings.Builder
+	for _, t := range item.Tasks {
+		b.WriteString(taskStateGlyph(t.State))
+	}
+	return b.String()
 }
 
 // composeTitle builds the display title for an item, preferring the
@@ -321,7 +321,7 @@ func composeTitle(item spindle.QueueItem) string {
 	return fmt.Sprintf("Item #%d", item.ID)
 }
 
-// getQueueTitle returns the queue pane title with optional filter indicator.
+// getQueueTitle returns the queue rule title with optional filter indicator.
 func (m Model) getQueueTitle() string {
 	items := m.getSortedItems()
 	total := len(m.snapshot.Queue)

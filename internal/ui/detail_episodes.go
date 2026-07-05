@@ -10,8 +10,8 @@ import (
 )
 
 // renderEpisodeList renders the episode list for TV content.
-// Includes episode sync warning, stage chips, and episode extras.
-func (m *Model) renderEpisodeList(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle, totals spindle.EpisodeTotals) {
+// Includes episode sync warning, per-asset grids, and episode extras.
+func (m *Model) renderEpisodeList(b *strings.Builder, item spindle.QueueItem, styles Styles, totals spindle.EpisodeTotals) {
 	episodes, _ := item.EpisodeSnapshot()
 	if len(episodes) == 0 {
 		return
@@ -19,18 +19,16 @@ func (m *Model) renderEpisodeList(b *strings.Builder, item spindle.QueueItem, st
 
 	collapsed := m.isEpisodesCollapsed(item, episodes, totals)
 
-	// Section header with toggle hint
-	m.writeSection(b, "Episodes [t]", styles, bg)
-	m.renderEpisodeSummary(b, item, episodes, totals, styles, bg)
+	m.renderEpisodeSummary(b, item, episodes, totals, styles)
 
 	// Episode sync warning (show when episodes don't have resolved keys)
 	if matched := matchedEpisodeCount(item, episodes); matched > 0 && matched < len(episodes) {
-		b.WriteString(bg.Render("⚠ Episode numbers not confirmed", styles.WarningText))
+		b.WriteString(styles.WarningText.Render("⚠ Episode numbers not confirmed"))
 		b.WriteString("\n")
 	}
 
 	if collapsed {
-		b.WriteString(bg.Render("Press t to expand", styles.FaintText))
+		b.WriteString(styles.FaintText.Render("Press t to expand"))
 		b.WriteString("\n")
 		return
 	}
@@ -39,9 +37,9 @@ func (m *Model) renderEpisodeList(b *strings.Builder, item spindle.QueueItem, st
 
 	// Episode list with enhanced rendering
 	for idx, ep := range episodes {
-		m.renderEpisodeRowEnhanced(b, item, ep, idx == activeIdx, styles, bg)
+		m.renderEpisodeRow(b, item, ep, idx == activeIdx, styles)
 	}
-	b.WriteString(bg.Render("Press t to collapse", styles.FaintText))
+	b.WriteString(styles.FaintText.Render("Press t to collapse"))
 	b.WriteString("\n")
 }
 
@@ -93,7 +91,7 @@ func matchedEpisodeCount(item spindle.QueueItem, episodes []spindle.EpisodeStatu
 	return count
 }
 
-func (m *Model) renderEpisodeSummary(b *strings.Builder, item spindle.QueueItem, episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, styles Styles, bg BgStyle) {
+func (m *Model) renderEpisodeSummary(b *strings.Builder, item spindle.QueueItem, episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, styles Styles) {
 	parts := []string{fmt.Sprintf("%d planned", totals.Planned)}
 	if matched := matchedEpisodeCount(item, episodes); matched > 0 {
 		parts = append(parts, fmt.Sprintf("%d matched", matched))
@@ -113,22 +111,22 @@ func (m *Model) renderEpisodeSummary(b *strings.Builder, item spindle.QueueItem,
 	if failed := len(spindle.FilterFailed(episodes)); failed > 0 {
 		parts = append(parts, fmt.Sprintf("%d failed", failed))
 	}
-	b.WriteString(bg.Render(strings.Join(parts, " · "), styles.MutedText))
+	b.WriteString(styles.MutedText.Render(strings.Join(parts, " · ")))
 	b.WriteString("\n")
 }
 
-// renderEpisodeRowEnhanced renders a single episode with a per-asset grid and extras.
-func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, item spindle.QueueItem, ep spindle.EpisodeStatus, active bool, styles Styles, bg BgStyle) {
-	marker := bg.Render("·", styles.FaintText)
+// renderEpisodeRow renders a single episode with a per-asset grid and extras.
+func (m *Model) renderEpisodeRow(b *strings.Builder, item spindle.QueueItem, ep spindle.EpisodeStatus, active bool, styles Styles) {
+	marker := styles.FaintText.Render("·")
 	if ep.IsFailed() {
-		marker = bg.Render("✗", styles.DangerText)
+		marker = styles.DangerText.Render("✗")
 	} else if active {
-		marker = bg.Render(">", styles.AccentText.Bold(true))
+		marker = styles.AccentText.Bold(true).Render(">")
 	}
 
 	label := formatEpisodeLabel(ep)
 	assetActive := ep.Active || item.ActiveAssetKeys()[strings.ToLower(ep.Key)]
-	grid := renderEpisodeAssetGrid(ep, assetActive, styles, bg)
+	grid := renderEpisodeAssetGrid(ep, assetActive, styles)
 	title, extras := describeEpisodeWithExtras(ep)
 	titleStyle := styles.Text
 	if active {
@@ -136,24 +134,24 @@ func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, item spindle.QueueI
 	}
 
 	b.WriteString(marker)
-	b.WriteString(bg.Space())
-	b.WriteString(bg.Render(label, styles.MutedText))
-	b.WriteString(bg.Space())
+	b.WriteString(" ")
+	b.WriteString(styles.MutedText.Render(label))
+	b.WriteString(" ")
 	b.WriteString(grid)
-	b.WriteString(bg.Space())
-	b.WriteString(bg.Render(title, titleStyle))
+	b.WriteString(" ")
+	b.WriteString(titleStyle.Render(title))
 	b.WriteString("\n")
 
 	if meta := compactEpisodeMeta(describeEpisodeTrackInfo(&ep), describeEpisodeMapping(ep), extras); meta != "" {
-		b.WriteString(bg.Spaces(4))
-		b.WriteString(bg.Render(meta, styles.FaintText))
+		b.WriteString("    ")
+		b.WriteString(styles.FaintText.Render(meta))
 		b.WriteString("\n")
 	}
 
 	// File states are visible in the asset grid; only issues need a line.
 	if issue := describeEpisodeIssue(ep); issue != "" {
-		b.WriteString(bg.Spaces(4))
-		b.WriteString(bg.Render(issue, styles.WarningText))
+		b.WriteString("    ")
+		b.WriteString(styles.WarningText.Render(issue))
 		b.WriteString("\n")
 	}
 
@@ -162,8 +160,8 @@ func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, item spindle.QueueI
 		if len(errMsg) > 80 {
 			errMsg = errMsg[:77] + "..."
 		}
-		b.WriteString(bg.Spaces(4))
-		b.WriteString(bg.Render(errMsg, styles.DangerText))
+		b.WriteString("    ")
+		b.WriteString(styles.DangerText.Render(errMsg))
 		b.WriteString("\n")
 	}
 }
@@ -291,62 +289,13 @@ func episodeAssetStyle(state episodeAssetState, styles Styles) lipgloss.Style {
 
 // renderEpisodeAssetGrid renders the compact per-asset grid for an episode
 // row, e.g. "R✓ E◉ S✓ F·".
-func renderEpisodeAssetGrid(ep spindle.EpisodeStatus, active bool, styles Styles, bg BgStyle) string {
+func renderEpisodeAssetGrid(ep spindle.EpisodeStatus, active bool, styles Styles) string {
 	states := episodeAssetStates(ep, active)
 	cells := make([]string, len(episodeAssetColumns))
 	for i, col := range episodeAssetColumns {
-		cells[i] = bg.Render(col+episodeAssetGlyph(states[i]), episodeAssetStyle(states[i], styles))
+		cells[i] = episodeAssetStyle(states[i], styles).Render(col + episodeAssetGlyph(states[i]))
 	}
-	return bg.Join(cells, " ")
-}
-
-// renderEpisodeFocusLine renders the focused episode line with stage chip.
-func (m *Model) renderEpisodeFocusLine(b *strings.Builder, ep spindle.EpisodeStatus, styles Styles, bg BgStyle) {
-	chip := m.episodeStageChip(ep.Stage, ep.IsFailed(), styles, bg)
-	b.WriteString(chip)
-	b.WriteString(bg.Space())
-	b.WriteString(bg.Render(episodeDisplayTitle(ep), styles.Text.Bold(true)))
-}
-
-// episodeStageChip returns a styled chip for an episode's asset stage. This
-// is spindle's per-episode vocabulary (planned/ripped/encoded/subtitled/
-// final, plus failed) -- a different, legitimate set of names from the
-// scheduler's task types in stages.go, keyed directly on the API value.
-func (m *Model) episodeStageChip(stage string, failed bool, styles Styles, bg BgStyle) string {
-	if failed {
-		return lipgloss.NewStyle().
-			Foreground(lipgloss.Color(m.theme.Background)).
-			Background(lipgloss.Color(m.theme.Danger)).
-			Padding(0, 1).
-			Render("FAIL")
-	}
-
-	color := m.theme.Muted
-	label := "WAIT"
-
-	switch strings.ToLower(strings.TrimSpace(stage)) {
-	case "final":
-		color = m.theme.Success
-		label = "DONE"
-	case "subtitled":
-		color = m.theme.Success
-		label = "SUB"
-	case "encoded":
-		color = m.theme.Accent
-		label = "ENC"
-	case "ripped":
-		color = m.theme.Info
-		label = "RIP"
-	case "planned":
-		color = m.theme.Muted
-		label = "PLAN"
-	}
-
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.Background)).
-		Background(lipgloss.Color(color)).
-		Padding(0, 1).
-		Render(label)
+	return strings.Join(cells, " ")
 }
 
 // episodeDisplayTitle extracts the display title for an episode.
@@ -375,26 +324,8 @@ func describeEpisodeTrackInfo(ep *spindle.EpisodeStatus) string {
 	return strings.Join(parts, "  ")
 }
 
-// describeEpisodeFileStates returns file state info for an episode.
-func (m *Model) describeEpisodeFileStates(ep *spindle.EpisodeStatus) string {
-	var parts []string
-	if ep.RippedPath != "" {
-		parts = append(parts, "RIP")
-	}
-	if ep.EncodedPath != "" {
-		parts = append(parts, "ENC")
-	}
-	if ep.SubtitledPath != "" {
-		parts = append(parts, "SUB")
-	}
-	if ep.FinalPath != "" {
-		parts = append(parts, "FIN")
-	}
-	return strings.Join(parts, " ")
-}
-
-// describeItemFileStates returns file state info for a movie item, tallied
-// from the item's (usually single) episode asset paths.
+// describeItemFileStates returns file state info for an item, tallied from
+// the item's (for movies, usually single) episode asset paths.
 func (m *Model) describeItemFileStates(item spindle.QueueItem) string {
 	_, totals := item.EpisodeSnapshot()
 	var parts []string
@@ -425,8 +356,6 @@ func describeEpisodeMapping(ep spindle.EpisodeStatus) string {
 		return "Unmatched"
 	}
 }
-
-// describeEpisodeIssue reports the episode's problem, if any, straight from
 
 // describeEpisodeIssue reports the episode's failure or review state.
 func describeEpisodeIssue(ep spindle.EpisodeStatus) string {

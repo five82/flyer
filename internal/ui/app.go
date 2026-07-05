@@ -1,4 +1,4 @@
-// Package tea provides a Bubble Tea-based TUI for Flyer.
+// Package ui provides a Bubble Tea-based TUI for Flyer.
 package ui
 
 import (
@@ -26,6 +26,17 @@ const (
 	ViewProblems
 )
 
+// inspectorTab identifies a tab inside the item inspector.
+type inspectorTab int
+
+const (
+	tabOverview inspectorTab = iota
+	tabEpisodes
+	tabProblems
+	tabLogs
+	tabCount
+)
+
 // QueueFilter represents the queue filter mode.
 type QueueFilter int
 
@@ -39,7 +50,6 @@ const (
 // detailState holds per-item detail view state.
 type detailState struct {
 	episodeCollapsed map[int64]bool
-	pathExpanded     map[int64]bool
 }
 
 // Options configures the UI.
@@ -72,7 +82,6 @@ type Model struct {
 	width       int
 	height      int
 	ready       bool
-	focusedPane int // 0 = table, 1 = detail
 
 	// Data state
 	snapshot    state.Snapshot
@@ -80,19 +89,25 @@ type Model struct {
 
 	// Queue state
 	selectedRow int
+	queueScroll int
 	filterMode  QueueFilter
 
-	// Detail state
-	detailViewport viewport.Model
-	detailState    detailState
+	// Inspector state (full-screen single-item view)
+	inspecting        bool
+	inspectorTab      inspectorTab
+	inspectedID       int64
+	returnView        View // view Esc returns to
+	inspectorViewport viewport.Model
+	detailState       detailState
 
 	// Log state
 	logViewport viewport.Model
 	logState    logState
 
-	// Problems state
-	problemsViewport viewport.Model
-	problemsState    problemsState
+	// Problems (triage) state
+	problemsRow    int
+	problemsScroll int
+	problemsState  problemsState
 
 	// Modal overlay (help, log filters, etc.)
 	activeModal Modal
@@ -141,7 +156,6 @@ func New(opts Options) Model {
 		currentView: ViewQueue,
 		detailState: detailState{
 			episodeCollapsed: make(map[int64]bool),
-			pathExpanded:     make(map[int64]bool),
 		},
 	}
 }
@@ -168,17 +182,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		if !m.ready {
-			m.initDetailViewport()
+			m.initInspectorViewport()
 			m.initLogState()
 			m.initLogViewport()
-			m.initProblemsViewport()
 			m.initLogFilterInputs()
 		}
 		m.ready = true
 		m.updateQueueTable()
-		m.updateDetailViewport()
+		m.updateInspectorViewport()
 		m.updateLogViewport()
-		m.updateProblemsViewport()
 		return m, nil
 
 	case tickMsg:
@@ -188,8 +200,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.snapshot = state.Snapshot(msg)
 		m.lastUpdated = time.Now()
 		m.updateQueueTable()
-		m.updateDetailViewport()
-		m.updateProblemsViewport()
+		m.clampProblemsRow()
+		m.updateInspectorViewport()
 		return m, nil
 
 	case logBatchMsg:
@@ -260,6 +272,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleLogFiltersKey(msg)
 	}
 
+	// Log search input captures keys before global bindings ('q', 'e', ...).
+	if m.logSearchCapturing() {
+		return m.handleLogsKey(msg)
+	}
+
 	// Global keys
 	switch {
 	case key.Matches(msg, m.keys.Quit):
@@ -274,71 +291,29 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.prefsPath != "" {
 			_ = prefs.Save(m.prefsPath, prefs.Prefs{Theme: m.theme.Name})
 		}
-		m.updateDetailViewport()
+		m.updateInspectorViewport()
 		m.updateLogViewport()
-		m.updateProblemsViewport()
-		return m, nil
-
-	case key.Matches(msg, m.keys.Tab):
-		m.toggleFocus()
-		if m.currentView == ViewLogs {
-			return m, m.refreshLogs()
-		}
-		return m, nil
-
-	case key.Matches(msg, m.keys.ShiftTab):
-		m.toggleFocusReverse()
-		if m.currentView == ViewLogs {
-			return m, m.refreshLogs()
-		}
 		return m, nil
 
 	case key.Matches(msg, m.keys.ViewQueue):
+		m.inspecting = false
 		m.currentView = ViewQueue
 		return m, nil
 
 	case key.Matches(msg, m.keys.ViewDaemonLogs):
-		if m.logState.mode != logSourceDaemon {
-			m.logState.mode = logSourceDaemon
-			m.logState.rawLines = nil
-			m.logState.streamCursor = 0
-			m.clearLogSearch()
-			m.logState.contentVersion++
-		}
-		m.currentView = ViewLogs
-		return m, m.refreshLogs()
-
-	case key.Matches(msg, m.keys.ViewItemLogs):
-		if m.logState.mode != logSourceItem {
-			m.logState.mode = logSourceItem
-			m.logState.rawLines = nil
-			m.logState.itemCursor = 0
-			m.logState.lastItemID = 0 // Force item detection in fetchItemLogs
-			m.clearLogSearch()
-			m.logState.contentVersion++
-		}
-		m.currentView = ViewLogs
-		return m, m.refreshLogs()
+		m.inspecting = false
+		return m.openDaemonLogs()
 
 	case key.Matches(msg, m.keys.ViewProblems):
+		m.inspecting = false
 		m.currentView = ViewProblems
+		m.clampProblemsRow()
 		return m, nil
+	}
 
-	case key.Matches(msg, m.keys.ToggleEpisodes):
-		m.toggleEpisodesCollapsed()
-		return m, nil
-
-	case key.Matches(msg, m.keys.TogglePaths):
-		m.togglePathExpanded()
-		return m, nil
-
-	case key.Matches(msg, m.keys.CycleFilter):
-		m.cycleFilter()
-		return m, nil
-
-	case key.Matches(msg, m.keys.Escape):
-		m.currentView = ViewQueue
-		return m, nil
+	// Inspector captures the rest of the keys while open
+	if m.inspecting {
+		return m.handleInspectorKey(msg)
 	}
 
 	// View-specific keys
@@ -354,54 +329,29 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// toggleFocus cycles focus forward through views.
-// Cycle: Queue(table) → Queue(detail) → Item Logs → Problems → Queue(table)
-func (m *Model) toggleFocus() {
-	switch m.currentView {
-	case ViewQueue:
-		if m.focusedPane == 0 {
-			// Table focused → focus detail pane
-			m.focusedPane = 1
-			m.updateDetailViewport()
-		} else {
-			// Detail focused → go to item logs
-			m.logState.mode = logSourceItem
-			m.currentView = ViewLogs
-			m.focusedPane = 0
-		}
-	case ViewLogs:
-		// Logs → go to problems
-		m.currentView = ViewProblems
-	case ViewProblems:
-		// Problems → back to queue (table focused)
-		m.currentView = ViewQueue
-		m.focusedPane = 0
+// logSearchCapturing reports whether the log search input is consuming keys.
+func (m Model) logSearchCapturing() bool {
+	if !m.logState.searchActive {
+		return false
 	}
+	if m.currentView == ViewLogs && !m.inspecting {
+		return true
+	}
+	return m.inspecting && m.inspectorTab == tabLogs
 }
 
-func toggleDetailBoolState(state map[int64]bool, itemID int64, current bool) {
-	state[itemID] = !current
-}
-
-// toggleEpisodesCollapsed toggles episode list visibility for current item.
-func (m *Model) toggleEpisodesCollapsed() {
-	item := m.getSelectedItem()
-	if item == nil {
-		return
+// openDaemonLogs switches to the daemon log view.
+func (m Model) openDaemonLogs() (tea.Model, tea.Cmd) {
+	if m.logState.mode != logSourceDaemon {
+		m.logState.mode = logSourceDaemon
+		m.logState.rawLines = nil
+		m.logState.streamCursor = 0
+		m.clearLogSearch()
+		m.logState.contentVersion++
 	}
-	episodes, totals := item.EpisodeSnapshot()
-	toggleDetailBoolState(m.detailState.episodeCollapsed, item.ID, m.isEpisodesCollapsed(*item, episodes, totals))
-	m.updateDetailViewport()
-}
-
-// togglePathExpanded toggles path detail visibility for current item.
-func (m *Model) togglePathExpanded() {
-	item := m.getSelectedItem()
-	if item == nil {
-		return
-	}
-	toggleDetailBoolState(m.detailState.pathExpanded, item.ID, m.detailState.pathExpanded[item.ID])
-	m.updateDetailViewport()
+	m.currentView = ViewLogs
+	m.updateLogViewport()
+	return m, m.refreshLogs(nil)
 }
 
 // cycleFilter cycles through queue filter modes.
@@ -432,63 +382,27 @@ func (m *Model) filterLabel() string {
 	}
 }
 
-// toggleFocusReverse cycles focus backward through views.
-func (m *Model) toggleFocusReverse() {
-	switch m.currentView {
-	case ViewQueue:
-		if m.focusedPane == 1 {
-			// Detail focused → focus table
-			m.focusedPane = 0
-			m.updateDetailViewport()
-		} else {
-			// Table focused → go to problems
-			m.currentView = ViewProblems
-		}
-	case ViewLogs:
-		// Logs → go to queue with detail focus
-		m.currentView = ViewQueue
-		m.focusedPane = 1
-		m.updateDetailViewport()
-	case ViewProblems:
-		// Problems → go to item logs
-		m.logState.mode = logSourceItem
-		m.currentView = ViewLogs
-	}
-}
-
-// handleQueueKey processes keyboard input for queue view.
+// handleQueueKey processes keyboard input for the queue view.
 func (m Model) handleQueueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.CycleFilter):
+		m.cycleFilter()
+		m.updateQueueTable()
+		return m, nil
+
+	case key.Matches(msg, m.keys.Inspect):
+		return m.openInspector(tabOverview)
+
+	case key.Matches(msg, m.keys.InspectLogs):
+		return m.openInspector(tabLogs)
+	}
+
 	items := m.getSortedItems()
 	itemCount := len(items)
 	if itemCount == 0 {
 		return m, nil
 	}
 
-	// When detail pane is focused, scroll the detail viewport
-	if m.focusedPane == 1 {
-		switch {
-		case key.Matches(msg, m.keys.Down):
-			m.detailViewport.ScrollDown(1)
-		case key.Matches(msg, m.keys.Up):
-			m.detailViewport.ScrollUp(1)
-		case key.Matches(msg, m.keys.Top):
-			m.detailViewport.GotoTop()
-		case key.Matches(msg, m.keys.Bottom):
-			m.detailViewport.GotoBottom()
-		case key.Matches(msg, m.keys.HalfPageDown):
-			m.detailViewport.HalfPageDown()
-		case key.Matches(msg, m.keys.HalfPageUp):
-			m.detailViewport.HalfPageUp()
-		case key.Matches(msg, m.keys.PageDown):
-			m.detailViewport.PageDown()
-		case key.Matches(msg, m.keys.PageUp):
-			m.detailViewport.PageUp()
-		}
-		return m, nil
-	}
-
-	// Table focused: navigate queue items
-	prev := m.selectedRow
 	switch {
 	case key.Matches(msg, m.keys.Down):
 		if m.selectedRow < itemCount-1 {
@@ -503,12 +417,7 @@ func (m Model) handleQueueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Bottom):
 		m.selectedRow = itemCount - 1
 	}
-
-	// Reset detail scroll when selection changes
-	if m.selectedRow != prev {
-		m.detailViewport.GotoTop()
-		m.updateDetailViewport()
-	}
+	m.ensureQueueVisible()
 
 	return m, nil
 }
@@ -530,17 +439,28 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 
 	// Skip log fetching when API is offline to reduce error noise
 	if !m.snapshot.IsOffline() {
-		// Refresh logs if in log view and following
-		if m.currentView == ViewLogs && m.logState.follow {
-			if cmd := m.refreshLogs(); cmd != nil {
+		// Daemon log view refresh while following
+		if !m.inspecting && m.currentView == ViewLogs && m.logState.follow {
+			if cmd := m.refreshLogs(nil); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 		}
 
-		// Refresh problems logs if in problems view
-		if m.currentView == ViewProblems {
-			if cmd := m.refreshProblemsLogs(); cmd != nil {
-				cmds = append(cmds, cmd)
+		// Inspector tabs with live fetches
+		if m.inspecting {
+			if item := m.getInspectedItem(); item != nil {
+				switch m.inspectorTab {
+				case tabLogs:
+					if m.logState.follow {
+						if cmd := m.refreshLogs(item); cmd != nil {
+							cmds = append(cmds, cmd)
+						}
+					}
+				case tabProblems:
+					if cmd := m.refreshProblemsLogs(item); cmd != nil {
+						cmds = append(cmds, cmd)
+					}
+				}
 			}
 		}
 	}
@@ -559,7 +479,13 @@ func (m Model) renderMain() string {
 	b.WriteString(m.renderHeader())
 	b.WriteString("\n")
 
-	// Header line 2: command bar
+	// NOW band: live resource occupancy (dashboard only)
+	if m.currentView == ViewQueue && !m.inspecting {
+		b.WriteString(m.renderNowBand())
+		b.WriteString("\n")
+	}
+
+	// Command bar
 	b.WriteString(m.renderCommandBar())
 	b.WriteString("\n")
 
@@ -571,6 +497,9 @@ func (m Model) renderMain() string {
 
 // renderContent renders the main content area based on current view.
 func (m Model) renderContent() string {
+	if m.inspecting {
+		return m.renderInspector()
+	}
 	switch m.currentView {
 	case ViewQueue:
 		return m.renderQueue()

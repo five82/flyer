@@ -88,27 +88,13 @@ func TestToggleEpisodesCollapsed_UsesEffectiveDefaultState(t *testing.T) {
 		t.Fatal("isEpisodesCollapsed() before toggle = false, want true")
 	}
 
-	m.toggleEpisodesCollapsed()
+	m.inspectedID = 1
+	m.toggleInspectedEpisodes()
 
 	item = m.getSelectedItem()
 	episodes, totals = item.EpisodeSnapshot()
 	if m.isEpisodesCollapsed(*item, episodes, totals) {
 		t.Fatal("isEpisodesCollapsed() after one toggle = true, want false")
-	}
-}
-
-func TestTogglePathExpanded_TogglesOnFirstPress(t *testing.T) {
-	m := New(Options{ThemeName: "slate"})
-	m.snapshot.Queue = []spindle.QueueItem{{ID: 1}}
-
-	if got := m.detailState.pathExpanded[1]; got {
-		t.Fatal("pathExpanded before toggle = true, want false")
-	}
-
-	m.togglePathExpanded()
-
-	if got := m.detailState.pathExpanded[1]; !got {
-		t.Fatal("pathExpanded after one toggle = false, want true")
 	}
 }
 
@@ -134,19 +120,6 @@ func TestActiveEpisodeIndex(t *testing.T) {
 	}
 }
 
-func TestDescribeEpisodeFileStates_IncludesSubtitles(t *testing.T) {
-	m := Model{theme: GetTheme("slate")}
-	ep := &spindle.EpisodeStatus{
-		RippedPath:    "/r.mkv",
-		EncodedPath:   "/e.mkv",
-		SubtitledPath: "/s.mkv",
-		FinalPath:     "/f.mkv",
-	}
-	if got := m.describeEpisodeFileStates(ep); got != "RIP ENC SUB FIN" {
-		t.Fatalf("describeEpisodeFileStates() = %q, want %q", got, "RIP ENC SUB FIN")
-	}
-}
-
 func TestDescribeEpisodeHelpers(t *testing.T) {
 	ep := spindle.EpisodeStatus{MatchScore: 0.93}
 	if got := describeEpisodeMapping(ep); got != "Match 0.93" {
@@ -167,27 +140,6 @@ func TestDescribeEpisodeHelpers(t *testing.T) {
 	ep = spindle.EpisodeStatus{Status: "failed"}
 	if got := describeEpisodeIssue(ep); got != "failed" {
 		t.Fatalf("describeEpisodeIssue() failed = %q, want %q", got, "failed")
-	}
-}
-
-func TestEpisodeStageChip_UsesSpecificLabels(t *testing.T) {
-	m := Model{theme: GetTheme("slate")}
-	styles := m.theme.Styles()
-	bg := NewBgStyle(m.theme.Background)
-	cases := []struct {
-		stage string
-		label string
-	}{
-		{stage: "planned", label: "PLAN"},
-		{stage: "ripped", label: "RIP"},
-		{stage: "encoded", label: "ENC"},
-		{stage: "subtitled", label: "SUB"},
-		{stage: "final", label: "DONE"},
-	}
-	for _, tc := range cases {
-		if got := m.episodeStageChip(tc.stage, false, styles, bg); !strings.Contains(got, tc.label) {
-			t.Fatalf("episodeStageChip(%q) = %q, want label %q", tc.stage, got, tc.label)
-		}
 	}
 }
 
@@ -256,9 +208,8 @@ func TestEpisodeAssetStates(t *testing.T) {
 func TestRenderEpisodeAssetGrid_ContainsColumnGlyphs(t *testing.T) {
 	m := Model{theme: GetTheme("slate")}
 	styles := m.theme.Styles()
-	bg := NewBgStyle(m.theme.Background)
 	ep := spindle.EpisodeStatus{RippedPath: "/r.mkv", EncodedPath: "/e.mkv"}
-	got := renderEpisodeAssetGrid(ep, true, styles, bg)
+	got := renderEpisodeAssetGrid(ep, true, styles)
 	for _, want := range []string{"R✓", "E✓", "S◉", "F·"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("renderEpisodeAssetGrid() = %q, want to contain %q", got, want)

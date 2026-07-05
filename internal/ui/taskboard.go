@@ -12,11 +12,10 @@ import (
 )
 
 // renderTaskBoard renders the item's scheduler tasks: one row per task in
-// pipeline order, with inline progress for running tasks. This replaces
-// the old stage checklist + separate activity bar -- concurrent branches
-// (rip-and-encode overlap, GPU work during encodes) each show their own
-// live row.
-func (m *Model) renderTaskBoard(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
+// pipeline order, with inline progress for running tasks. Concurrent
+// branches (rip-and-encode overlap, GPU work during encodes) each show
+// their own live row.
+func (m *Model) renderTaskBoard(b *strings.Builder, item spindle.QueueItem, styles Styles, width int) {
 	if len(item.Tasks) == 0 {
 		info := stageDisplay(itemDisplayStage(item))
 		glyph, style := "○", styles.MutedText
@@ -24,27 +23,27 @@ func (m *Model) renderTaskBoard(b *strings.Builder, item spindle.QueueItem, styl
 			glyph = taskStateGlyph(map[bool]string{true: "failed", false: "done"}[strings.EqualFold(item.Stage, "failed")])
 			style = roleStyle(info.role, styles)
 		}
-		b.WriteString(bg.Spaces(2))
-		b.WriteString(bg.Render(glyph, style))
-		b.WriteString(bg.Space())
-		b.WriteString(bg.Render(info.doneLabel, styles.Text))
+		b.WriteString("  ")
+		b.WriteString(style.Render(glyph))
+		b.WriteString(" ")
+		b.WriteString(styles.Text.Render(info.doneLabel))
 		if !item.IsTerminal() {
-			b.WriteString(bg.Space())
-			b.WriteString(bg.Render("(tasks pending)", styles.FaintText))
+			b.WriteString(" ")
+			b.WriteString(styles.FaintText.Render("(tasks pending)"))
 		}
 		b.WriteString("\n")
 		return
 	}
 
-	_, totals := item.EpisodeSnapshot()
+	episodes, totals := item.EpisodeSnapshot()
 	countWidth := len(strconv.Itoa(max(totals.Planned, 1)))
 
 	for _, task := range item.Tasks {
-		m.renderTaskRow(b, item, task, totals, countWidth, styles, bg)
+		m.renderTaskRow(b, item, task, episodes, totals, countWidth, styles, width)
 	}
 }
 
-func (m *Model) renderTaskRow(b *strings.Builder, item spindle.QueueItem, task spindle.Task, totals spindle.EpisodeTotals, countWidth int, styles Styles, bg BgStyle) {
+func (m *Model) renderTaskRow(b *strings.Builder, item spindle.QueueItem, task spindle.Task, episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, countWidth int, styles Styles, width int) {
 	info := stageDisplay(task.Type)
 
 	glyph := taskStateGlyph(task.State)
@@ -67,55 +66,87 @@ func (m *Model) renderTaskRow(b *strings.Builder, item spindle.QueueItem, task s
 		labelStyle = styles.FaintText
 	}
 
-	b.WriteString(bg.Spaces(2))
-	b.WriteString(bg.Render(glyph, glyphStyle))
-	b.WriteString(bg.Space())
-	b.WriteString(bg.Render(fmt.Sprintf("%-12s", label), labelStyle))
+	b.WriteString("  ")
+	b.WriteString(glyphStyle.Render(glyph))
+	b.WriteString(" ")
+	b.WriteString(labelStyle.Render(fmt.Sprintf("%-12s", label)))
 
 	// Per-episode throughput count for stages that have one (TV items).
 	if count, ok := stageThroughput(info.totals, totals); ok && totals.Planned > 1 {
-		b.WriteString(bg.Space())
-		b.WriteString(bg.Render(fmt.Sprintf("%*d/%d", countWidth, count, totals.Planned), styles.MutedText))
+		b.WriteString(" ")
+		b.WriteString(styles.MutedText.Render(fmt.Sprintf("%*d/%d", countWidth, count, totals.Planned)))
 	}
 
 	switch task.State {
 	case "running":
-		b.WriteString(bg.Spaces(2))
-		b.WriteString(m.renderProgressBar(task.Progress.Percent, 20, styles, bg))
-		b.WriteString(bg.Space())
-		b.WriteString(bg.Render(fmt.Sprintf("%3.0f%%", clampPercent(task.Progress.Percent)), styles.Text))
+		b.WriteString("  ")
+		b.WriteString(renderProgressBar(task.Progress.Percent, 20, styles))
+		b.WriteString(" ")
+		b.WriteString(styles.Text.Render(fmt.Sprintf("%3.0f%%", clampPercent(task.Progress.Percent))))
 		for _, extra := range taskExtras(item, task, totals) {
-			b.WriteString(bg.Spaces(2))
-			b.WriteString(bg.Render(extra, styles.MutedText))
+			b.WriteString("  ")
+			b.WriteString(styles.MutedText.Render(extra))
 		}
 	case "done":
 		if d := task.Duration(); d > 0 {
-			b.WriteString(bg.Spaces(2))
-			b.WriteString(bg.Render(formatDuration(d), styles.FaintText))
+			b.WriteString("  ")
+			b.WriteString(styles.FaintText.Render(formatDuration(d)))
 		}
 	case "failed":
 		if task.Attempts > 1 {
-			b.WriteString(bg.Spaces(2))
-			b.WriteString(bg.Render(fmt.Sprintf("attempt %d", task.Attempts), styles.MutedText))
+			b.WriteString("  ")
+			b.WriteString(styles.MutedText.Render(fmt.Sprintf("attempt %d", task.Attempts)))
 		}
 	}
 	b.WriteString("\n")
 
-	// Second line: running message / failure error.
+	// Second line: running message / failure error, wrapped.
+	wrapWidth := max(width-6, 20)
 	switch task.State {
 	case "running":
 		if msg := runningTaskMessage(task); msg != "" {
-			b.WriteString(bg.Spaces(6))
-			b.WriteString(bg.Render(msg, styles.Text))
+			for _, line := range wrapText(msg, wrapWidth) {
+				b.WriteString(strings.Repeat(" ", 6))
+				b.WriteString(styles.Text.Render(line))
+				b.WriteString("\n")
+			}
+		}
+		// Third line: the episode this task reports working on, when named.
+		if context := taskEpisodeContext(task, episodes); context != "" {
+			b.WriteString(strings.Repeat(" ", 6))
+			b.WriteString(styles.FaintText.Render(context))
 			b.WriteString("\n")
 		}
 	case "failed":
 		if err := strings.TrimSpace(task.Error); err != "" {
-			b.WriteString(bg.Spaces(6))
-			b.WriteString(bg.Render(err, styles.DangerText))
-			b.WriteString("\n")
+			for _, line := range wrapText(err, wrapWidth) {
+				b.WriteString(strings.Repeat(" ", 6))
+				b.WriteString(styles.DangerText.Render(line))
+				b.WriteString("\n")
+			}
 		}
 	}
+}
+
+// taskEpisodeContext describes the episode a running task is working on:
+// label, title, and source track info.
+func taskEpisodeContext(task spindle.Task, episodes []spindle.EpisodeStatus) string {
+	key := strings.ToLower(strings.TrimSpace(task.ActiveAssetKey))
+	if key == "" {
+		return ""
+	}
+	for i := range episodes {
+		if strings.ToLower(episodes[i].Key) != key {
+			continue
+		}
+		ep := episodes[i]
+		parts := []string{strings.TrimSpace(formatEpisodeLabel(ep) + " " + episodeDisplayTitle(ep))}
+		if track := describeEpisodeTrackInfo(&ep); track != "" {
+			parts = append(parts, track)
+		}
+		return strings.Join(parts, " · ")
+	}
+	return ""
 }
 
 // stageThroughput maps a catalog totals key to its tallied count.
@@ -149,11 +180,16 @@ func runningTaskMessage(task spindle.Task) string {
 }
 
 // taskExtras returns supplemental figures for a running task's row:
-// fps for encodes, byte progress for copy-style tasks, and an ETA.
+// fps and substage for encodes, byte progress for copy-style tasks, an ETA.
 func taskExtras(item spindle.QueueItem, task spindle.Task, totals spindle.EpisodeTotals) []string {
 	var extras []string
-	if task.Type == "encoding" && item.Encoding != nil && item.Encoding.FPS > 0 {
-		extras = append(extras, fmt.Sprintf("%.0f fps", item.Encoding.FPS))
+	if task.Type == "encoding" && item.Encoding != nil {
+		if sub := strings.TrimSpace(item.Encoding.Substage); sub != "" {
+			extras = append(extras, sub)
+		}
+		if item.Encoding.FPS > 0 {
+			extras = append(extras, fmt.Sprintf("%.0f fps", item.Encoding.FPS))
+		}
 	}
 	if task.Progress.TotalBytes > 0 {
 		extras = append(extras, fmt.Sprintf("%s / %s",
@@ -196,9 +232,9 @@ func taskETA(item spindle.QueueItem, task spindle.Task, totals spindle.EpisodeTo
 
 // renderProgressBar renders a text-based progress bar without percentage
 // text. Callers add percentage display as needed.
-func (m *Model) renderProgressBar(percent float64, width int, styles Styles, bg BgStyle) string {
+func renderProgressBar(percent float64, width int, styles Styles) string {
 	percent = clampPercent(percent)
 	filled := min(int(float64(width)*percent/100), width)
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
-	return bg.Render(bar, styles.AccentText)
+	return styles.AccentText.Render(bar)
 }

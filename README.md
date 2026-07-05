@@ -15,11 +15,11 @@ This repository is shared as is. Flyer is a personal tool I built for my own wor
 
 ## Features
 
-- **Queue view** — items grouped by status with live counts and filtering
-- **Detail view** — metadata, progress, errors, and review flags for the selected item
-- **Episode tracker** — per-episode stage summaries for TV box sets
+- **Dashboard** — full-width queue table with a live resource band (drive/GPU/encode occupancy), progress, and filtering
+- **Item inspector** — full-screen drill-in per item with Overview, Episodes, Problems, and Logs tabs
+- **Episode tracker** — per-episode asset grids for TV box sets
 - **Log viewer** — daemon and per-item logs with syntax highlighting
-- **Problems view** — aggregated error logs across all items
+- **Problems triage** — every failed/review item with its lead reason, one keypress from the details
 - **Search** — vim-style `/` search with `n`/`N` navigation and regex support
 - **Themes** — Nightfox, Kanagawa, and Slate color schemes
 

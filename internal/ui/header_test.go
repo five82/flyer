@@ -10,8 +10,7 @@ import (
 
 func TestBuildErrorPartsShowsWorkflowLastError(t *testing.T) {
 	theme := GetTheme("Nightfox")
-	styles := theme.Styles().WithBackground(theme.Surface)
-	bg := NewBgStyle(theme.Surface)
+	styles := theme.Styles()
 	model := Model{
 		theme: theme,
 		snapshot: state.Snapshot{
@@ -21,7 +20,7 @@ func TestBuildErrorPartsShowsWorkflowLastError(t *testing.T) {
 		},
 	}
 
-	parts := model.buildErrorParts(false, styles, bg)
+	parts := model.buildErrorParts(false, styles)
 	if len(parts) != 1 {
 		t.Fatalf("error parts = %d, want 1", len(parts))
 	}

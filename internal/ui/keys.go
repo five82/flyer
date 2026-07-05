@@ -8,20 +8,26 @@ type keyMap struct {
 	Quit       key.Binding
 	Help       key.Binding
 	CycleTheme key.Binding
-	Tab        key.Binding
-	ShiftTab   key.Binding
 	Escape     key.Binding
 
 	// View switching
 	ViewQueue      key.Binding
 	ViewDaemonLogs key.Binding
-	ViewItemLogs   key.Binding
 	ViewProblems   key.Binding
+
+	// Inspector
+	Inspect     key.Binding
+	InspectLogs key.Binding
+	Tab         key.Binding
+	ShiftTab    key.Binding
+	Tab1        key.Binding
+	Tab2        key.Binding
+	Tab3        key.Binding
+	Tab4        key.Binding
 
 	// Queue actions
 	CycleFilter    key.Binding
 	ToggleEpisodes key.Binding
-	TogglePaths    key.Binding
 
 	// Navigation
 	Up           key.Binding
@@ -34,12 +40,11 @@ type keyMap struct {
 	HalfPageDown key.Binding
 
 	// Logs actions
-	ToggleFollow    key.Binding
-	ToggleLogSource key.Binding
-	Search          key.Binding
-	NextMatch       key.Binding
-	PrevMatch       key.Binding
-	LogFilters      key.Binding
+	ToggleFollow key.Binding
+	Search       key.Binding
+	NextMatch    key.Binding
+	PrevMatch    key.Binding
+	LogFilters   key.Binding
 
 	// Search/input
 	Confirm key.Binding
@@ -61,35 +66,57 @@ func DefaultKeyMap() keyMap {
 			key.WithKeys("T"),
 			key.WithHelp("T", "Cycle theme"),
 		),
-		Tab: key.NewBinding(
-			key.WithKeys("tab"),
-			key.WithHelp("tab", "Cycle views"),
-		),
-		ShiftTab: key.NewBinding(
-			key.WithKeys("shift+tab"),
-			key.WithHelp("shift+tab", "Cycle views (reverse)"),
-		),
 		Escape: key.NewBinding(
 			key.WithKeys("esc"),
-			key.WithHelp("esc", "Return to queue"),
+			key.WithHelp("esc", "Back"),
 		),
 
 		// View switching
 		ViewQueue: key.NewBinding(
 			key.WithKeys("q"),
-			key.WithHelp("q", "Queue view"),
+			key.WithHelp("q", "Queue"),
 		),
 		ViewDaemonLogs: key.NewBinding(
 			key.WithKeys("l"),
 			key.WithHelp("l", "Daemon logs"),
 		),
-		ViewItemLogs: key.NewBinding(
+		ViewProblems: key.NewBinding(
+			key.WithKeys("p"),
+			key.WithHelp("p", "Problems"),
+		),
+
+		// Inspector
+		Inspect: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("Enter", "Inspect item"),
+		),
+		InspectLogs: key.NewBinding(
 			key.WithKeys("i"),
 			key.WithHelp("i", "Item logs"),
 		),
-		ViewProblems: key.NewBinding(
-			key.WithKeys("p"),
-			key.WithHelp("p", "Problems view"),
+		Tab: key.NewBinding(
+			key.WithKeys("tab"),
+			key.WithHelp("Tab", "Next tab"),
+		),
+		ShiftTab: key.NewBinding(
+			key.WithKeys("shift+tab"),
+			key.WithHelp("Shift+Tab", "Previous tab"),
+		),
+		Tab1: key.NewBinding(
+			key.WithKeys("1"),
+			key.WithHelp("1", "Overview"),
+		),
+		Tab2: key.NewBinding(
+			key.WithKeys("2"),
+			key.WithHelp("2", "Episodes"),
+		),
+		Tab3: key.NewBinding(
+			key.WithKeys("3"),
+			key.WithHelp("3", "Problems"),
+		),
+		Tab4: key.NewBinding(
+			key.WithKeys("4"),
+			key.WithHelp("4", "Logs"),
 		),
 
 		// Queue actions
@@ -100,10 +127,6 @@ func DefaultKeyMap() keyMap {
 		ToggleEpisodes: key.NewBinding(
 			key.WithKeys("t"),
 			key.WithHelp("t", "Toggle episodes"),
-		),
-		TogglePaths: key.NewBinding(
-			key.WithKeys("P"),
-			key.WithHelp("P", "Toggle paths"),
 		),
 
 		// Navigation
@@ -145,10 +168,6 @@ func DefaultKeyMap() keyMap {
 			key.WithKeys(" "),
 			key.WithHelp("Space", "Toggle follow mode"),
 		),
-		ToggleLogSource: key.NewBinding(
-			key.WithKeys("i"),
-			key.WithHelp("i", "Toggle item/daemon logs"),
-		),
 		Search: key.NewBinding(
 			key.WithKeys("/"),
 			key.WithHelp("/", "Search logs"),
@@ -174,27 +193,6 @@ func DefaultKeyMap() keyMap {
 	}
 }
 
-// ShortHelp returns key bindings for the short help view.
-func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help, k.Quit}
-}
-
-// FullHelp returns key bindings for the full help view.
-func (k keyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		// Navigation
-		{k.Tab, k.ViewQueue, k.ViewDaemonLogs, k.ViewItemLogs, k.ViewProblems},
-		{k.Up, k.Down, k.Top, k.Bottom},
-		{k.HalfPageDown, k.HalfPageUp},
-		// Queue
-		{k.CycleFilter, k.ToggleEpisodes, k.TogglePaths},
-		// Logs
-		{k.ToggleFollow, k.Search, k.NextMatch, k.PrevMatch, k.LogFilters},
-		// General
-		{k.CycleTheme, k.Help, k.Quit},
-	}
-}
-
 // HelpSection groups related key bindings for display in the help modal.
 type HelpSection struct {
 	Title    string
@@ -205,15 +203,26 @@ type HelpSection struct {
 func (k keyMap) HelpSections() []HelpSection {
 	return []HelpSection{
 		{
+			Title: "Views",
+			Bindings: []key.Binding{
+				k.ViewQueue, k.ViewDaemonLogs, k.ViewProblems, k.Escape,
+			},
+		},
+		{
+			Title: "Inspector",
+			Bindings: []key.Binding{
+				k.Inspect, k.InspectLogs, k.Tab1, k.Tab2, k.Tab3, k.Tab4, k.Tab,
+			},
+		},
+		{
 			Title: "Navigation",
 			Bindings: []key.Binding{
-				k.Tab, k.ViewQueue, k.ViewDaemonLogs, k.ViewItemLogs, k.ViewProblems,
-				k.Escape, k.Up, k.Down, k.Top, k.Bottom, k.HalfPageDown, k.HalfPageUp,
+				k.Up, k.Down, k.Top, k.Bottom, k.HalfPageDown, k.HalfPageUp,
 			},
 		},
 		{
 			Title:    "Queue",
-			Bindings: []key.Binding{k.CycleFilter, k.ToggleEpisodes, k.TogglePaths},
+			Bindings: []key.Binding{k.CycleFilter, k.ToggleEpisodes},
 		},
 		{
 			Title:    "Logs",
