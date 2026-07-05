@@ -137,12 +137,20 @@ func (m *Model) renderProblemsContent() string {
 
 // renderStructuredProblems extracts problem info from the item's structured data.
 func (m *Model) renderStructuredProblems(b *strings.Builder, item *spindle.QueueItem, styles Styles, bg BgStyle) {
-	// Review reason
-	if item.NeedsReview && strings.TrimSpace(item.ReviewReason) != "" {
-		m.renderProblemSection(b, "Review Reason", styles.WarningText, bg)
-		b.WriteString(bg.Spaces(2))
-		b.WriteString(bg.Render(item.ReviewReason, styles.Text))
-		b.WriteString("\n\n")
+	// Review reasons
+	if item.NeedsReview && len(item.ReviewReasons) > 0 {
+		m.renderProblemSection(b, "Review Reasons", styles.WarningText, bg)
+		for _, reason := range item.ReviewReasons {
+			if reason = strings.TrimSpace(reason); reason == "" {
+				continue
+			}
+			b.WriteString(bg.Spaces(2))
+			b.WriteString(bg.Render("•", styles.WarningText))
+			b.WriteString(bg.Space())
+			b.WriteString(bg.Render(reason, styles.Text))
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
 	}
 
 	// Error message

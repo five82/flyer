@@ -2,7 +2,6 @@ package spindle
 
 import (
 	"encoding/json"
-	"sort"
 	"strings"
 	"time"
 )
@@ -17,32 +16,57 @@ type StatusResponse struct {
 	LockFilePath string             `json:"lockFilePath"`
 	Workflow     WorkflowStatus     `json:"workflow"`
 	Dependencies []DependencyStatus `json:"dependencies"`
+	Pipeline     []PipelineStage    `json:"pipeline"`
+	Scheduler    *SchedulerStatus   `json:"scheduler"`
+	Disc         *DiscStatus        `json:"disc"`
 }
 
-// WorkflowStatus aggregates queue stats and recent activity.
+// WorkflowStatus aggregates queue stats and the last workflow error.
 type WorkflowStatus struct {
-	Running     bool           `json:"running"`
-	QueueStats  map[string]int `json:"queueStats"`
-	LastError   string         `json:"lastError"`
-	LastItem    *QueueItem     `json:"lastItem"`
-	StageHealth []StageHealth  `json:"stageHealth"`
+	Running    bool           `json:"running"`
+	QueueStats map[string]int `json:"queueStats"`
+	LastError  string         `json:"lastError"`
 }
 
-// StageHealth reflects readiness indicators for workflow components.
-type StageHealth struct {
-	Name   string `json:"name"`
-	Ready  bool   `json:"ready"`
-	Detail string `json:"detail"`
+// PipelineStage describes one stage of the daemon's registered pipeline
+// template. This is the source of truth for stage names, display order,
+// and dependency edges -- flyer must not hardcode them.
+type PipelineStage struct {
+	Stage     string   `json:"stage"`
+	DependsOn []string `json:"dependsOn"`
+	Claims    []string `json:"claims"`
+}
+
+// SchedulerStatus reports live resource occupancy.
+type SchedulerStatus struct {
+	Resources map[string]ResourceStatus `json:"resources"`
+}
+
+// ResourceStatus is one resource budget's occupancy.
+type ResourceStatus struct {
+	Capacity int              `json:"capacity"`
+	Used     int              `json:"used"`
+	Holders  []ResourceHolder `json:"holders"`
+}
+
+// ResourceHolder names the task currently holding (part of) a resource.
+type ResourceHolder struct {
+	ItemID int64  `json:"itemId"`
+	Task   string `json:"task"`
+}
+
+// DiscStatus reports disc-monitor state. The drive is free for another
+// disc when the drive resource's Used is 0 and Paused is false.
+type DiscStatus struct {
+	Paused bool `json:"paused"`
 }
 
 // DependencyStatus reports an external dependency health check.
 type DependencyStatus struct {
-	Name        string `json:"name"`
-	Command     string `json:"command"`
-	Description string `json:"description"`
-	Optional    bool   `json:"optional"`
-	Available   bool   `json:"available"`
-	Detail      string `json:"detail"`
+	Name      string `json:"name"`
+	Optional  bool   `json:"optional"`
+	Available bool   `json:"available"`
+	Detail    string `json:"detail"`
 }
 
 // QueueListResponse mirrors /api/queue.
@@ -50,37 +74,144 @@ type QueueListResponse struct {
 	Items []QueueItem `json:"items"`
 }
 
-// QueueItem describes a queue entry in transport-friendly form.
+// QueueItem describes a queue entry. Stage is the scheduler's coarse
+// position and LAGS running tasks during overlap windows; Tasks carry the
+// live truth (state and per-task progress).
 type QueueItem struct {
-	ID                      int64                     `json:"id"`
-	DiscTitle               string                    `json:"discTitle"`
-	Stage                   string                    `json:"stage"`
-	InProgress              bool                      `json:"inProgress"`
-	Progress                QueueProgress             `json:"progress"`
-	Encoding                *EncodingStatus           `json:"encoding,omitempty"`
-	ErrorMessage            string                    `json:"errorMessage"`
-	CreatedAt               string                    `json:"createdAt"`
-	UpdatedAt               string                    `json:"updatedAt"`
-	DiscFingerprint         string                    `json:"discFingerprint"`
-	NeedsReview             bool                      `json:"needsReview"`
-	ReviewReason            string                    `json:"reviewReason"`
-	Metadata                json.RawMessage           `json:"metadata"`
-	RipSpec                 json.RawMessage           `json:"ripSpec"`
-	Episodes                []EpisodeStatus           `json:"episodes"`
-	EpisodeTotals           *EpisodeTotals            `json:"episodeTotals"`
-	EpisodeIdentifiedCount  int                       `json:"episodeIdentifiedCount"`
-	SubtitleGeneration      *SubtitleGenerationStatus `json:"subtitleGeneration"`
-	PrimaryAudioDescription string                    `json:"primaryAudioDescription"`
-	CommentaryCount         int                       `json:"commentaryCount"`
+	ID                      int64           `json:"id"`
+	DiscTitle               string          `json:"discTitle"`
+	DisplayTitle            string          `json:"displayTitle"`
+	Stage                   string          `json:"stage"`
+	InProgress              bool            `json:"inProgress"`
+	FailedAtStage           string          `json:"failedAtStage"`
+	ErrorMessage            string          `json:"errorMessage"`
+	CreatedAt               string          `json:"createdAt"`
+	UpdatedAt               string          `json:"updatedAt"`
+	DiscFingerprint         string          `json:"discFingerprint"`
+	NeedsReview             bool            `json:"needsReview"`
+	UserStopped             bool            `json:"userStopped"`
+	ReviewReasons           []string        `json:"reviewReasons"`
+	Metadata                json.RawMessage `json:"metadata"`
+	Tasks                   []Task          `json:"tasks"`
+	Encoding                *EncodingStatus `json:"encoding"`
+	Episodes                []EpisodeStatus `json:"episodes"`
+	EpisodeIdentifiedCount  int             `json:"episodeIdentifiedCount"`
+	PrimaryAudioDescription string          `json:"primaryAudioDescription"`
+	CommentaryCount         int             `json:"commentaryCount"`
+	ContentID               *ContentID      `json:"contentId"`
+	Source                  *SourceTitle    `json:"source"`
 }
 
-// QueueProgress tracks stage progress for an item.
-type QueueProgress struct {
-	Stage       string  `json:"stage"`
+// Task is one scheduler task of an item, in pipeline order.
+type Task struct {
+	Type           string       `json:"type"`
+	State          string       `json:"state"` // pending, running, done, failed
+	Attempts       int          `json:"attempts"`
+	Error          string       `json:"error"`
+	DependsOn      []string     `json:"dependsOn"`
+	StartedAt      string       `json:"startedAt"`
+	FinishedAt     string       `json:"finishedAt"`
+	Progress       TaskProgress `json:"progress"`
+	ActiveAssetKey string       `json:"activeAssetKey"`
+}
+
+// TaskProgress is the running task's own progress slot.
+type TaskProgress struct {
 	Percent     float64 `json:"percent"`
 	Message     string  `json:"message"`
-	BytesCopied int64   `json:"bytesCopied,omitempty"` // Only set during organizing
-	TotalBytes  int64   `json:"totalBytes,omitempty"`  // Only set during organizing
+	BytesCopied int64   `json:"bytesCopied"`
+	TotalBytes  int64   `json:"totalBytes"`
+}
+
+// Task state helpers.
+func (t Task) IsRunning() bool { return t.State == "running" }
+func (t Task) IsDone() bool    { return t.State == "done" }
+func (t Task) IsFailed() bool  { return t.State == "failed" }
+
+// ParsedStartedAt returns the task's start time when it parses.
+func (t Task) ParsedStartedAt() time.Time { return parseTime(t.StartedAt) }
+
+// Duration returns the task's run duration when both timestamps parse.
+func (t Task) Duration() time.Duration {
+	start, end := parseTime(t.StartedAt), parseTime(t.FinishedAt)
+	if start.IsZero() || end.IsZero() || end.Before(start) {
+		return 0
+	}
+	return end.Sub(start)
+}
+
+// RunningTasks returns the item's running tasks in pipeline order.
+func (q QueueItem) RunningTasks() []Task {
+	var running []Task
+	for _, t := range q.Tasks {
+		if t.IsRunning() {
+			running = append(running, t)
+		}
+	}
+	return running
+}
+
+// PrimaryTask picks the task that best represents "what is happening now":
+// the first running task, else the first failed task, else the first
+// pending task. Returns nil for terminal or task-less items.
+func (q QueueItem) PrimaryTask() *Task {
+	for _, pick := range []func(Task) bool{Task.IsRunning, Task.IsFailed, func(t Task) bool { return t.State == "pending" }} {
+		for i := range q.Tasks {
+			if pick(q.Tasks[i]) {
+				return &q.Tasks[i]
+			}
+		}
+	}
+	return nil
+}
+
+// FailedTask returns the first failed task, if any.
+func (q QueueItem) FailedTask() *Task {
+	for i := range q.Tasks {
+		if q.Tasks[i].IsFailed() {
+			return &q.Tasks[i]
+		}
+	}
+	return nil
+}
+
+// ActiveAssetKeys returns the lowercase asset keys running tasks are
+// working on right now.
+func (q QueueItem) ActiveAssetKeys() map[string]bool {
+	keys := make(map[string]bool)
+	for _, t := range q.Tasks {
+		if t.IsRunning() && t.ActiveAssetKey != "" {
+			keys[strings.ToLower(t.ActiveAssetKey)] = true
+		}
+	}
+	return keys
+}
+
+// IsTerminal reports whether the item reached a terminal stage.
+func (q QueueItem) IsTerminal() bool {
+	return strings.EqualFold(q.Stage, "completed") || strings.EqualFold(q.Stage, "failed")
+}
+
+// ContentID summarizes episode-identification provenance.
+type ContentID struct {
+	Method               string  `json:"method"`
+	ReferenceSource      string  `json:"referenceSource"`
+	ReferenceEpisodes    int     `json:"referenceEpisodes"`
+	TranscribedEpisodes  int     `json:"transcribedEpisodes"`
+	MatchedEpisodes      int     `json:"matchedEpisodes"`
+	UnresolvedEpisodes   int     `json:"unresolvedEpisodes"`
+	LowConfidenceCount   int     `json:"lowConfidenceCount"`
+	ReviewThreshold      float64 `json:"reviewThreshold"`
+	SequenceContiguous   bool    `json:"sequenceContiguous"`
+	EpisodesSynchronized bool    `json:"episodesSynchronized"`
+	Completed            bool    `json:"completed"`
+}
+
+// SourceTitle summarizes the primary rip-spec title (movie main title).
+type SourceTitle struct {
+	TitleID         int    `json:"titleId"`
+	Name            string `json:"name"`
+	DurationSeconds int    `json:"durationSeconds"`
 }
 
 // EncodingStatus matches spindle's encodingstate.Snapshot (flat, snake_case JSON).
@@ -140,31 +271,38 @@ func (e *EncodingStatus) ETADuration() time.Duration {
 	return time.Duration(e.ETASeconds * float64(time.Second))
 }
 
+// EpisodeStatus is spindle's per-episode projection. Stage reflects asset
+// completion (planned/ripped/encoded/subtitled/final), not the pipeline.
 type EpisodeStatus struct {
-	Key                       string         `json:"key"`
-	Season                    int            `json:"season"`
-	Episode                   int            `json:"episode"`
-	Title                     string         `json:"title"`
-	Stage                     string         `json:"stage"`
-	Status                    string         `json:"status,omitempty"`       // pending, completed, failed
-	ErrorMessage              string         `json:"errorMessage,omitempty"` // per-episode error
-	Active                    bool           `json:"active,omitempty"`
-	Progress                  *QueueProgress `json:"progress,omitempty"`
-	RuntimeSeconds            int            `json:"runtimeSeconds"`
-	SourceTitleID             int            `json:"sourceTitleId"`
-	SourceTitle               string         `json:"sourceTitle"`
-	OutputBasename            string         `json:"outputBasename"`
-	RippedPath                string         `json:"rippedPath"`
-	EncodedPath               string         `json:"encodedPath"`
-	SubtitledPath             string         `json:"subtitledPath,omitempty"`
-	FinalPath                 string         `json:"finalPath"`
-	SubtitleSource            string         `json:"subtitleSource"`
-	SubtitleLanguage          string         `json:"subtitleLanguage"`
-	GeneratedSubtitleSource   string         `json:"generatedSubtitleSource"`
-	GeneratedSubtitleLanguage string         `json:"generatedSubtitleLanguage"`
-	GeneratedSubtitleDecision string         `json:"generatedSubtitleDecision"`
-	MatchScore                float64        `json:"matchScore"`
-	MatchedEpisode            int            `json:"matchedEpisode"`
+	Key                  string   `json:"key"`
+	Season               int      `json:"season"`
+	Episode              int      `json:"episode"`
+	EpisodeEnd           int      `json:"episodeEnd"`
+	Title                string   `json:"title"`
+	Stage                string   `json:"stage"`
+	Status               string   `json:"status,omitempty"`       // pending, completed, failed
+	ErrorMessage         string   `json:"errorMessage,omitempty"` // per-episode error
+	Active               bool     `json:"active,omitempty"`
+	RuntimeSeconds       int      `json:"runtimeSeconds"`
+	SourceTitleID        int      `json:"sourceTitleId"`
+	SourceTitle          string   `json:"sourceTitle"`
+	OutputBasename       string   `json:"outputBasename"`
+	RippedPath           string   `json:"rippedPath"`
+	EncodedPath          string   `json:"encodedPath"`
+	SubtitledPath        string   `json:"subtitledPath,omitempty"`
+	FinalPath            string   `json:"finalPath"`
+	SubtitleSource       string   `json:"subtitleSource"`
+	SubtitleLanguage     string   `json:"subtitleLanguage"`
+	SubtitleValidation   string   `json:"subtitleValidation"`
+	SubtitleReviewIssues []string `json:"subtitleReviewIssues"`
+	SubtitleSevereIssues []string `json:"subtitleSevereIssues"`
+	CommentaryTracks     int      `json:"commentaryTracks"`
+	ExcludedTracks       int      `json:"excludedTracks"`
+	MatchScore           float64  `json:"matchScore"`
+	MatchConfidence      float64  `json:"matchConfidence"`
+	MatchedEpisode       int      `json:"matchedEpisode"`
+	NeedsReview          bool     `json:"needsReview"`
+	ReviewReason         string   `json:"reviewReason"`
 }
 
 // IsFailed returns true if the episode has a failed status.
@@ -183,31 +321,37 @@ func FilterFailed(episodes []EpisodeStatus) []EpisodeStatus {
 	return failed
 }
 
+// EpisodeTotals counts per-asset completion, tallied client-side from
+// episode paths.
 type EpisodeTotals struct {
-	Planned   int `json:"planned"`
-	Ripped    int `json:"ripped"`
-	Encoded   int `json:"encoded"`
-	Subtitled int `json:"subtitled"`
-	Final     int `json:"final"`
+	Planned   int
+	Ripped    int
+	Encoded   int
+	Subtitled int
+	Final     int
 }
 
-type SubtitleGenerationStatus struct {
-	WhisperX int `json:"whisperx"`
+// EpisodeSnapshot returns the item's episodes with tallied totals.
+func (q QueueItem) EpisodeSnapshot() ([]EpisodeStatus, EpisodeTotals) {
+	if len(q.Episodes) == 0 {
+		return nil, EpisodeTotals{}
+	}
+	episodes := make([]EpisodeStatus, len(q.Episodes))
+	copy(episodes, q.Episodes)
+	return episodes, tallyEpisodeTotals(episodes)
 }
 
 // LogEvent represents a single log entry from /api/logs.
 type LogEvent struct {
-	Sequence      uint64            `json:"seq"`
-	Timestamp     string            `json:"ts"`
-	Level         string            `json:"level"`
-	Message       string            `json:"msg"`
-	Component     string            `json:"component"`
-	Stage         string            `json:"stage"`
-	ItemID        int64             `json:"item_id"`
-	Lane          string            `json:"lane"`
-	CorrelationID string            `json:"correlation_id"`
-	Fields        map[string]string `json:"fields"`
-	Details       []DetailField     `json:"details"`
+	Sequence  uint64        `json:"seq"`
+	Timestamp string        `json:"ts"`
+	Level     string        `json:"level"`
+	Message   string        `json:"msg"`
+	Component string        `json:"component"`
+	Stage     string        `json:"stage"`
+	ItemID    int64         `json:"item_id"`
+	Lane      string        `json:"lane"`
+	Details   []DetailField `json:"details"`
 }
 
 // ParsedTime returns the timestamp as time.Time when possible.
@@ -227,51 +371,6 @@ type LogBatch struct {
 	Next   uint64     `json:"next"`
 }
 
-// RipSpecSummary describes the subset of rip spec details Flyer cares about.
-type RipSpecSummary struct {
-	ContentKey string               `json:"content_key"`
-	Metadata   map[string]any       `json:"metadata"`
-	Titles     []RipSpecTitleInfo   `json:"titles"`
-	Episodes   []RipSpecEpisodeInfo `json:"episodes"`
-}
-
-// RipSpecTitleInfo captures per-title fingerprint information.
-type RipSpecTitleInfo struct {
-	ID                 int    `json:"id"`
-	Name               string `json:"name"`
-	Duration           int    `json:"duration"`
-	Playlist           string `json:"playlist"`
-	SegmentCount       int    `json:"segment_count"`
-	SegmentMap         string `json:"segment_map"`
-	Season             int    `json:"season"`
-	Episode            int    `json:"episode"`
-	EpisodeTitle       string `json:"episode_title"`
-	EpisodeAirDate     string `json:"episode_air_date"`
-	ContentFingerprint string `json:"content_fingerprint"`
-}
-
-// RipSpecEpisodeInfo links rip spec episodes to playlist metadata for lookups.
-type RipSpecEpisodeInfo struct {
-	Key            string `json:"key"`
-	TitleID        int    `json:"title_id"`
-	Season         int    `json:"season"`
-	Episode        int    `json:"episode"`
-	EpisodeTitle   string `json:"episode_title"`
-	OutputBasename string `json:"output_basename"`
-}
-
-// ParseRipSpec decodes the rip specification payload if present.
-func (q QueueItem) ParseRipSpec() (RipSpecSummary, error) {
-	if len(q.RipSpec) == 0 {
-		return RipSpecSummary{}, nil
-	}
-	var summary RipSpecSummary
-	if err := json.Unmarshal(q.RipSpec, &summary); err != nil {
-		return RipSpecSummary{}, err
-	}
-	return summary, nil
-}
-
 // ParsedCreatedAt returns the parsed CreatedAt timestamp.
 func (q QueueItem) ParsedCreatedAt() time.Time {
 	return parseTime(q.CreatedAt)
@@ -280,23 +379,6 @@ func (q QueueItem) ParsedCreatedAt() time.Time {
 // ParsedUpdatedAt returns the parsed UpdatedAt timestamp.
 func (q QueueItem) ParsedUpdatedAt() time.Time {
 	return parseTime(q.UpdatedAt)
-}
-
-// EpisodeSnapshot normalizes per-episode data for the UI, deriving it from the
-// raw rip spec when the API fields are unavailable.
-func (q QueueItem) EpisodeSnapshot() ([]EpisodeStatus, EpisodeTotals) {
-	if len(q.Episodes) > 0 {
-		copyEpisodes := make([]EpisodeStatus, len(q.Episodes))
-		copy(copyEpisodes, q.Episodes)
-		if q.EpisodeTotals != nil {
-			return copyEpisodes, *q.EpisodeTotals
-		}
-		return copyEpisodes, tallyEpisodeTotals(copyEpisodes)
-	}
-	if len(q.RipSpec) == 0 {
-		return nil, EpisodeTotals{}
-	}
-	return deriveEpisodesFromRipSpec(q.RipSpec)
 }
 
 func parseTime(value string) time.Time {
@@ -332,195 +414,4 @@ func tallyEpisodeTotals(list []EpisodeStatus) EpisodeTotals {
 		}
 	}
 	return totals
-}
-
-func deriveEpisodesFromRipSpec(raw json.RawMessage) ([]EpisodeStatus, EpisodeTotals) {
-	var env ripSpecEnvelope
-	if err := json.Unmarshal(raw, &env); err != nil || len(env.Episodes) == 0 {
-		return nil, EpisodeTotals{}
-	}
-	lookup := env.assetsByKey()
-	titles := env.titleByID()
-	statuses := make([]EpisodeStatus, 0, len(env.Episodes))
-	for _, ep := range env.Episodes {
-		status := EpisodeStatus{
-			Key:            strings.ToLower(strings.TrimSpace(ep.Key)),
-			Season:         ep.Season,
-			Episode:        ep.Episode,
-			Title:          strings.TrimSpace(ep.EpisodeTitle),
-			Stage:          "planned",
-			RuntimeSeconds: ep.RuntimeSeconds,
-			SourceTitleID:  ep.TitleID,
-			OutputBasename: strings.TrimSpace(ep.OutputBasename),
-		}
-		if title, ok := titles[ep.TitleID]; ok {
-			if status.Title == "" {
-				status.Title = strings.TrimSpace(title.EpisodeTitle)
-			}
-			if status.Title == "" {
-				status.Title = strings.TrimSpace(title.Name)
-			}
-			status.SourceTitle = strings.TrimSpace(title.Name)
-			if status.RuntimeSeconds == 0 {
-				status.RuntimeSeconds = title.Duration
-			}
-		}
-		if asset, ok := lookup[status.Key]; ok {
-			if asset.Ripped != "" {
-				status.RippedPath = asset.Ripped
-				status.Stage = "ripped"
-			}
-			if asset.Encoded != "" {
-				status.EncodedPath = asset.Encoded
-				status.Stage = "encoded"
-			}
-			if asset.Subtitled != "" {
-				status.SubtitledPath = asset.Subtitled
-				status.Stage = "subtitled"
-			}
-			if asset.Final != "" {
-				status.FinalPath = asset.Final
-				status.Stage = "final"
-			}
-			// Per-episode status and error
-			if asset.Status != "" {
-				status.Status = asset.Status
-			}
-			if asset.ErrorMessage != "" {
-				status.ErrorMessage = asset.ErrorMessage
-			}
-		}
-		statuses = append(statuses, status)
-	}
-	sort.SliceStable(statuses, func(i, j int) bool {
-		if statuses[i].Season != statuses[j].Season {
-			return statuses[i].Season < statuses[j].Season
-		}
-		if statuses[i].Episode != statuses[j].Episode {
-			return statuses[i].Episode < statuses[j].Episode
-		}
-		return statuses[i].Key < statuses[j].Key
-	})
-	return statuses, tallyEpisodeTotals(statuses)
-}
-
-type ripSpecEnvelope struct {
-	Titles   []ripSpecTitle   `json:"titles"`
-	Episodes []ripSpecEpisode `json:"episodes"`
-	Assets   ripSpecAssets    `json:"assets"`
-}
-
-type ripSpecTitle struct {
-	ID           int    `json:"id"`
-	Name         string `json:"name"`
-	EpisodeTitle string `json:"episode_title"`
-	Duration     int    `json:"duration"`
-}
-
-type ripSpecEpisode struct {
-	Key            string `json:"key"`
-	TitleID        int    `json:"title_id"`
-	Season         int    `json:"season"`
-	Episode        int    `json:"episode"`
-	EpisodeTitle   string `json:"episode_title"`
-	RuntimeSeconds int    `json:"runtime_seconds"`
-	OutputBasename string `json:"output_basename"`
-}
-
-type ripSpecAssets struct {
-	Ripped    []ripSpecAsset `json:"ripped"`
-	Encoded   []ripSpecAsset `json:"encoded"`
-	Subtitled []ripSpecAsset `json:"subtitled"`
-	Final     []ripSpecAsset `json:"final"`
-}
-
-type ripSpecAsset struct {
-	EpisodeKey string `json:"episode_key"`
-	Path       string `json:"path"`
-	Status     string `json:"status,omitempty"`
-	ErrorMsg   string `json:"error_msg,omitempty"`
-}
-
-type assetPaths struct {
-	Ripped       string
-	Encoded      string
-	Subtitled    string
-	Final        string
-	Status       string // Overall status (failed if any asset failed)
-	ErrorMessage string // Error message from failed asset
-}
-
-func (e ripSpecEnvelope) titleByID() map[int]ripSpecTitle {
-	if len(e.Titles) == 0 {
-		return nil
-	}
-	lookup := make(map[int]ripSpecTitle, len(e.Titles))
-	for _, title := range e.Titles {
-		lookup[title.ID] = title
-	}
-	return lookup
-}
-
-func (e ripSpecEnvelope) assetsByKey() map[string]assetPaths {
-	lookup := make(map[string]assetPaths)
-
-	normalizeKey := func(key string) string {
-		return strings.ToLower(strings.TrimSpace(key))
-	}
-
-	for _, asset := range e.Assets.Ripped {
-		key := normalizeKey(asset.EpisodeKey)
-		if key == "" {
-			continue
-		}
-		entry := lookup[key]
-		entry.Ripped = asset.Path
-		lookup[key] = entry
-	}
-
-	for _, asset := range e.Assets.Encoded {
-		key := normalizeKey(asset.EpisodeKey)
-		if key == "" {
-			continue
-		}
-		entry := lookup[key]
-		entry.Encoded = asset.Path
-		if asset.Status != "" {
-			entry.Status = asset.Status
-		}
-		if asset.ErrorMsg != "" {
-			entry.ErrorMessage = asset.ErrorMsg
-		}
-		lookup[key] = entry
-	}
-
-	for _, asset := range e.Assets.Subtitled {
-		key := normalizeKey(asset.EpisodeKey)
-		if key == "" {
-			continue
-		}
-		entry := lookup[key]
-		entry.Subtitled = asset.Path
-		if strings.EqualFold(asset.Status, "failed") {
-			entry.Status = asset.Status
-			entry.ErrorMessage = asset.ErrorMsg
-		}
-		lookup[key] = entry
-	}
-
-	for _, asset := range e.Assets.Final {
-		key := normalizeKey(asset.EpisodeKey)
-		if key == "" {
-			continue
-		}
-		entry := lookup[key]
-		entry.Final = asset.Path
-		if strings.EqualFold(asset.Status, "failed") {
-			entry.Status = asset.Status
-			entry.ErrorMessage = asset.ErrorMsg
-		}
-		lookup[key] = entry
-	}
-
-	return lookup
 }

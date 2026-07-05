@@ -1,7 +1,6 @@
 package spindle
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 )
@@ -30,31 +29,6 @@ func TestParseTimeLayouts(t *testing.T) {
 	}
 }
 
-func TestParseRipSpec(t *testing.T) {
-	item := QueueItem{}
-	sum, err := item.ParseRipSpec()
-	if err != nil {
-		t.Fatalf("ParseRipSpec returned error: %v", err)
-	}
-	if sum.ContentKey != "" || sum.Metadata != nil || len(sum.Titles) != 0 || len(sum.Episodes) != 0 {
-		t.Fatalf("ParseRipSpec = %#v, want empty summary", sum)
-	}
-
-	item.RipSpec = json.RawMessage(`{"content_key":"x"}`)
-	sum, err = item.ParseRipSpec()
-	if err != nil {
-		t.Fatalf("ParseRipSpec returned error: %v", err)
-	}
-	if sum.ContentKey != "x" {
-		t.Fatalf("ContentKey = %q, want x", sum.ContentKey)
-	}
-
-	item.RipSpec = json.RawMessage("{not-json")
-	if _, err := item.ParseRipSpec(); err == nil {
-		t.Fatalf("ParseRipSpec returned nil error, want error")
-	}
-}
-
 func TestEpisodeSnapshot_UsesAPIFieldsWhenPresent(t *testing.T) {
 	item := QueueItem{
 		Episodes: []EpisodeStatus{
@@ -76,65 +50,51 @@ func TestEpisodeSnapshot_UsesAPIFieldsWhenPresent(t *testing.T) {
 	}
 }
 
-func TestEpisodeSnapshot_DerivesFromRipSpec(t *testing.T) {
-	raw := json.RawMessage(`{
-  "titles": [
-    {"id": 1, "name": "Show", "episode_title": "Pilot", "duration": 1800},
-    {"id": 2, "name": "Show", "episode_title": "Second", "duration": 1790}
-  ],
-  "episodes": [
-    {"key": "S01E02", "title_id": 2, "season": 1, "episode": 2, "episode_title": "", "runtime_seconds": 0, "output_basename": "ep2"},
-    {"key": "S01E01", "title_id": 1, "season": 1, "episode": 1, "episode_title": "", "runtime_seconds": 0, "output_basename": "ep1"}
-  ],
-  "assets": {
-    "ripped": [{"episode_key": "S01E01", "path": "/ripped1.mkv"}],
-    "encoded": [{"episode_key": "S01E02", "path": "/encoded2.mkv"}],
-    "final": [{"episode_key": "S01E02", "path": "/final2.mkv"}]
-  }
-}`)
-
-	item := QueueItem{RipSpec: raw}
-	episodes, totals := item.EpisodeSnapshot()
-	if len(episodes) != 2 {
-		t.Fatalf("episodes len = %d, want 2", len(episodes))
+func TestEpisodeSnapshot_EmptyWhenNoEpisodes(t *testing.T) {
+	episodes, totals := QueueItem{}.EpisodeSnapshot()
+	if episodes != nil {
+		t.Fatalf("episodes = %#v, want nil", episodes)
 	}
-	if episodes[0].Episode != 1 || episodes[1].Episode != 2 {
-		t.Fatalf("episodes not sorted: %#v", episodes)
-	}
-	if episodes[0].Stage != "ripped" || episodes[0].RippedPath != "/ripped1.mkv" {
-		t.Fatalf("episode1 = %#v, want ripped", episodes[0])
-	}
-	if episodes[1].Stage != "final" || episodes[1].FinalPath != "/final2.mkv" {
-		t.Fatalf("episode2 = %#v, want final", episodes[1])
-	}
-	if totals.Planned != 2 || totals.Ripped != 1 || totals.Encoded != 1 || totals.Subtitled != 0 || totals.Final != 1 {
-		t.Fatalf("totals = %#v, want planned=2 ripped=1 encoded=1 subtitled=0 final=1", totals)
+	if totals != (EpisodeTotals{}) {
+		t.Fatalf("totals = %#v, want zero value", totals)
 	}
 }
 
-func TestEpisodeSnapshot_DerivesSubtitledFromRipSpec(t *testing.T) {
-	raw := json.RawMessage(`{
-  "episodes": [
-    {"key": "S01E01", "title_id": 1, "season": 1, "episode": 1, "episode_title": "", "runtime_seconds": 0, "output_basename": "ep1"}
-  ],
-  "assets": {
-    "encoded": [{"episode_key": "S01E01", "path": "/encoded1.mkv"}],
-    "subtitled": [{"episode_key": "S01E01", "path": "/encoded1.mkv"}]
-  }
-}`)
+func TestTaskHelpers(t *testing.T) {
+	item := QueueItem{Tasks: []Task{
+		{Type: "ripping", State: "done"},
+		{Type: "encoding", State: "running", ActiveAssetKey: "S01E02"},
+		{Type: "subtitling", State: "pending"},
+	}}
 
-	item := QueueItem{RipSpec: raw}
-	episodes, totals := item.EpisodeSnapshot()
-	if len(episodes) != 1 {
-		t.Fatalf("episodes len = %d, want 1", len(episodes))
+	if running := item.RunningTasks(); len(running) != 1 || running[0].Type != "encoding" {
+		t.Fatalf("RunningTasks() = %#v, want single encoding task", running)
 	}
-	if episodes[0].Stage != "subtitled" {
-		t.Fatalf("episode stage = %q, want subtitled", episodes[0].Stage)
+
+	primary := item.PrimaryTask()
+	if primary == nil || primary.Type != "encoding" {
+		t.Fatalf("PrimaryTask() = %#v, want running encoding task", primary)
 	}
-	if episodes[0].SubtitledPath != "/encoded1.mkv" {
-		t.Fatalf("episode subtitled path = %q, want /encoded1.mkv", episodes[0].SubtitledPath)
+
+	keys := item.ActiveAssetKeys()
+	if !keys["s01e02"] {
+		t.Fatalf("ActiveAssetKeys() = %#v, want lowercase s01e02", keys)
 	}
-	if totals.Subtitled != 1 {
-		t.Fatalf("totals subtitled = %d, want 1", totals.Subtitled)
+
+	failed := QueueItem{Tasks: []Task{{Type: "encoding", State: "failed"}}}
+	if ft := failed.FailedTask(); ft == nil || ft.Type != "encoding" {
+		t.Fatalf("FailedTask() = %#v, want failed encoding task", ft)
+	}
+}
+
+func TestIsTerminal(t *testing.T) {
+	if (QueueItem{Stage: "encoding"}).IsTerminal() {
+		t.Fatalf("encoding should not be terminal")
+	}
+	if !(QueueItem{Stage: "completed"}).IsTerminal() {
+		t.Fatalf("completed should be terminal")
+	}
+	if !(QueueItem{Stage: "failed"}).IsTerminal() {
+		t.Fatalf("failed should be terminal")
 	}
 }

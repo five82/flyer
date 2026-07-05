@@ -70,13 +70,13 @@ func TestMatchedEpisodeCount(t *testing.T) {
 
 func TestToggleEpisodesCollapsed_UsesEffectiveDefaultState(t *testing.T) {
 	m := New(Options{ThemeName: "slate"})
+	episodes := make([]spindle.EpisodeStatus, 10)
+	for i := range episodes {
+		episodes[i].FinalPath = "/final.mkv"
+	}
 	m.snapshot.Queue = []spindle.QueueItem{{
 		ID:       1,
-		Episodes: make([]spindle.EpisodeStatus, 10),
-		EpisodeTotals: &spindle.EpisodeTotals{
-			Planned: 10,
-			Final:   10,
-		},
+		Episodes: episodes,
 	}}
 
 	item := m.getSelectedItem()
@@ -112,18 +112,25 @@ func TestTogglePathExpanded_TogglesOnFirstPress(t *testing.T) {
 	}
 }
 
-func TestActiveEpisodeDescriptor(t *testing.T) {
-	m := Model{theme: GetTheme("slate")}
+func TestActiveEpisodeIndex(t *testing.T) {
 	episodes := []spindle.EpisodeStatus{{Key: "a", Active: true}, {Key: "b"}}
-	idx, inferred, reason := m.activeEpisodeDescriptor(spindle.QueueItem{}, episodes)
-	if idx != 0 || inferred || reason != "active" {
-		t.Fatalf("activeEpisodeDescriptor() = (%d, %v, %q), want (0, false, %q)", idx, inferred, reason, "active")
+	idx, ok := activeEpisodeIndex(spindle.QueueItem{}, episodes)
+	if !ok || idx != 0 {
+		t.Fatalf("activeEpisodeIndex() = (%d, %v), want (0, true) for Active flag", idx, ok)
 	}
 
-	episodes = []spindle.EpisodeStatus{{Key: "a", Stage: "ripped"}, {Key: "b", Stage: "encoded"}}
-	idx, inferred, reason = m.activeEpisodeDescriptor(spindle.QueueItem{Stage: "encoding"}, episodes)
-	if idx != 0 || !inferred || reason == "" {
-		t.Fatalf("activeEpisodeDescriptor() inferred = (%d, %v, %q), want inferred match", idx, inferred, reason)
+	episodes = []spindle.EpisodeStatus{{Key: "a"}, {Key: "b"}}
+	item := spindle.QueueItem{Tasks: []spindle.Task{
+		{Type: "encoding", State: "running", ActiveAssetKey: "B"},
+	}}
+	idx, ok = activeEpisodeIndex(item, episodes)
+	if !ok || idx != 1 {
+		t.Fatalf("activeEpisodeIndex() = (%d, %v), want (1, true) matched via task's active asset key", idx, ok)
+	}
+
+	idx, ok = activeEpisodeIndex(spindle.QueueItem{}, []spindle.EpisodeStatus{{Key: "a"}})
+	if ok {
+		t.Fatalf("activeEpisodeIndex() = (%d, %v), want (_, false) when nothing is active", idx, ok)
 	}
 }
 
@@ -145,19 +152,21 @@ func TestDescribeEpisodeHelpers(t *testing.T) {
 	if got := describeEpisodeMapping(ep); got != "Match 0.93" {
 		t.Fatalf("describeEpisodeMapping() = %q, want %q", got, "Match 0.93")
 	}
-	ep = spindle.EpisodeStatus{GeneratedSubtitleDecision: "no_match"}
-	if got := describeEpisodeIssue(ep, "subtitling"); got != "subtitle no-match" {
+	ep = spindle.EpisodeStatus{NeedsReview: true, ReviewReason: "subtitle no-match"}
+	if got := describeEpisodeIssue(ep); got != "subtitle no-match" {
 		t.Fatalf("describeEpisodeIssue() = %q, want %q", got, "subtitle no-match")
 	}
+	ep = spindle.EpisodeStatus{NeedsReview: true}
+	if got := describeEpisodeIssue(ep); got != "needs review" {
+		t.Fatalf("describeEpisodeIssue() default reason = %q, want %q", got, "needs review")
+	}
 	ep = spindle.EpisodeStatus{}
-	if got := describeEpisodeIssue(ep, "ripping"); got != "" {
-		t.Fatalf("describeEpisodeIssue() pre-match = %q, want empty", got)
+	if got := describeEpisodeIssue(ep); got != "" {
+		t.Fatalf("describeEpisodeIssue() healthy = %q, want empty", got)
 	}
-	if got := describeEpisodeIssue(ep, "episode_identifying"); got != "matching in progress" {
-		t.Fatalf("describeEpisodeIssue() matching = %q, want %q", got, "matching in progress")
-	}
-	if got := describeEpisodeIssue(ep, "encoding"); got != "unconfirmed mapping" {
-		t.Fatalf("describeEpisodeIssue() unmatched = %q, want %q", got, "unconfirmed mapping")
+	ep = spindle.EpisodeStatus{Status: "failed"}
+	if got := describeEpisodeIssue(ep); got != "failed" {
+		t.Fatalf("describeEpisodeIssue() failed = %q, want %q", got, "failed")
 	}
 }
 
@@ -169,10 +178,11 @@ func TestEpisodeStageChip_UsesSpecificLabels(t *testing.T) {
 		stage string
 		label string
 	}{
-		{stage: "encoding", label: "ENC"},
-		{stage: "ripping", label: "RIP"},
-		{stage: "episode_identifying", label: "MATCH"},
-		{stage: "identifying", label: "ID"},
+		{stage: "planned", label: "PLAN"},
+		{stage: "ripped", label: "RIP"},
+		{stage: "encoded", label: "ENC"},
+		{stage: "subtitled", label: "SUB"},
+		{stage: "final", label: "DONE"},
 	}
 	for _, tc := range cases {
 		if got := m.episodeStageChip(tc.stage, false, styles, bg); !strings.Contains(got, tc.label) {

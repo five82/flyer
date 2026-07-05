@@ -59,7 +59,7 @@ func (m *Model) getSortedItems() []spindle.QueueItem {
 				continue
 			}
 		case FilterProcessing:
-			if !isProcessingStatus(item.Stage) {
+			if !isProcessingItem(item) {
 				continue
 			}
 		}
@@ -67,17 +67,12 @@ func (m *Model) getSortedItems() []spindle.QueueItem {
 	}
 
 	sort.SliceStable(items, func(i, j int) bool {
-		// Needs review items first
-		if items[i].NeedsReview != items[j].NeedsReview {
-			return items[i].NeedsReview
-		}
-		// Then by status rank (active items bubble up)
-		pi := statusRank(items[i].Stage)
-		pj := statusRank(items[j].Stage)
+		// Review first, then failed, then live work, then by ID ascending
+		// (spindle's processing order).
+		pi, pj := itemSortRank(items[i]), itemSortRank(items[j])
 		if pi != pj {
 			return pi < pj
 		}
-		// Then by ID ascending (matches Spindle's processing order)
 		return items[i].ID < items[j].ID
 	})
 
@@ -173,79 +168,79 @@ func (m Model) renderQueueTable(width int, bgColor string) string {
 }
 
 // formatQueueRowContent formats a queue item row with inline colors.
-// Format: "Icon #ID Title" - status and progress details are shown in the Details pane.
+// Format: "[task strip] #ID Title" -- the strip is one glyph per scheduler
+// task in pipeline order, so concurrent work is visible in the list itself.
 // When selected is true, uses SelectionText color for all text to ensure contrast.
 func (m Model) formatQueueRowContent(item spindle.QueueItem, width int, bgColor string, selected bool) string {
 	bg := NewBgStyle(bgColor)
+	styles := m.theme.Styles()
 
 	title := composeTitle(item)
-	icon := stageIcon(effectiveQueueStage(item))
 	idStr := fmt.Sprintf("#%d", item.ID)
-
-	// Calculate available title width: total - icon - space - id - space
-	fixedLen := 1 + 1 + len(idStr) + 1 // icon + space + id + space
-	titleWidth := max(width-fixedLen, 10)
-
-	// For selected rows, use SelectionText for all parts to ensure contrast
-	// For non-selected rows, use themed colors
-	var iconStyle, idStyle, titleStyle lipgloss.Style
-	if selected {
-		selText := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.SelectionText))
-		iconStyle = selText
-		idStyle = selText
-		titleStyle = selText
-	} else {
-		styles := m.theme.Styles()
-		iconStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(m.colorForStatus(effectiveQueueStage(item))))
-		idStyle = styles.MutedText
-		titleStyle = styles.Text
+	if item.NeedsReview {
+		idStr += "?"
 	}
 
-	iconPart := bg.Render(icon, iconStyle)
+	var selText lipgloss.Style
+	if selected {
+		selText = lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.SelectionText))
+	}
+
+	strip, stripWidth := m.renderTaskStrip(item, selected, selText, styles, bg)
+
+	// Calculate available title width: total - strip - space - id - space
+	fixedLen := stripWidth + 1 + len(idStr) + 1
+	titleWidth := max(width-fixedLen, 10)
+
+	idStyle, titleStyle := styles.MutedText, styles.Text
+	if selected {
+		idStyle, titleStyle = selText, selText
+	} else if item.NeedsReview {
+		idStyle = styles.WarningText
+	}
+
 	idPart := bg.Render(idStr, idStyle)
 	titlePart := bg.Render(truncate(title, titleWidth), titleStyle)
 
-	return iconPart + bg.Space() + idPart + bg.Space() + titlePart
+	return strip + bg.Space() + idPart + bg.Space() + titlePart
 }
 
-// stageIcons maps status to display icon.
-var stageIcons = map[string]string{
-	"identifying":            "*",
-	"identification":         "*",
-	"episode_identifying":    "*",
-	"episode_identification": "*",
-	"identified":             "*",
-	"episode_identified":     "*",
-	"ripping":                ">",
-	"ripped":                 ">",
-	"encoding":               "%",
-	"encoded":                "%",
-	"audio_analyzing":        "#",
-	"audio_analysis":         "#",
-	"audio_analyzed":         "#",
-	"subtitling":             "@",
-	"subtitled":              "@",
-	"organizing":             "+",
-	"completed":              "+",
-	"failed":                 "!",
-	"review":                 "?",
-}
-
-// stageIcon returns a display icon for the given status.
-func stageIcon(status string) string {
-	if icon, ok := stageIcons[strings.ToLower(strings.TrimSpace(status))]; ok {
-		return icon
+// renderTaskStrip renders one glyph per task, colored by task state (with
+// the running glyph in its stage's role color). Terminal or task-less items
+// collapse to a single summary glyph. Returns the strip and its cell width.
+func (m Model) renderTaskStrip(item spindle.QueueItem, selected bool, selText lipgloss.Style, styles Styles, bg BgStyle) (string, int) {
+	styleFor := func(s lipgloss.Style) lipgloss.Style {
+		if selected {
+			return selText
+		}
+		return s
 	}
-	return "-"
-}
 
-// colorForStatus returns the theme color for a given status.
-func (m Model) colorForStatus(status string) string {
-	status = strings.ToLower(strings.TrimSpace(status))
-	if color, ok := m.theme.StatusColors[status]; ok {
-		return color
+	if len(item.Tasks) == 0 {
+		glyph, style := "○", styles.FaintText
+		switch {
+		case strings.EqualFold(item.Stage, "completed"):
+			glyph, style = "✓", styles.SuccessText
+		case strings.EqualFold(item.Stage, "failed"):
+			glyph, style = "✗", styles.DangerText
+		}
+		return bg.Render(glyph, styleFor(style)), 1
 	}
-	return m.theme.Text
+
+	var b strings.Builder
+	for _, t := range item.Tasks {
+		style := styles.FaintText
+		switch t.State {
+		case "done":
+			style = styles.SuccessText
+		case "running":
+			style = roleStyle(stageDisplay(t.Type).role, styles)
+		case "failed":
+			style = styles.DangerText
+		}
+		b.WriteString(bg.Render(taskStateGlyph(t.State), styleFor(style)))
+	}
+	return b.String(), len(item.Tasks)
 }
 
 // renderBox renders content in a titled box with the title embedded in the top border.
@@ -314,55 +309,16 @@ func (m Model) renderBox(title, content string, width, height int, focused bool)
 	return topLine + "\n" + strings.Join(middleLines, "\n") + "\n" + bottomLine
 }
 
-// statusRank returns the priority rank for a status (lower = higher priority).
-func statusRank(status string) int {
-	ranks := map[string]int{
-		"failed":                 0,
-		"review":                 1,
-		"encoding":               2,
-		"subtitling":             3,
-		"ripping":                4,
-		"audio_analyzing":        5,
-		"audio_analysis":         5,
-		"identifying":            6,
-		"identification":         6,
-		"episode_identifying":    7,
-		"episode_identification": 7,
-		"organizing":             8,
-		"subtitled":              9,
-		"encoded":                10,
-		"ripped":                 11,
-		"audio_analyzed":         12,
-		"identified":             13,
-		"episode_identified":     14,
-		"completed":              16,
-	}
-	if r, ok := ranks[strings.ToLower(status)]; ok {
-		return r
-	}
-	return 100
-}
-
-// isProcessingStatus returns true if the status indicates active processing.
-func isProcessingStatus(status string) bool {
-	_, ok := processingStatuses[strings.ToLower(strings.TrimSpace(status))]
-	return ok
-}
-
-// composeTitle builds the display title for an item.
+// composeTitle builds the display title for an item, preferring the
+// server-computed one.
 func composeTitle(item spindle.QueueItem) string {
+	if item.DisplayTitle != "" {
+		return item.DisplayTitle
+	}
 	if item.DiscTitle != "" {
 		return item.DiscTitle
 	}
 	return fmt.Sprintf("Item #%d", item.ID)
-}
-
-// effectiveQueueStage returns the display status for an item.
-func effectiveQueueStage(item spindle.QueueItem) string {
-	if item.NeedsReview {
-		return "review"
-	}
-	return item.Stage
 }
 
 // getQueueTitle returns the queue pane title with optional filter indicator.

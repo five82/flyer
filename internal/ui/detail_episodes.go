@@ -11,7 +11,7 @@ import (
 
 // renderEpisodeList renders the episode list for TV content.
 // Includes episode sync warning, stage chips, and episode extras.
-func (m *Model) renderEpisodeList(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle, titleLookup map[int]*spindle.RipSpecTitleInfo, episodeTitleIndex map[string]int, currentStage string, totals spindle.EpisodeTotals) {
+func (m *Model) renderEpisodeList(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle, totals spindle.EpisodeTotals) {
 	episodes, _ := item.EpisodeSnapshot()
 	if len(episodes) == 0 {
 		return
@@ -20,8 +20,7 @@ func (m *Model) renderEpisodeList(b *strings.Builder, item spindle.QueueItem, st
 	collapsed := m.isEpisodesCollapsed(item, episodes, totals)
 
 	// Section header with toggle hint
-	toggleHint := "[t]"
-	m.writeSection(b, fmt.Sprintf("Episodes %s", toggleHint), styles, bg)
+	m.writeSection(b, "Episodes [t]", styles, bg)
 	m.renderEpisodeSummary(b, item, episodes, totals, styles, bg)
 
 	// Episode sync warning (show when episodes don't have resolved keys)
@@ -30,19 +29,17 @@ func (m *Model) renderEpisodeList(b *strings.Builder, item spindle.QueueItem, st
 		b.WriteString("\n")
 	}
 
-	activeIdx := m.activeEpisodeIndex(item, episodes)
-
 	if collapsed {
 		b.WriteString(bg.Render("Press t to expand", styles.FaintText))
 		b.WriteString("\n")
 		return
 	}
 
+	activeIdx, _ := activeEpisodeIndex(item, episodes)
+
 	// Episode list with enhanced rendering
 	for idx, ep := range episodes {
-		isActive := idx == activeIdx
-		stage := m.episodeStage(ep, currentStage, isActive)
-		m.renderEpisodeRowEnhanced(b, ep, titleLookup, episodeTitleIndex, isActive, stage, styles, bg)
+		m.renderEpisodeRowEnhanced(b, ep, idx == activeIdx, styles, bg)
 	}
 	b.WriteString(bg.Render("Press t to collapse", styles.FaintText))
 	b.WriteString("\n")
@@ -68,11 +65,19 @@ func shouldAutoExpandEpisodes(item spindle.QueueItem, episodes []spindle.Episode
 	if matched := matchedEpisodeCount(item, episodes); matched > 0 && matched < len(episodes) {
 		return true
 	}
-	stage := normalizeEpisodeStage(item.Stage)
-	if (stage == "final" || stage == "completed") && totals.Planned > 0 && totals.Final < totals.Planned {
+	if strings.EqualFold(item.Stage, "completed") && totals.Planned > 0 && totals.Final < totals.Planned {
 		return true
 	}
 	return false
+}
+
+// isEpisodeMapped reports whether an episode has been resolved to a real
+// episode number (vs. still being a placeholder awaiting identification).
+func isEpisodeMapped(ep spindle.EpisodeStatus) bool {
+	if ep.MatchedEpisode > 0 || ep.MatchScore > 0 {
+		return true
+	}
+	return ep.Episode > 0
 }
 
 func matchedEpisodeCount(item spindle.QueueItem, episodes []spindle.EpisodeStatus) int {
@@ -113,7 +118,7 @@ func (m *Model) renderEpisodeSummary(b *strings.Builder, item spindle.QueueItem,
 }
 
 // renderEpisodeRowEnhanced renders a single episode with stage chip and extras.
-func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int, active bool, stageName string, styles Styles, bg BgStyle) {
+func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, ep spindle.EpisodeStatus, active bool, styles Styles, bg BgStyle) {
 	marker := bg.Render("·", styles.FaintText)
 	if ep.IsFailed() {
 		marker = bg.Render("✗", styles.DangerText)
@@ -122,8 +127,8 @@ func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, ep spindle.EpisodeS
 	}
 
 	label := formatEpisodeLabel(ep)
-	stageChip := m.episodeStageChip(stageName, ep.IsFailed(), styles, bg)
-	title, extras, _ := m.describeEpisodeWithExtras(ep, titles, keyLookup)
+	stageChip := m.episodeStageChip(ep.Stage, ep.IsFailed(), styles, bg)
+	title, extras := describeEpisodeWithExtras(ep)
 	titleStyle := styles.Text
 	if active {
 		titleStyle = styles.Text.Bold(true)
@@ -138,13 +143,13 @@ func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, ep spindle.EpisodeS
 	b.WriteString(bg.Render(title, titleStyle))
 	b.WriteString("\n")
 
-	if meta := compactEpisodeMeta(m.describeEpisodeTrackInfo(&ep, titles, keyLookup), describeEpisodeMapping(ep), extras); meta != "" {
+	if meta := compactEpisodeMeta(describeEpisodeTrackInfo(&ep), describeEpisodeMapping(ep), extras); meta != "" {
 		b.WriteString(bg.Spaces(4))
 		b.WriteString(bg.Render(meta, styles.FaintText))
 		b.WriteString("\n")
 	}
 
-	if status := compactEpisodeStatus(m.describeEpisodeFileStates(&ep), describeEpisodeIssue(ep, stageName)); status != "" {
+	if status := compactEpisodeStatus(m.describeEpisodeFileStates(&ep), describeEpisodeIssue(ep)); status != "" {
 		b.WriteString(bg.Spaces(4))
 		b.WriteString(bg.Render(status, styles.MutedText))
 		b.WriteString("\n")
@@ -162,7 +167,7 @@ func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, ep spindle.EpisodeS
 }
 
 // describeEpisodeWithExtras returns title and extra info (runtime, language, source).
-func (m *Model) describeEpisodeWithExtras(ep spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) (string, []string, *spindle.RipSpecTitleInfo) {
+func describeEpisodeWithExtras(ep spindle.EpisodeStatus) (string, []string) {
 	title := episodeDisplayTitle(ep)
 	var extras []string
 
@@ -170,103 +175,30 @@ func (m *Model) describeEpisodeWithExtras(ep spindle.EpisodeStatus, titles map[i
 		extras = append(extras, runtime)
 	}
 
-	lang := strings.TrimSpace(ep.GeneratedSubtitleLanguage)
-	if lang == "" {
-		lang = strings.TrimSpace(ep.SubtitleLanguage)
-	}
-	if lang != "" {
+	if lang := strings.TrimSpace(ep.SubtitleLanguage); lang != "" {
 		extras = append(extras, strings.ToUpper(lang))
 	}
 
-	source := strings.ToLower(strings.TrimSpace(ep.GeneratedSubtitleSource))
-	if source == "whisperx" {
+	if strings.EqualFold(strings.TrimSpace(ep.SubtitleSource), "whisperx") {
 		extras = append(extras, "AI")
 	}
 
-	info := m.lookupRipTitleInfo(&ep, titles, keyLookup)
-	return title, extras, info
+	return title, extras
 }
 
-// activeEpisodeIndex finds the currently active episode index.
-func (m *Model) activeEpisodeIndex(item spindle.QueueItem, episodes []spindle.EpisodeStatus) int {
-	idx, _, _ := m.activeEpisodeDescriptor(item, episodes)
-	return idx
-}
-
-// describeActiveEpisode describes the best current episode candidate and whether
-// it was inferred rather than reported explicitly.
-func describeActiveEpisode(item spindle.QueueItem, episodes []spindle.EpisodeStatus) (idx int, inferred bool, reason string) {
-	if len(episodes) == 0 {
-		return -1, false, ""
-	}
-
+// activeEpisodeIndex returns the index of the first episode the server
+// reports as actively being worked on: either its Active flag, or a running
+// task's activeAssetKey matching the episode's key. When several episodes
+// are active at once (e.g. rip/encode overlap on different episodes), the
+// first one found wins.
+func activeEpisodeIndex(item spindle.QueueItem, episodes []spindle.EpisodeStatus) (int, bool) {
+	keys := item.ActiveAssetKeys()
 	for i, ep := range episodes {
-		if ep.Active {
-			return i, false, "active"
+		if ep.Active || keys[strings.ToLower(ep.Key)] {
+			return i, true
 		}
 	}
-
-	stage := itemCurrentStage(item)
-	if (stage == "encoding" || stage == "subtitling") && item.Encoding != nil && item.Encoding.InputFile != "" {
-		input := item.Encoding.InputFile
-		for i, ep := range episodes {
-			if checkMatch(input, ep.RippedPath) || checkMatch(input, ep.EncodedPath) || checkMatch(input, ep.OutputBasename) {
-				return i, true, "input match"
-			}
-		}
-	}
-
-	for i, ep := range episodes {
-		if normalizeEpisodeStage(ep.Stage) == stage {
-			return i, true, "stage match"
-		}
-	}
-
-	var searchStage string
-	switch stage {
-	case "ripping":
-		searchStage = "planned"
-	case "encoding":
-		searchStage = "ripped"
-	case "subtitling":
-		searchStage = "encoded"
-	}
-	if searchStage != "" {
-		for i, ep := range episodes {
-			if normalizeEpisodeStage(ep.Stage) == searchStage {
-				return i, true, "ready"
-			}
-		}
-	}
-
-	for i, ep := range episodes {
-		epStage := normalizeEpisodeStage(ep.Stage)
-		if epStage != "final" && epStage != "completed" {
-			return i, true, "next remaining"
-		}
-	}
-
-	return len(episodes) - 1, true, "last"
-}
-
-// activeEpisodeDescriptor describes the best current episode candidate and whether
-// it was inferred rather than reported explicitly.
-func (m *Model) activeEpisodeDescriptor(item spindle.QueueItem, episodes []spindle.EpisodeStatus) (idx int, inferred bool, reason string) {
-	return describeActiveEpisode(item, episodes)
-}
-
-// episodeStage returns the display stage for an episode.
-func (m *Model) episodeStage(ep spindle.EpisodeStatus, currentGlobalStage string, isActive bool) string {
-	if isActive {
-		switch currentGlobalStage {
-		case "ripping", "encoding", "identifying", "episode_identifying", "subtitling":
-			return currentGlobalStage
-		}
-	}
-	if ep.Stage == "final" {
-		return "final"
-	}
-	return ep.Stage
+	return -1, false
 }
 
 // formatEpisodeLabel formats an episode as S01E01.
@@ -278,14 +210,17 @@ func formatEpisodeLabel(ep spindle.EpisodeStatus) string {
 }
 
 // renderEpisodeFocusLine renders the focused episode line with stage chip.
-func (m *Model) renderEpisodeFocusLine(b *strings.Builder, ep spindle.EpisodeStatus, stageName string, styles Styles, bg BgStyle) {
-	chip := m.episodeStageChip(stageName, ep.IsFailed(), styles, bg)
+func (m *Model) renderEpisodeFocusLine(b *strings.Builder, ep spindle.EpisodeStatus, styles Styles, bg BgStyle) {
+	chip := m.episodeStageChip(ep.Stage, ep.IsFailed(), styles, bg)
 	b.WriteString(chip)
 	b.WriteString(bg.Space())
 	b.WriteString(bg.Render(episodeDisplayTitle(ep), styles.Text.Bold(true)))
 }
 
-// episodeStageChip returns a styled chip for an episode stage.
+// episodeStageChip returns a styled chip for an episode's asset stage. This
+// is spindle's per-episode vocabulary (planned/ripped/encoded/subtitled/
+// final, plus failed) -- a different, legitimate set of names from the
+// scheduler's task types in stages.go, keyed directly on the API value.
 func (m *Model) episodeStageChip(stage string, failed bool, styles Styles, bg BgStyle) string {
 	if failed {
 		return lipgloss.NewStyle().
@@ -295,35 +230,22 @@ func (m *Model) episodeStageChip(stage string, failed bool, styles Styles, bg Bg
 			Render("FAIL")
 	}
 
-	stage = strings.ToLower(stage)
 	color := m.theme.Muted
 	label := "WAIT"
 
-	switch stage {
-	case "final", "completed":
-		color = m.theme.StatusColors["completed"]
+	switch strings.ToLower(strings.TrimSpace(stage)) {
+	case "final":
+		color = m.theme.Success
 		label = "DONE"
-	case "organizing":
-		color = m.theme.StatusColors["subtitled"]
-		label = "ORG"
-	case "subtitled", "subtitling":
-		color = m.theme.StatusColors["subtitled"]
+	case "subtitled":
+		color = m.theme.Success
 		label = "SUB"
-	case "encoded", "encoding":
-		color = m.theme.StatusColors["encoded"]
+	case "encoded":
+		color = m.theme.Accent
 		label = "ENC"
-	case "audio_analyzed", "audio_analyzing":
-		color = m.theme.StatusColors["audio_analyzed"]
-		label = "ANLY"
-	case "ripped", "ripping":
-		color = m.theme.StatusColors["ripped"]
+	case "ripped":
+		color = m.theme.Info
 		label = "RIP"
-	case "episode_identified", "episode_identifying":
-		color = m.theme.StatusColors["episode_identified"]
-		label = "MATCH"
-	case "identified", "identifying":
-		color = m.theme.StatusColors["ripped"]
-		label = "ID"
 	case "planned":
 		color = m.theme.Muted
 		label = "PLAN"
@@ -350,32 +272,16 @@ func episodeDisplayTitle(ep spindle.EpisodeStatus) string {
 	return "Unlabeled"
 }
 
-// describeEpisodeTrackInfo returns track info for an episode.
-func (m *Model) describeEpisodeTrackInfo(ep *spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) string {
-	info := m.lookupRipTitleInfo(ep, titles, keyLookup)
+// describeEpisodeTrackInfo returns source track info for an episode.
+func describeEpisodeTrackInfo(ep *spindle.EpisodeStatus) string {
 	var parts []string
-	if info != nil {
-		if info.ID > 0 {
-			parts = append(parts, fmt.Sprintf("Title %02d", info.ID))
-		}
-		if info.Duration > 0 {
-			parts = append(parts, formatRuntime(info.Duration))
-		}
-	} else if ep.SourceTitleID > 0 {
+	if ep.SourceTitleID > 0 {
 		parts = append(parts, fmt.Sprintf("Title %02d", ep.SourceTitleID))
 	}
+	if runtime := formatRuntime(ep.RuntimeSeconds); runtime != "" {
+		parts = append(parts, runtime)
+	}
 	return strings.Join(parts, "  ")
-}
-
-// lookupRipTitleInfo looks up RipSpec title info for an episode.
-func (m *Model) lookupRipTitleInfo(ep *spindle.EpisodeStatus, titles map[int]*spindle.RipSpecTitleInfo, keyLookup map[string]int) *spindle.RipSpecTitleInfo {
-	if ep.SourceTitleID > 0 {
-		return titles[ep.SourceTitleID]
-	}
-	if key, ok := keyLookup[strings.ToLower(ep.Key)]; ok {
-		return titles[key]
-	}
-	return nil
 }
 
 // describeEpisodeFileStates returns file state info for an episode.
@@ -396,18 +302,10 @@ func (m *Model) describeEpisodeFileStates(ep *spindle.EpisodeStatus) string {
 	return strings.Join(parts, " ")
 }
 
-// describeItemFileStates returns file state info for a movie item.
-// Uses the "main" episode key from the episodes array (API-provided) or totals.
+// describeItemFileStates returns file state info for a movie item, tallied
+// from the item's (usually single) episode asset paths.
 func (m *Model) describeItemFileStates(item spindle.QueueItem) string {
-	// For movies, check the first episode (key "main") or use totals.
-	totals := item.EpisodeTotals
-	if totals == nil {
-		_, derived := item.EpisodeSnapshot()
-		totals = &derived
-	}
-	if totals == nil {
-		return ""
-	}
+	_, totals := item.EpisodeSnapshot()
 	var parts []string
 	if totals.Ripped > 0 {
 		parts = append(parts, "RIP")
@@ -437,27 +335,19 @@ func describeEpisodeMapping(ep spindle.EpisodeStatus) string {
 	}
 }
 
-func describeEpisodeIssue(ep spindle.EpisodeStatus, stageName string) string {
+// describeEpisodeIssue reports the episode's problem, if any, straight from
+// the API's authoritative per-episode fields -- no client-side guessing.
+func describeEpisodeIssue(ep spindle.EpisodeStatus) string {
 	if ep.IsFailed() {
 		return "failed"
 	}
-	switch strings.ToLower(strings.TrimSpace(ep.GeneratedSubtitleDecision)) {
-	case "no_match":
-		return "subtitle no-match"
-	case "error":
-		return "subtitle lookup error"
+	if ep.NeedsReview {
+		if reason := strings.TrimSpace(ep.ReviewReason); reason != "" {
+			return reason
+		}
+		return "needs review"
 	}
-	if isEpisodeMapped(ep) {
-		return ""
-	}
-	switch strings.ToLower(strings.TrimSpace(stageName)) {
-	case "planned", "identifying", "identified", "ripping", "ripped":
-		return ""
-	case "episode_identifying":
-		return "matching in progress"
-	default:
-		return "unconfirmed mapping"
-	}
+	return ""
 }
 
 func compactEpisodeMeta(track string, mapping string, extras []string) string {
@@ -483,18 +373,4 @@ func compactEpisodeStatus(files string, issue string) string {
 		parts = append(parts, issue)
 	}
 	return strings.Join(parts, "  ·  ")
-}
-
-// movieFocusLine returns the focus line for a movie item.
-func (m *Model) movieFocusLine(summary spindle.RipSpecSummary, stage string, styles Styles, bg BgStyle) string {
-	if len(summary.Titles) == 0 {
-		return ""
-	}
-	main := summary.Titles[0]
-	name := main.Name
-	if name == "" {
-		name = fmt.Sprintf("Title %02d", main.ID)
-	}
-	chip := m.episodeStageChip(stage, false, styles, bg)
-	return chip + bg.Space() + bg.Render(name, styles.Text)
 }

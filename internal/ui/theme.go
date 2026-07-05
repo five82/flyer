@@ -32,9 +32,6 @@ type Theme struct {
 	Warning string
 	Danger  string
 	Info    string
-
-	// Status colors
-	StatusColors map[string]string
 }
 
 // Styles returns Lipgloss styles for this theme.
@@ -98,10 +95,8 @@ func (t Theme) Styles() Styles {
 			Background(lipgloss.Color(t.SelectionBg)).
 			Foreground(lipgloss.Color(t.SelectionText)),
 
-		// Status badge style generator
-		statusColors: t.StatusColors,
-		background:   t.Background,
-		muted:        t.Muted,
+		background: t.Background,
+		muted:      t.Muted,
 	}
 }
 
@@ -129,9 +124,8 @@ type Styles struct {
 	Selected lipgloss.Style
 
 	// For dynamic status colors
-	statusColors map[string]string
-	background   string
-	muted        string
+	background string
+	muted      string
 }
 
 // WithBackground returns a copy of Styles with all text styles having the specified background.
@@ -162,8 +156,8 @@ func (s Styles) WithBackground(bgColor string) Styles {
 		Selected: s.Selected.Background(bg),
 
 		// Preserve internal fields
-		statusColors: s.statusColors,
-		background:   s.background,
+		background: s.background,
+		muted:      s.muted,
 	}
 }
 
@@ -224,26 +218,6 @@ func nightfoxTheme() Theme {
 		Warning: "#dbc074", // yellow
 		Danger:  "#c94f6d", // red
 		Info:    "#63cdcf", // cyan
-
-		StatusColors: map[string]string{
-			"identification":      "#738091", // comment
-			"identifying":         "#63cdcf", // cyan
-			"identified":          "#71839b", // fg3
-			"ripping":             "#719cd6", // blue
-			"ripped":              "#71839b", // fg3
-			"audio_analyzing":     "#63cdcf", // cyan
-			"audio_analyzed":      "#71839b", // fg3
-			"episode_identifying": "#63cdcf", // cyan
-			"episode_identified":  "#71839b", // fg3
-			"encoding":            "#9d79d6", // magenta
-			"encoded":             "#81b29a", // green
-			"subtitling":          "#63cdcf", // cyan
-			"subtitled":           "#81b29a", // green
-			"organizing":          "#f4a261", // orange
-			"completed":           "#81b29a", // green
-			"failed":              "#c94f6d", // red
-			"review":              "#dbc074", // yellow
-		},
 	}
 }
 
@@ -276,26 +250,6 @@ func kanagawaTheme() Theme {
 		Warning: "#E6C384", // carpYellow
 		Danger:  "#E46876", // waveRed
 		Info:    "#7FB4CA", // springBlue
-
-		StatusColors: map[string]string{
-			"identification":      "#727169", // fujiGray
-			"identifying":         "#7FB4CA", // springBlue
-			"identified":          "#727169", // fujiGray
-			"ripping":             "#7E9CD8", // crystalBlue
-			"ripped":              "#727169", // fujiGray
-			"audio_analyzing":     "#7FB4CA", // springBlue
-			"audio_analyzed":      "#727169", // fujiGray
-			"episode_identifying": "#7FB4CA", // springBlue
-			"episode_identified":  "#727169", // fujiGray
-			"encoding":            "#957FB8", // oniViolet
-			"encoded":             "#98BB6C", // springGreen
-			"subtitling":          "#7FB4CA", // springBlue
-			"subtitled":           "#98BB6C", // springGreen
-			"organizing":          "#E6C384", // carpYellow
-			"completed":           "#98BB6C", // springGreen
-			"failed":              "#E46876", // waveRed
-			"review":              "#E6C384", // carpYellow
-		},
 	}
 }
 
@@ -329,25 +283,5 @@ func slateTheme() Theme {
 		Warning: "#f59e0b", // amber-500
 		Danger:  "#ef4444", // red-500
 		Info:    "#06b6d4", // cyan-500
-
-		StatusColors: map[string]string{
-			"identification":      "#64748b", // slate-500 (muted)
-			"identifying":         "#38bdf8", // sky-400 (active)
-			"identified":          "#0284c7", // sky-600 (completed)
-			"ripping":             "#0ea5e9", // sky-500 (active)
-			"ripped":              "#0369a1", // sky-700 (completed)
-			"audio_analyzing":     "#38bdf8", // sky-400 (active)
-			"audio_analyzed":      "#0369a1", // sky-700 (completed)
-			"episode_identifying": "#7dd3fc", // sky-300
-			"episode_identified":  "#0ea5e9", // sky-500
-			"encoding":            "#06b6d4", // cyan-500 (active)
-			"encoded":             "#22c55e", // green-500 (success)
-			"subtitling":          "#22d3ee", // cyan-400 (active)
-			"subtitled":           "#14b8a6", // teal-500 (success)
-			"organizing":          "#f59e0b", // amber-500
-			"completed":           "#16a34a", // green-600 (success)
-			"failed":              "#dc2626", // red-600 (error)
-			"review":              "#f59e0b", // amber-500 (attention)
-		},
 	}
 }

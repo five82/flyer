@@ -165,11 +165,7 @@ func (m *Model) renderSubtitleSummary(b *strings.Builder, item spindle.QueueItem
 
 	count := 0
 	for _, ep := range episodes {
-		source := strings.ToLower(strings.TrimSpace(ep.GeneratedSubtitleSource))
-		if source == "" {
-			source = strings.ToLower(strings.TrimSpace(ep.SubtitleSource))
-		}
-		if source == "whisperx" {
+		if strings.EqualFold(strings.TrimSpace(ep.SubtitleSource), "whisperx") {
 			count++
 		}
 	}
@@ -183,12 +179,8 @@ func (m *Model) renderSubtitleSummary(b *strings.Builder, item spindle.QueueItem
 
 // renderSubtitleInfo renders subtitle source for movies and single items.
 func (m *Model) renderSubtitleInfo(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
-	sg := item.SubtitleGeneration
-	if sg == nil {
-		return
-	}
-
-	if sg.WhisperX == 0 {
+	episodes, _ := item.EpisodeSnapshot()
+	if len(episodes) == 0 || !strings.EqualFold(strings.TrimSpace(episodes[0].SubtitleSource), "whisperx") {
 		return
 	}
 

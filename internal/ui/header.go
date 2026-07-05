@@ -13,22 +13,9 @@ import (
 // compactWidthThreshold is the terminal width below which the UI uses compact mode.
 const compactWidthThreshold = 100
 
-// processingStatuses defines which statuses are considered "processing".
-// Past-tense statuses like "episode_identified" and "subtitled" are included
-// because they represent transitional states where work is still pending.
-var processingStatuses = map[string]struct{}{
-	"identifying":            {},
-	"identification":         {},
-	"ripping":                {},
-	"audio_analyzing":        {},
-	"audio_analysis":         {},
-	"episode_identifying":    {},
-	"episode_identification": {},
-	"episode_identified":     {},
-	"encoding":               {},
-	"subtitling":             {},
-	"subtitled":              {},
-	"organizing":             {},
+// isProcessingItem reports whether an item has live scheduler work.
+func isProcessingItem(item spindle.QueueItem) bool {
+	return len(item.RunningTasks()) > 0
 }
 
 // renderHeader renders the status bar with all information.
@@ -92,61 +79,80 @@ func (m Model) renderConnectingHeader(styles Styles, bg BgStyle) string {
 	)
 }
 
-// countProcessingItems returns the number of items in processing statuses.
+// countProcessingItems returns the number of items with running tasks.
 func (m Model) countProcessingItems() int {
-	stats := m.snapshot.Status.Workflow.QueueStats
 	count := 0
-	for status := range processingStatuses {
-		count += stats[status]
+	for _, item := range m.snapshot.Queue {
+		if isProcessingItem(item) {
+			count++
+		}
 	}
 	return count
 }
 
-// buildProcessingPart builds a compact pipeline summary of all active items.
-func (m Model) buildProcessingPart(compact bool, processing int, styles Styles, bg BgStyle) string {
-	var parts []string
-
-	// Encoding item gets priority with full mini-progress.
-	encItem := m.activeEncodingItem()
-	if encItem != nil {
-		parts = append(parts, m.formatEncodingMini(encItem, compact, styles, bg))
-	}
-
-	// Other active (non-encoding) items.
-	maxOthers := 2
-	if compact {
-		maxOthers = 1
-	}
-	titleLen := maxLen(compact, 16, 8)
-
-	for i := range m.snapshot.Queue {
-		if len(parts) >= maxOthers+1 {
-			break
-		}
-		item := &m.snapshot.Queue[i]
-		if !item.InProgress {
-			continue
-		}
-		if strings.EqualFold(item.Stage, "encoding") {
-			continue // already shown above
-		}
-		icon := stageIcon(item.Stage)
-		title := truncate(composeTitle(*item), titleLen)
-		colorHex := m.colorForStatus(item.Stage)
-		iconStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colorHex))
-		parts = append(parts, bg.Render(icon, iconStyle)+bg.Space()+bg.Render(title, styles.Text))
-	}
-
-	if len(parts) == 0 {
-		if processing > 0 {
-			color := lipgloss.Color(m.theme.StatusColors["encoding"])
-			activeStyle := lipgloss.NewStyle().Foreground(color)
+// buildResourceStrip renders the scheduler's resource occupancy: which
+// task of which item holds each resource, with live percent, and the
+// drive-free indicator when the drive is idle. Ordering follows the
+// daemon's pipeline template.
+func (m Model) buildResourceStrip(compact bool, styles Styles, bg BgStyle) string {
+	sched := m.snapshot.Status.Scheduler
+	if sched == nil || len(sched.Resources) == 0 {
+		// Old daemon or no scheduler info: fall back to a bare active count.
+		if n := m.countProcessingItems(); n > 0 {
 			return bg.Render("Active:", styles.MutedText) + bg.Space() +
-				bg.Render(fmt.Sprintf("%d", processing), activeStyle)
+				bg.Render(fmt.Sprintf("%d", n), styles.AccentText)
 		}
 		return ""
 	}
 
+	taskPercent := func(itemID int64, taskType string) (float64, bool) {
+		for i := range m.snapshot.Queue {
+			if m.snapshot.Queue[i].ID != itemID {
+				continue
+			}
+			for _, t := range m.snapshot.Queue[i].Tasks {
+				if t.Type == taskType && t.IsRunning() {
+					return t.Progress.Percent, true
+				}
+			}
+		}
+		return 0, false
+	}
+
+	var parts []string
+	for _, name := range resourceOrder(m.snapshot.Status.Pipeline, sched.Resources) {
+		res := sched.Resources[name]
+		label := resourceLabel(name)
+
+		if res.Used == 0 {
+			// Idle resources stay quiet, except the drive: "insert the next
+			// disc" is the single most useful signal this header carries.
+			if name == "drive" {
+				state, style := "FREE", styles.SuccessText
+				if disc := m.snapshot.Status.Disc; disc != nil && disc.Paused {
+					state, style = "PAUSED", styles.WarningText
+				}
+				parts = append(parts, bg.Render(label+":", styles.MutedText)+bg.Space()+
+					bg.Render(state, style.Bold(true)))
+			}
+			continue
+		}
+
+		for _, h := range res.Holders {
+			info := stageDisplay(h.Task)
+			seg := bg.Render(label+":", styles.MutedText) + bg.Space() +
+				bg.Render(fmt.Sprintf("#%d", h.ItemID), styles.Text) + bg.Space() +
+				bg.Render(strings.ToLower(info.label), roleStyle(info.role, styles))
+			if pct, ok := taskPercent(h.ItemID, h.Task); ok && pct > 0 && !compact {
+				seg += bg.Space() + bg.Render(fmt.Sprintf("%.0f%%", pct), styles.AccentText)
+			}
+			parts = append(parts, seg)
+		}
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
 	sep := bg.Space() + bg.Render("|", styles.FaintText) + bg.Space()
 	return strings.Join(parts, sep)
 }
@@ -214,7 +220,6 @@ func (m Model) buildErrorParts(compact bool, styles Styles, bg BgStyle) []string
 // buildStatusContent builds the status bar content string.
 func (m Model) buildStatusContent(styles Styles, bg BgStyle) string {
 	compact := m.width < compactWidthThreshold
-	processing := m.countProcessingItems()
 	failed, review := m.countProblemCounts()
 
 	var parts []string
@@ -233,9 +238,9 @@ func (m Model) buildStatusContent(styles Styles, bg BgStyle) string {
 			bg.Render(fmt.Sprintf("%d", len(m.snapshot.Queue)), styles.Text),
 	)
 
-	// Active encoding or processing count
-	if processingPart := m.buildProcessingPart(compact, processing, styles, bg); processingPart != "" {
-		parts = append(parts, processingPart)
+	// Resource occupancy strip (drive/gpu/encode tiers with holders).
+	if strip := m.buildResourceStrip(compact, styles, bg); strip != "" {
+		parts = append(parts, strip)
 	}
 
 	// Failed and review counts (only shown when non-zero)
@@ -301,11 +306,6 @@ func (m Model) formatTimestamp() string {
 // formatHealthWarning formats health warnings if any.
 func (m Model) formatHealthWarning(compact bool, styles Styles, bg BgStyle) string {
 	var unhealthy []string
-	for _, sh := range m.snapshot.Status.Workflow.StageHealth {
-		if !sh.Ready {
-			unhealthy = append(unhealthy, fmt.Sprintf("%s: %s", sh.Name, sh.Detail))
-		}
-	}
 	for _, dep := range m.snapshot.Status.Dependencies {
 		if !dep.Available {
 			label := dep.Name
@@ -456,43 +456,4 @@ func truncateMiddle(s string, max int) string {
 	endLen := (max - 3) * 2 / 3
 	startLen := max - 3 - endLen
 	return s[:startLen] + "..." + s[len(s)-endLen:]
-}
-
-// activeEncodingItem returns the first item that is actively encoding.
-func (m Model) activeEncodingItem() *spindle.QueueItem {
-	for i := range m.snapshot.Queue {
-		item := &m.snapshot.Queue[i]
-		if strings.EqualFold(item.Stage, "encoding") && item.Encoding != nil {
-			return item
-		}
-	}
-	return nil
-}
-
-// formatEncodingMini formats a compact encoding progress display for the header.
-// Callers must ensure item is non-nil.
-func (m Model) formatEncodingMini(item *spindle.QueueItem, compact bool, styles Styles, bg BgStyle) string {
-	if item.Encoding == nil {
-		return ""
-	}
-
-	enc := item.Encoding
-	title := truncate(composeTitle(*item), maxLen(compact, 20, 12))
-
-	// Get percentage
-	percent := enc.Percent
-	if percent <= 0 && enc.TotalFrames > 0 && enc.CurrentFrame > 0 {
-		percent = (float64(enc.CurrentFrame) / float64(enc.TotalFrames)) * 100
-	}
-
-	// Build display parts
-	encodingColor := lipgloss.Color(m.theme.StatusColors["encoding"])
-	iconStyle := lipgloss.NewStyle().Foreground(encodingColor)
-
-	var parts []string
-	parts = append(parts, bg.Render("⚙", iconStyle))
-	parts = append(parts, bg.Render(title, styles.Text))
-	parts = append(parts, bg.Render(fmt.Sprintf("%.0f%%", percent), styles.AccentText))
-
-	return strings.Join(parts, bg.Space())
 }
