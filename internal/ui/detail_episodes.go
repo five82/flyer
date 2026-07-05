@@ -39,7 +39,7 @@ func (m *Model) renderEpisodeList(b *strings.Builder, item spindle.QueueItem, st
 
 	// Episode list with enhanced rendering
 	for idx, ep := range episodes {
-		m.renderEpisodeRowEnhanced(b, ep, idx == activeIdx, styles, bg)
+		m.renderEpisodeRowEnhanced(b, item, ep, idx == activeIdx, styles, bg)
 	}
 	b.WriteString(bg.Render("Press t to collapse", styles.FaintText))
 	b.WriteString("\n")
@@ -117,8 +117,8 @@ func (m *Model) renderEpisodeSummary(b *strings.Builder, item spindle.QueueItem,
 	b.WriteString("\n")
 }
 
-// renderEpisodeRowEnhanced renders a single episode with stage chip and extras.
-func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, ep spindle.EpisodeStatus, active bool, styles Styles, bg BgStyle) {
+// renderEpisodeRowEnhanced renders a single episode with a per-asset grid and extras.
+func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, item spindle.QueueItem, ep spindle.EpisodeStatus, active bool, styles Styles, bg BgStyle) {
 	marker := bg.Render("·", styles.FaintText)
 	if ep.IsFailed() {
 		marker = bg.Render("✗", styles.DangerText)
@@ -127,7 +127,8 @@ func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, ep spindle.EpisodeS
 	}
 
 	label := formatEpisodeLabel(ep)
-	stageChip := m.episodeStageChip(ep.Stage, ep.IsFailed(), styles, bg)
+	assetActive := ep.Active || item.ActiveAssetKeys()[strings.ToLower(ep.Key)]
+	grid := renderEpisodeAssetGrid(ep, assetActive, styles, bg)
 	title, extras := describeEpisodeWithExtras(ep)
 	titleStyle := styles.Text
 	if active {
@@ -138,7 +139,7 @@ func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, ep spindle.EpisodeS
 	b.WriteString(bg.Space())
 	b.WriteString(bg.Render(label, styles.MutedText))
 	b.WriteString(bg.Space())
-	b.WriteString(stageChip)
+	b.WriteString(grid)
 	b.WriteString(bg.Space())
 	b.WriteString(bg.Render(title, titleStyle))
 	b.WriteString("\n")
@@ -149,9 +150,10 @@ func (m *Model) renderEpisodeRowEnhanced(b *strings.Builder, ep spindle.EpisodeS
 		b.WriteString("\n")
 	}
 
-	if status := compactEpisodeStatus(m.describeEpisodeFileStates(&ep), describeEpisodeIssue(ep)); status != "" {
+	// File states are visible in the asset grid; only issues need a line.
+	if issue := describeEpisodeIssue(ep); issue != "" {
 		b.WriteString(bg.Spaces(4))
-		b.WriteString(bg.Render(status, styles.MutedText))
+		b.WriteString(bg.Render(issue, styles.WarningText))
 		b.WriteString("\n")
 	}
 
@@ -207,6 +209,95 @@ func formatEpisodeLabel(ep spindle.EpisodeStatus) string {
 		return "S??E??"
 	}
 	return fmt.Sprintf("S%02dE%02d", ep.Season, ep.Episode)
+}
+
+// episodeAssetState is the per-asset-column state within an episode's grid.
+type episodeAssetState int
+
+const (
+	episodeAssetPending episodeAssetState = iota
+	episodeAssetDone
+	episodeAssetFailed
+	episodeAssetActive
+)
+
+// episodeAssetColumns are the grid columns in pipeline order: rip, encode,
+// subtitle, final. This is spindle's per-episode asset vocabulary, not a
+// pipeline stage list.
+var episodeAssetColumns = [4]string{"R", "E", "S", "F"}
+
+// episodeAssetStates derives the per-column state for an episode's asset
+// grid, pure from the episode's path fields plus a caller-supplied active
+// flag. A column is done when its path is non-empty; the first empty column
+// after the last done one is the "next" column, which renders as failed (if
+// the episode is failed) or active (if the episode is active); all other
+// empty columns are pending.
+func episodeAssetStates(ep spindle.EpisodeStatus, active bool) [4]episodeAssetState {
+	paths := [4]string{ep.RippedPath, ep.EncodedPath, ep.SubtitledPath, ep.FinalPath}
+	var states [4]episodeAssetState
+	lastDone := -1
+	for i, p := range paths {
+		if strings.TrimSpace(p) != "" {
+			states[i] = episodeAssetDone
+			lastDone = i
+		}
+	}
+
+	next := lastDone + 1
+	failed := ep.IsFailed()
+	for i := range states {
+		if states[i] == episodeAssetDone {
+			continue
+		}
+		switch {
+		case failed && i == next:
+			states[i] = episodeAssetFailed
+		case !failed && active && i == next:
+			states[i] = episodeAssetActive
+		default:
+			states[i] = episodeAssetPending
+		}
+	}
+	return states
+}
+
+// episodeAssetGlyph returns the glyph for an asset cell state.
+func episodeAssetGlyph(state episodeAssetState) string {
+	switch state {
+	case episodeAssetDone:
+		return "✓"
+	case episodeAssetFailed:
+		return "✗"
+	case episodeAssetActive:
+		return "◉"
+	default:
+		return "·"
+	}
+}
+
+// episodeAssetStyle returns the text style for an asset cell state.
+func episodeAssetStyle(state episodeAssetState, styles Styles) lipgloss.Style {
+	switch state {
+	case episodeAssetDone:
+		return styles.SuccessText
+	case episodeAssetFailed:
+		return styles.DangerText
+	case episodeAssetActive:
+		return styles.AccentText
+	default:
+		return styles.FaintText
+	}
+}
+
+// renderEpisodeAssetGrid renders the compact per-asset grid for an episode
+// row, e.g. "R✓ E◉ S✓ F·".
+func renderEpisodeAssetGrid(ep spindle.EpisodeStatus, active bool, styles Styles, bg BgStyle) string {
+	states := episodeAssetStates(ep, active)
+	cells := make([]string, len(episodeAssetColumns))
+	for i, col := range episodeAssetColumns {
+		cells[i] = bg.Render(col+episodeAssetGlyph(states[i]), episodeAssetStyle(states[i], styles))
+	}
+	return bg.Join(cells, " ")
 }
 
 // renderEpisodeFocusLine renders the focused episode line with stage chip.
@@ -336,7 +427,8 @@ func describeEpisodeMapping(ep spindle.EpisodeStatus) string {
 }
 
 // describeEpisodeIssue reports the episode's problem, if any, straight from
-// the API's authoritative per-episode fields -- no client-side guessing.
+
+// describeEpisodeIssue reports the episode's failure or review state.
 func describeEpisodeIssue(ep spindle.EpisodeStatus) string {
 	if ep.IsFailed() {
 		return "failed"
@@ -350,6 +442,7 @@ func describeEpisodeIssue(ep spindle.EpisodeStatus) string {
 	return ""
 }
 
+// compactEpisodeMeta joins the episode row's secondary line fragments.
 func compactEpisodeMeta(track string, mapping string, extras []string) string {
 	parts := make([]string, 0, 2)
 	if track != "" {
@@ -360,17 +453,6 @@ func compactEpisodeMeta(track string, mapping string, extras []string) string {
 	}
 	if len(extras) > 0 {
 		parts = append(parts, strings.Join(extras, " · "))
-	}
-	return strings.Join(parts, "  ·  ")
-}
-
-func compactEpisodeStatus(files string, issue string) string {
-	var parts []string
-	if files != "" {
-		parts = append(parts, files)
-	}
-	if issue != "" {
-		parts = append(parts, issue)
 	}
 	return strings.Join(parts, "  ·  ")
 }

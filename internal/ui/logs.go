@@ -34,8 +34,12 @@ const (
 
 // logState holds all log-related state.
 type logState struct {
-	mode        logSource
-	rawLines    []string
+	mode logSource
+	// rawLines holds the structured log events backing the current view, one
+	// entry per displayed block (a block may span multiple visual rows via
+	// Details). formatLogEvent derives the plain text form on demand for
+	// search matching and copy.
+	rawLines    []spindle.LogEvent
 	follow      bool
 	lastRefresh time.Time
 
@@ -265,28 +269,29 @@ func (m *Model) renderLogContent() string {
 
 	var b strings.Builder
 
-	for i, line := range m.logState.rawLines {
+	for i, evt := range m.logState.rawLines {
 		lineNum := i + 1
 
 		// Determine if this line is a search match
 		isActiveMatch := i == activeMatchLine
 		isPassiveMatch := matchSet[i] && !isActiveMatch
 
-		// Build line content: line number + colorized text
+		// Build line content: line number + styled text
 		var lineContent string
-		if isActiveMatch {
+		switch {
+		case isActiveMatch:
 			// Active match: highlighted background
 			highlightBg := NewBgStyle(m.theme.Warning)
 			lineContent = highlightBg.Render(fmt.Sprintf("%4d │ ", lineNum), styles.FaintText.Background(lipgloss.Color(m.theme.Warning))) +
-				m.colorizeLineForSearch(line, m.theme.Warning)
-		} else if isPassiveMatch {
+				m.colorizeLineForSearch(formatLogEvent(evt), m.theme.Warning)
+		case isPassiveMatch:
 			// Passive match: accent foreground
 			lineContent = bg.Render(fmt.Sprintf("%4d │ ", lineNum), styles.AccentText) +
-				m.colorizeLineWithHighlight(line, styles, bg)
-		} else {
-			// Normal line
+				m.colorizeLineWithHighlight(formatLogEvent(evt), styles, bg)
+		default:
+			// Normal line: styled directly from the structured event fields
 			lineContent = bg.Render(fmt.Sprintf("%4d │ ", lineNum), styles.FaintText) +
-				m.colorizeLineWithBg(line, styles, bg)
+				m.styleLogEvent(evt, styles, bg)
 		}
 
 		// Pad to fill viewport width
@@ -312,66 +317,45 @@ func (m *Model) colorizeLineWithHighlight(line string, styles Styles, bg BgStyle
 	return bg.Render(line, styles.AccentText)
 }
 
-// colorizeLineWithBg applies Lipgloss styling to a log line using the provided styles.
-func (m *Model) colorizeLineWithBg(line string, styles Styles, bg BgStyle) string {
-	if strings.TrimSpace(line) == "" {
-		return line
-	}
-
-	// Detail lines (indented with spaces and starting with key: value or -)
-	if content, found := strings.CutPrefix(line, "    "); found {
-		if listItem, isList := strings.CutPrefix(content, "- "); isList {
-			// List item: "    - File: value"
-			return bg.Spaces(8) + bg.Render(listItem, styles.Text)
-		}
-		// Key-value: "    Key: value"
-		return bg.Spaces(4) + bg.Render(content, styles.Text)
+// styleLogEvent builds the styled log line directly from the structured
+// LogEvent fields: timestamp muted, level colored by severity, the item/stage
+// subject highlighted, message in normal text, and details appended below,
+// matching the visual treatment previously produced by re-parsing
+// formatLogEvent's output with regexes.
+func (m *Model) styleLogEvent(evt spindle.LogEvent, styles Styles, bg BgStyle) string {
+	level := strings.ToUpper(strings.TrimSpace(evt.Level))
+	if level == "" {
+		level = "INFO"
 	}
 
 	var result strings.Builder
-	remaining := line
+	result.WriteString(bg.Render(logEventTimestamp(evt), styles.FaintText))
+	result.WriteString(bg.Space())
+	result.WriteString(bg.Render(level, m.getLevelStyle(level, styles).Bold(true)))
 
-	// Extract and colorize timestamp (contains space between date and time)
-	if matches := timestampRe.FindStringSubmatchIndex(remaining); len(matches) > 0 {
-		start, end := matches[2], matches[3]
-		ts := remaining[start:end]
-		result.WriteString(bg.Render(ts, styles.FaintText))
-		remaining = remaining[end:]
-	}
-
-	// Extract and colorize log level
-	if matches := levelRe.FindStringSubmatchIndex(remaining); len(matches) > 0 {
-		start, end := matches[2], matches[3]
-		level := remaining[start:end]
-		levelStyle := m.getLevelStyle(level, styles)
+	// Note: the [component] tag is part of formatLogEvent's plain text (for
+	// search) but is not shown here, since the stage is already surfaced via
+	// the subject below.
+	if subject := composeLogSubject(evt.ItemID, evt.Stage); subject != "" {
 		result.WriteString(bg.Space())
-		result.WriteString(bg.Render(level, levelStyle.Bold(true)))
-		remaining = remaining[end:]
+		result.WriteString(bg.Render(subject, styles.AccentText))
 	}
 
-	// Skip [component] tag if present (stage is already shown in Item #X (stage))
-	if matches := componentRe.FindStringSubmatchIndex(remaining); len(matches) > 0 {
-		_, end := matches[0], matches[1]
-		remaining = remaining[end:]
-	}
-
-	// Extract and colorize item info (contains spaces like "Item #123 (encoding)")
-	if matches := itemRe.FindStringSubmatchIndex(remaining); len(matches) > 0 {
-		start, end := matches[0], matches[1]
-		item := strings.TrimSpace(remaining[start:end])
-		result.WriteString(bg.Space())
-		result.WriteString(bg.Render(item, styles.AccentText))
-		remaining = remaining[end:]
-	}
-
-	// Handle separator and message
-	if parts := separatorRe.Split(remaining, 2); len(parts) == 2 {
+	if message := strings.TrimSpace(evt.Message); message != "" {
 		result.WriteString(bg.Space())
 		result.WriteString(bg.Render("–", styles.FaintText))
 		result.WriteString(bg.Space())
-		result.WriteString(bg.Render(strings.TrimSpace(parts[1]), styles.Text))
-	} else {
-		result.WriteString(bg.Render(strings.TrimSpace(remaining), styles.Text))
+		result.WriteString(bg.Render(message, styles.Text))
+	}
+
+	for _, detail := range evt.Details {
+		label := strings.TrimSpace(detail.Label)
+		value := strings.TrimSpace(detail.Value)
+		if label == "" || value == "" {
+			continue
+		}
+		result.WriteString("\n")
+		result.WriteString(bg.Render(fmt.Sprintf("    - %s: %s", label, value), styles.Text))
 	}
 
 	return result.String()
@@ -397,15 +381,6 @@ func (m *Model) getLevelStyle(level string, styles Styles) lipgloss.Style {
 func (m *Model) logFiltersActive() bool {
 	return m.logState.filterLevel != "" || m.logState.filterComponent != "" || m.logState.filterLane != "" || m.logState.filterRequest != ""
 }
-
-// Regex patterns for log parsing (shared with logtail package)
-var (
-	timestampRe = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})`)
-	levelRe     = regexp.MustCompile(`\b(INFO|WARN|ERROR|DEBUG)\b`)
-	componentRe = regexp.MustCompile(`\[([^\]]+)\]`)
-	itemRe      = regexp.MustCompile(`Item #\d+ \([^)]+\)`)
-	separatorRe = regexp.MustCompile(`\s*–\s*`)
-)
 
 // handleLogsKey processes keyboard input for logs view.
 func (m Model) handleLogsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -570,8 +545,8 @@ func (m *Model) findSearchMatches() {
 		return
 	}
 
-	for i, line := range m.logState.rawLines {
-		if m.logState.searchRegex.MatchString(line) {
+	for i, evt := range m.logState.rawLines {
+		if m.logState.searchRegex.MatchString(formatLogEvent(evt)) {
 			m.logState.searchMatches = append(m.logState.searchMatches, i)
 		}
 	}
@@ -756,34 +731,26 @@ func (m *Model) handleLogBatch(msg logBatchMsg) {
 		m.logState.streamCursor = msg.next
 	}
 
-	// Format events to lines
-	newLines := formatLogEvents(msg.events)
-	if len(newLines) > 0 {
-		m.logState.rawLines = append(m.logState.rawLines, newLines...)
+	if len(msg.events) > 0 {
+		m.logState.rawLines = append(m.logState.rawLines, msg.events...)
 		m.logState.rawLines = trimLogBuffer(m.logState.rawLines, logBufferLimit)
 		m.logState.contentVersion++ // Mark content changed
 		m.updateLogViewport()
 	}
 }
 
-// formatLogEvents formats log events into display lines.
-func formatLogEvents(events []spindle.LogEvent) []string {
-	if len(events) == 0 {
-		return nil
+// logEventTimestamp formats an event's timestamp for display, preferring the
+// parsed local time and falling back to the raw timestamp string.
+func logEventTimestamp(evt spindle.LogEvent) string {
+	if parsed := evt.ParsedTime(); !parsed.IsZero() {
+		return parsed.In(time.Local).Format("2006-01-02 15:04:05")
 	}
-	lines := make([]string, 0, len(events))
-	for _, evt := range events {
-		lines = append(lines, formatLogEvent(evt))
-	}
-	return lines
+	return evt.Timestamp
 }
 
 // formatLogEvent formats a single log event.
 func formatLogEvent(evt spindle.LogEvent) string {
-	ts := evt.Timestamp
-	if parsed := evt.ParsedTime(); !parsed.IsZero() {
-		ts = parsed.In(time.Local).Format("2006-01-02 15:04:05")
-	}
+	ts := logEventTimestamp(evt)
 	level := strings.ToUpper(strings.TrimSpace(evt.Level))
 	if level == "" {
 		level = "INFO"
@@ -834,9 +801,9 @@ func composeLogSubject(itemID int64, stage string) string {
 }
 
 // trimLogBuffer trims the log buffer to the limit by removing oldest entries.
-func trimLogBuffer(lines []string, limit int) []string {
+func trimLogBuffer[T any](lines []T, limit int) []T {
 	if overflow := len(lines) - limit; overflow > 0 {
-		return append([]string(nil), lines[overflow:]...)
+		return append([]T(nil), lines[overflow:]...)
 	}
 	return lines
 }

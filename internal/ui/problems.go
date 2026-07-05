@@ -24,7 +24,7 @@ const (
 
 // problemsState holds state for the problems view.
 type problemsState struct {
-	logLines    []string
+	logLines    []spindle.LogEvent
 	logCursor   uint64
 	lastItemID  int64
 	lastRefresh time.Time
@@ -114,10 +114,10 @@ func (m *Model) renderProblemsContent() string {
 		b.WriteString(bg.Render("Log Messages", styles.MutedText.Bold(true)))
 		b.WriteString("\n")
 
-		for i, line := range m.problemsState.logLines {
+		for i, evt := range m.problemsState.logLines {
 			lineNum := i + 1
 			b.WriteString(bg.Render(fmt.Sprintf("%4d │ ", lineNum), styles.FaintText))
-			b.WriteString(m.colorizeLineWithBg(line, styles, bg))
+			b.WriteString(m.styleLogEvent(evt, styles, bg))
 			b.WriteString("\n")
 		}
 	}
@@ -137,6 +137,9 @@ func (m *Model) renderProblemsContent() string {
 
 // renderStructuredProblems extracts problem info from the item's structured data.
 func (m *Model) renderStructuredProblems(b *strings.Builder, item *spindle.QueueItem, styles Styles, bg BgStyle) {
+	// Failed task leads: it's the most direct answer to "what broke".
+	m.renderFailedTaskSection(b, item, styles, bg)
+
 	// Review reasons
 	if item.NeedsReview && len(item.ReviewReasons) > 0 {
 		m.renderProblemSection(b, "Review Reasons", styles.WarningText, bg)
@@ -265,6 +268,41 @@ func (m *Model) renderStructuredProblems(b *strings.Builder, item *spindle.Queue
 				}
 			}
 			b.WriteString("\n")
+		}
+	}
+}
+
+// renderFailedTaskSection leads the problems view with the item's failed
+// task, when one exists: its name, attempts, and error. When no task is
+// failed but the daemon still remembers a failed stage (a retry recompile
+// can transiently drop the task rows), that stage name is shown as a
+// fallback label. Otherwise this renders nothing.
+func (m *Model) renderFailedTaskSection(b *strings.Builder, item *spindle.QueueItem, styles Styles, bg BgStyle) {
+	danger := roleStyle("danger", styles)
+
+	if task := item.FailedTask(); task != nil {
+		m.renderProblemSection(b, "Failed Task", danger, bg)
+		b.WriteString(bg.Spaces(2))
+		b.WriteString(bg.Render(stageDisplay(task.Type).label, styles.Text.Bold(true)))
+		if task.Attempts > 0 {
+			b.WriteString(bg.Render(fmt.Sprintf(" (attempt %d)", task.Attempts), styles.MutedText))
+		}
+		b.WriteString("\n")
+		if msg := strings.TrimSpace(task.Error); msg != "" {
+			b.WriteString(bg.Spaces(2))
+			b.WriteString(bg.Render(msg, styles.MutedText))
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+		return
+	}
+
+	if len(item.Tasks) == 0 {
+		if stage := strings.TrimSpace(item.FailedAtStage); stage != "" {
+			m.renderProblemSection(b, "Failed Task", danger, bg)
+			b.WriteString(bg.Spaces(2))
+			b.WriteString(bg.Render(stageDisplay(stage).label, styles.Text.Bold(true)))
+			b.WriteString("\n\n")
 		}
 	}
 }
@@ -399,10 +437,8 @@ func (m *Model) handleProblemsLogBatch(msg problemsLogBatchMsg) {
 	// Update cursor for this item
 	m.problemsState.logCursor = msg.next
 
-	// Format events to lines
-	newLines := formatLogEvents(msg.events)
-	if len(newLines) > 0 {
-		m.problemsState.logLines = append(m.problemsState.logLines, newLines...)
+	if len(msg.events) > 0 {
+		m.problemsState.logLines = append(m.problemsState.logLines, msg.events...)
 		m.problemsState.logLines = trimLogBuffer(m.problemsState.logLines, problemsBufferLimit)
 		m.problemsState.contentVersion++ // Mark content changed
 		m.updateProblemsViewport()

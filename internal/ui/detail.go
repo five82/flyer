@@ -281,25 +281,89 @@ func (m *Model) renderPendingDetail(b *strings.Builder, item spindle.QueueItem, 
 	}
 }
 
-// renderActiveDetail renders detail for active/processing items.
+// renderActiveDetail renders detail for active/processing items: one
+// section per RUNNING task, so overlap windows show every live branch's
+// context at once (the right details at the right time).
 func (m *Model) renderActiveDetail(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
 	episodes, totals := item.EpisodeSnapshot()
 	mediaType := detectMediaType(item.Metadata)
 
-	m.renderDetailFocus(b, item, episodes, styles, bg)
-
-	m.writeSection(b, "Details", styles, bg)
-	m.renderEstimatedSize(b, item, styles, bg)
-	m.renderVideoSpecs(b, item, styles, bg)
-	m.renderAudioInfo(b, item, styles, bg)
-	m.renderEncodingConfig(b, item, styles, bg)
-	m.renderCropInfo(b, item, styles, bg)
+	running := item.RunningTasks()
+	for _, task := range running {
+		m.renderTaskSection(b, item, task, episodes, styles, bg)
+	}
+	if len(running) == 0 {
+		m.writeSection(b, "Status", styles, bg)
+		renderDetailField(b, bg, "State", styles.MutedText, "Waiting for scheduler...", styles.MutedText)
+	}
 
 	if mediaType == "movie" {
 		m.renderMovieScope(b, item, styles, bg)
 	}
 
 	m.renderEpisodeList(b, item, styles, bg, totals)
+}
+
+// renderTaskSection renders one running task's working context. The task
+// board above already shows the bar/percent/message; this section adds the
+// data that matters for that task type.
+func (m *Model) renderTaskSection(b *strings.Builder, item spindle.QueueItem, task spindle.Task, episodes []spindle.EpisodeStatus, styles Styles, bg BgStyle) {
+	info := stageDisplay(task.Type)
+	m.writeSection(b, info.label, styles, bg)
+
+	// The episode this task reports working on, when it names one.
+	if key := strings.ToLower(strings.TrimSpace(task.ActiveAssetKey)); key != "" {
+		for i := range episodes {
+			if strings.ToLower(episodes[i].Key) != key {
+				continue
+			}
+			ep := episodes[i]
+			renderDetailField(b, bg, "Episode", styles.MutedText, strings.TrimSpace(formatEpisodeLabel(ep)+" "+episodeDisplayTitle(ep)), styles.Text)
+			if track := describeEpisodeTrackInfo(&ep); track != "" {
+				renderDetailField(b, bg, "Track", styles.MutedText, track, styles.Text)
+			}
+			break
+		}
+	}
+
+	switch task.Type {
+	case "encoding":
+		m.renderEstimatedSize(b, item, styles, bg)
+		m.renderVideoSpecs(b, item, styles, bg)
+		m.renderAudioInfo(b, item, styles, bg)
+		m.renderEncodingConfig(b, item, styles, bg)
+		m.renderCropInfo(b, item, styles, bg)
+	case "episode_identification":
+		if cid := item.ContentID; cid != nil {
+			renderDetailField(b, bg, "Method", styles.MutedText, cid.Method, styles.Text)
+			if cid.TranscribedEpisodes > 0 || cid.MatchedEpisodes > 0 {
+				renderDetailField(b, bg, "Matched", styles.MutedText,
+					fmt.Sprintf("%d matched · %d unresolved · %d low confidence",
+						cid.MatchedEpisodes, cid.UnresolvedEpisodes, cid.LowConfidenceCount), styles.Text)
+			}
+		}
+	case "analysis":
+		m.renderAudioInfo(b, item, styles, bg)
+		if item.CommentaryCount > 0 {
+			renderDetailField(b, bg, "Comment.", styles.MutedText,
+				fmt.Sprintf("%d commentary track(s) detected", item.CommentaryCount), styles.Text)
+		}
+	case "subtitling":
+		done := 0
+		for _, ep := range episodes {
+			if strings.TrimSpace(ep.SubtitleSource) != "" {
+				done++
+			}
+		}
+		if done > 0 {
+			renderDetailField(b, bg, "Subs", styles.MutedText,
+				fmt.Sprintf("%d of %d generated", done, max(len(episodes), 1)), styles.Text)
+		}
+	case "organizing":
+		if files := m.describeItemFileStates(item); files != "" {
+			renderDetailField(b, bg, "Files", styles.MutedText, files, styles.Text)
+		}
+	}
 }
 
 // renderRecoverySummary renders leftover file state for a stopped/failed
@@ -371,12 +435,11 @@ func (m *Model) renderCompletedTVSummary(b *strings.Builder, item spindle.QueueI
 	m.renderEncodingConfig(b, item, styles, bg)
 }
 
-// renderCompletedDetail renders detail for completed items.
+// renderCompletedDetail renders detail for completed items. No Focus
+// section: nothing is active, and Summary/Results carry the outcome.
 func (m *Model) renderCompletedDetail(b *strings.Builder, item spindle.QueueItem, styles Styles, bg BgStyle) {
 	episodes, totals := item.EpisodeSnapshot()
 	mediaType := detectMediaType(item.Metadata)
-
-	m.renderDetailFocus(b, item, episodes, styles, bg)
 
 	if isHealthyCompletedTV(item, episodes, totals) {
 		m.renderCompletedTVSummary(b, item, episodes, totals, styles, bg)
@@ -454,23 +517,17 @@ func (m *Model) renderFailedDetail(b *strings.Builder, item spindle.QueueItem, s
 }
 
 // renderDetailFocus renders the "Focus" section: the single most relevant
-// episode or movie-level line for what's happening right now.
+// episode or movie-level line for what's happening right now. Renders
+// nothing (no header, no placeholder) when there is nothing to focus on.
 func (m *Model) renderDetailFocus(b *strings.Builder, item spindle.QueueItem, episodes []spindle.EpisodeStatus, styles Styles, bg BgStyle) {
 	mediaType := detectMediaType(item.Metadata)
-	m.writeSection(b, "Focus", styles, bg)
 	if len(episodes) > 0 && mediaType != "movie" {
-		if isHealthyCompletedTV(item, episodes, spindle.EpisodeTotals{Planned: len(episodes), Final: countFinalEpisodes(episodes)}) {
-			renderDetailField(b, bg, "State", styles.MutedText, "Batch complete", styles.Text.Bold(true))
-			renderDetailField(b, bg, "Batch", styles.MutedText, fmt.Sprintf("%d planned · %d matched · %d final", len(episodes), matchedEpisodeCount(item, episodes), countFinalEpisodes(episodes)), styles.Text)
-			return
-		}
 		idx, ok := activeEpisodeIndex(item, episodes)
 		if !ok {
-			b.WriteString(bg.Render("No active episode", styles.MutedText))
-			b.WriteString("\n")
 			return
 		}
 		ep := episodes[idx]
+		m.writeSection(b, "Focus", styles, bg)
 		m.renderEpisodeFocusLine(b, ep, styles, bg)
 		b.WriteString("\n")
 		renderDetailField(b, bg, "Episode", styles.MutedText, formatEpisodeLabel(ep), styles.Text)
@@ -485,17 +542,8 @@ func (m *Model) renderDetailFocus(b *strings.Builder, item spindle.QueueItem, ep
 		}
 		return
 	}
+	m.writeSection(b, "Focus", styles, bg)
 	m.renderMovieFocus(b, item, styles, bg)
-}
-
-func countFinalEpisodes(episodes []spindle.EpisodeStatus) int {
-	count := 0
-	for _, ep := range episodes {
-		if ep.Stage == "final" {
-			count++
-		}
-	}
-	return count
 }
 
 // renderMovieFocus renders the focus line for a movie item: current

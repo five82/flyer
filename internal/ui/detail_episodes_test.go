@@ -191,6 +191,81 @@ func TestEpisodeStageChip_UsesSpecificLabels(t *testing.T) {
 	}
 }
 
+func TestEpisodeAssetStates(t *testing.T) {
+	tests := []struct {
+		name   string
+		ep     spindle.EpisodeStatus
+		active bool
+		want   [4]episodeAssetState
+	}{
+		{
+			name: "all pending",
+			ep:   spindle.EpisodeStatus{},
+			want: [4]episodeAssetState{episodeAssetPending, episodeAssetPending, episodeAssetPending, episodeAssetPending},
+		},
+		{
+			name:   "next pending column is active",
+			ep:     spindle.EpisodeStatus{RippedPath: "/r.mkv", EncodedPath: "/e.mkv"},
+			active: true,
+			want:   [4]episodeAssetState{episodeAssetDone, episodeAssetDone, episodeAssetActive, episodeAssetPending},
+		},
+		{
+			name: "failed episode marks next column failed",
+			ep:   spindle.EpisodeStatus{RippedPath: "/r.mkv", Status: "failed"},
+			want: [4]episodeAssetState{episodeAssetDone, episodeAssetFailed, episodeAssetPending, episodeAssetPending},
+		},
+		{
+			name: "failed with nothing done yet marks first column",
+			ep:   spindle.EpisodeStatus{Status: "failed"},
+			want: [4]episodeAssetState{episodeAssetFailed, episodeAssetPending, episodeAssetPending, episodeAssetPending},
+		},
+		{
+			name: "all done leaves nothing active or failed",
+			ep: spindle.EpisodeStatus{
+				RippedPath:    "/r.mkv",
+				EncodedPath:   "/e.mkv",
+				SubtitledPath: "/s.mkv",
+				FinalPath:     "/f.mkv",
+			},
+			active: true,
+			want:   [4]episodeAssetState{episodeAssetDone, episodeAssetDone, episodeAssetDone, episodeAssetDone},
+		},
+		{
+			name:   "active without any done marks first column",
+			ep:     spindle.EpisodeStatus{},
+			active: true,
+			want:   [4]episodeAssetState{episodeAssetActive, episodeAssetPending, episodeAssetPending, episodeAssetPending},
+		},
+		{
+			name:   "not active and not failed leaves next column pending",
+			ep:     spindle.EpisodeStatus{RippedPath: "/r.mkv"},
+			active: false,
+			want:   [4]episodeAssetState{episodeAssetDone, episodeAssetPending, episodeAssetPending, episodeAssetPending},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := episodeAssetStates(tc.ep, tc.active); got != tc.want {
+				t.Fatalf("episodeAssetStates() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRenderEpisodeAssetGrid_ContainsColumnGlyphs(t *testing.T) {
+	m := Model{theme: GetTheme("slate")}
+	styles := m.theme.Styles()
+	bg := NewBgStyle(m.theme.Background)
+	ep := spindle.EpisodeStatus{RippedPath: "/r.mkv", EncodedPath: "/e.mkv"}
+	got := renderEpisodeAssetGrid(ep, true, styles, bg)
+	for _, want := range []string{"R✓", "E✓", "S◉", "F·"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("renderEpisodeAssetGrid() = %q, want to contain %q", got, want)
+		}
+	}
+}
+
 func TestDescribeItemFileStates_DerivesTotals(t *testing.T) {
 	m := Model{theme: GetTheme("slate")}
 	item := spindle.QueueItem{
