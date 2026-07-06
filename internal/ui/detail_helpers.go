@@ -3,6 +3,7 @@ package ui
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -178,6 +179,10 @@ func summarizeMetadata(raw json.RawMessage) []metadataRow {
 			rows = append(rows, metadataRow{key: k, value: fmt.Sprintf("%t", v)})
 		}
 	}
+	// Map iteration order is random; sort so rows don't shuffle every refresh.
+	sort.Slice(rows, func(i, j int) bool {
+		return strings.ToLower(rows[i].key) < strings.ToLower(rows[j].key)
+	})
 	return rows
 }
 
