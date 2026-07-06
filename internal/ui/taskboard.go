@@ -41,6 +41,36 @@ func (m *Model) renderTaskBoard(b *strings.Builder, item spindle.QueueItem, styl
 	for _, task := range item.Tasks {
 		m.renderTaskRow(b, item, task, episodes, totals, countWidth, styles, width)
 	}
+
+	if elapsed := itemElapsed(item); elapsed != "" {
+		b.WriteString("  ")
+		b.WriteString(styles.FaintText.Render("Elapsed " + elapsed))
+		b.WriteString("\n")
+	}
+}
+
+// itemElapsed reports the item's wall-clock time in the pipeline: creation
+// to the last task finish for terminal items, creation to now otherwise.
+// Empty under a minute -- the figure means nothing that fresh.
+func itemElapsed(item spindle.QueueItem) string {
+	created := item.ParsedCreatedAt()
+	if created.IsZero() {
+		return ""
+	}
+	end := time.Now()
+	if item.IsTerminal() {
+		end = item.ParsedUpdatedAt()
+		for _, t := range item.Tasks {
+			if fin := t.ParsedFinishedAt(); fin.After(end) {
+				end = fin
+			}
+		}
+	}
+	d := end.Sub(created)
+	if d < time.Minute {
+		return ""
+	}
+	return humanizeDurationLong(d)
 }
 
 func (m *Model) renderTaskRow(b *strings.Builder, item spindle.QueueItem, task spindle.Task, episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, countWidth int, styles Styles, width int) {
@@ -92,11 +122,13 @@ func (m *Model) renderTaskRow(b *strings.Builder, item spindle.QueueItem, task s
 			b.WriteString("  ")
 			b.WriteString(styles.FaintText.Render(formatDuration(d)))
 		}
-	case "failed":
-		if task.Attempts > 1 {
-			b.WriteString("  ")
-			b.WriteString(styles.MutedText.Render(fmt.Sprintf("attempt %d", task.Attempts)))
-		}
+	}
+
+	// Retries are visible on every state: a task that needed more than one
+	// attempt is silent flakiness worth seeing even after it succeeds.
+	if task.Attempts > 1 {
+		b.WriteString("  ")
+		b.WriteString(styles.MutedText.Render(fmt.Sprintf("attempt %d", task.Attempts)))
 	}
 	b.WriteString("\n")
 

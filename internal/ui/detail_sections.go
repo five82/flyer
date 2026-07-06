@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -99,7 +100,9 @@ func renderEncodingConfig(w fieldWriter, item spindle.QueueItem) {
 	w.field("Config", strings.Join(parts, " • "), w.styles.AccentText)
 }
 
-// renderContentID renders the episode identification summary.
+// renderContentID renders the episode identification summary: method and
+// match counts, the reference corpus, and sequence problems a completed
+// identification left behind.
 func renderContentID(w fieldWriter, item spindle.QueueItem) {
 	cid := item.ContentID
 	if cid == nil || strings.TrimSpace(cid.Method) == "" {
@@ -111,6 +114,24 @@ func renderContentID(w fieldWriter, item spindle.QueueItem) {
 			cid.MatchedEpisodes, cid.UnresolvedEpisodes, cid.LowConfidenceCount)
 	}
 	w.field("ID", value, w.styles.Text)
+
+	if src := strings.TrimSpace(cid.ReferenceSource); src != "" {
+		ref := src
+		if cid.ReferenceEpisodes > 0 {
+			ref += fmt.Sprintf(" · %d reference episodes", cid.ReferenceEpisodes)
+		}
+		w.field("Ref", ref, w.styles.Text)
+	}
+
+	// The flags only mean something once identification has finished.
+	if cid.Completed {
+		if !cid.SequenceContiguous {
+			w.fieldStyled("", w.styles.MutedText, "⚠ Episode sequence not contiguous", w.styles.WarningText)
+		}
+		if !cid.EpisodesSynchronized {
+			w.fieldStyled("", w.styles.MutedText, "⚠ Episodes not synchronized", w.styles.WarningText)
+		}
+	}
 }
 
 // renderEncodeStats renders duration and average speed (for completed).
@@ -172,6 +193,26 @@ func renderCropInfo(w fieldWriter, item spindle.QueueItem) {
 		// Detection complete but no cropping needed
 		w.field("Crop", "None", w.styles.FaintText)
 	}
+}
+
+// renderFinalPath renders where finished files landed: the file path for
+// single-file items, the shared directory once a batch has final files.
+func renderFinalPath(w fieldWriter, item spindle.QueueItem) {
+	episodes, _ := item.EpisodeSnapshot()
+	var paths []string
+	for _, ep := range episodes {
+		if p := strings.TrimSpace(ep.FinalPath); p != "" {
+			paths = append(paths, p)
+		}
+	}
+	if len(paths) == 0 {
+		return
+	}
+	value := paths[0]
+	if len(paths) > 1 {
+		value = filepath.Dir(paths[0]) + "/"
+	}
+	w.field("Path", value, w.styles.Text)
 }
 
 // renderSubtitleSummary renders the subtitle source summary: a count for

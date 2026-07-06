@@ -58,7 +58,7 @@ func TestOverviewActiveItem_FixedSkeleton(t *testing.T) {
 	}
 }
 
-func TestOverviewFailedItem_AttentionAfterPipeline(t *testing.T) {
+func TestOverviewFailedItem_AttentionFirst(t *testing.T) {
 	got := overviewFor(t, spindle.QueueItem{
 		ID:           2,
 		Stage:        "failed",
@@ -68,7 +68,7 @@ func TestOverviewFailedItem_AttentionAfterPipeline(t *testing.T) {
 		},
 	})
 
-	sectionOrder(t, got, "Pipeline", "Attention")
+	sectionOrder(t, got, "Attention", "Pipeline")
 	if !strings.Contains(got, "ffmpeg exited 1") {
 		t.Fatalf("overview missing error message, got:\n%s", got)
 	}
@@ -82,18 +82,38 @@ func TestOverviewReviewItem_ShowsReasons(t *testing.T) {
 		ReviewReasons: []string{"subtitle no-match"},
 	})
 
-	sectionOrder(t, got, "Pipeline", "Attention")
+	sectionOrder(t, got, "Attention", "Pipeline")
 	if !strings.Contains(got, "subtitle no-match") {
 		t.Fatalf("overview missing review reason, got:\n%s", got)
 	}
 }
 
+func TestOverviewEncoderWarning_RendersInAttention(t *testing.T) {
+	got := overviewFor(t, spindle.QueueItem{
+		ID:    6,
+		Stage: "encoding",
+		Encoding: &spindle.EncodingStatus{
+			Warning: "bit-depth fallback: encoding at 8-bit",
+		},
+	})
+
+	sectionOrder(t, got, "Attention", "Warning", "Pipeline")
+	if !strings.Contains(got, "bit-depth fallback: encoding at 8-bit") {
+		t.Fatalf("overview missing encoder warning, got:\n%s", got)
+	}
+}
+
 func TestOverviewCompletedItem_OutputResults(t *testing.T) {
 	got := overviewFor(t, spindle.QueueItem{
-		ID:    4,
-		Stage: "completed",
+		ID:        4,
+		Stage:     "completed",
+		CreatedAt: "2026-07-05T10:00:00Z",
+		UpdatedAt: "2026-07-05T12:30:00Z",
 		Tasks: []spindle.Task{
 			{Type: "encoding", State: "done"},
+		},
+		Episodes: []spindle.EpisodeStatus{
+			{Key: "main", Episode: 0, FinalPath: "/library/movies/Avatar (2009)/Avatar (2009).mkv"},
 		},
 		Encoding: &spindle.EncodingStatus{
 			OriginalSize:          20 << 30,
@@ -108,8 +128,12 @@ func TestOverviewCompletedItem_OutputResults(t *testing.T) {
 		},
 	})
 
-	sectionOrder(t, got, "Pipeline", "Output")
-	for _, want := range []string{"75% reduction", "3.2x avg", "Passed · 1/1 checks"} {
+	sectionOrder(t, got, "Pipeline", "Output", "created")
+	for _, want := range []string{
+		"75% reduction", "3.2x avg", "Passed · 1/1 checks",
+		"/library/movies/Avatar (2009)/Avatar (2009).mkv",
+		"Elapsed 2h 30m",
+	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("overview missing %q, got:\n%s", want, got)
 		}

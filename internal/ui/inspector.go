@@ -228,6 +228,8 @@ func (m Model) renderInspector() string {
 
 // renderInspectorItemLine renders the persistent item identity line, led by
 // a breadcrumb back to the view Esc returns to (guide drill-down pattern).
+// Segments carry drop ranks so narrow terminals shed whole segments
+// (runtime first, then year, age, id, chips) instead of cropping.
 func (m Model) renderInspectorItemLine(styles Styles) string {
 	crumb := "Queue"
 	if m.returnView == ViewProblems {
@@ -240,27 +242,46 @@ func (m Model) renderInspectorItemLine(styles Styles) string {
 		return prefix + styles.MutedText.Render(fmt.Sprintf("Item #%d (gone)", m.inspectedID))
 	}
 
-	parts := []string{
-		prefix + styles.Text.Bold(true).Render(composeTitle(*item)),
-		m.renderStatusChips(*item, styles),
-		styles.MutedText.Render(fmt.Sprintf("#%d", item.ID)),
+	title := composeTitle(*item)
+	parts := []headerPart{{prefix + styles.Text.Bold(true).Render(title), 0}}
+	// Year and runtime are identity, not metadata. The display title
+	// usually embeds the year already; only fill the gap when it doesn't.
+	if year := metadataYear(item.Metadata); year != "" && !strings.Contains(title, year) {
+		parts = append(parts, headerPart{styles.MutedText.Render("(" + year + ")"), 4})
 	}
+	if item.Source != nil && item.Source.DurationSeconds > 0 {
+		runtime := humanizeDurationLong(time.Duration(item.Source.DurationSeconds) * time.Second)
+		parts = append(parts, headerPart{styles.MutedText.Render(runtime), 5})
+	}
+	parts = append(parts,
+		headerPart{m.renderStatusChips(*item, styles), 1},
+		headerPart{styles.MutedText.Render(fmt.Sprintf("#%d", item.ID)), 2},
+	)
 	if updated := parseTimestamp(item.UpdatedAt); !updated.IsZero() {
-		parts = append(parts, styles.FaintText.Render(humanizeDuration(time.Since(updated))))
+		parts = append(parts, headerPart{styles.FaintText.Render(humanizeDuration(time.Since(updated))), 3})
 	}
-	return strings.Join(parts, styles.Band.Render("  "))
+	return joinHeaderParts(parts, m.width, styles.Band)
 }
 
-// renderInspectorTabBar renders the numbered tab bar.
+// renderInspectorTabBar renders the numbered tab bar. The Problems tab
+// carries a warning glyph when the item actually has problems, so the
+// operator never tabs in blind; the glyph marks presence, the label
+// carries the meaning (guide: color/symbol never stands alone).
 func (m Model) renderInspectorTabBar(styles Styles) string {
+	item := m.getInspectedItem()
 	segments := make([]string, 0, tabCount)
 	for i, label := range inspectorTabLabels {
 		num := fmt.Sprintf("%d", i+1)
+		text := num + " " + label
 		if inspectorTab(i) == m.inspectorTab {
-			segments = append(segments, styles.AccentText.Bold(true).Render(num+" "+label))
+			text = styles.AccentText.Bold(true).Render(text)
 		} else {
-			segments = append(segments, styles.FaintText.Render(num+" "+label))
+			text = styles.FaintText.Render(text)
 		}
+		if inspectorTab(i) == tabProblems && item != nil && needsAttention(*item) {
+			text += styles.WarningText.Render(" ⚠")
+		}
+		segments = append(segments, text)
 	}
 	return strings.Join(segments, styles.RuleText.Render("  │  "))
 }

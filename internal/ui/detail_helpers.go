@@ -131,6 +131,25 @@ func detectMediaType(raw json.RawMessage) string {
 	return ""
 }
 
+// metadataYear extracts the release year from metadata JSON. Spindle
+// stores it as a string; a number is tolerated for safety.
+func metadataYear(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return ""
+	}
+	switch v := obj["year"].(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case float64:
+		return fmt.Sprintf("%.0f", v)
+	}
+	return ""
+}
+
 // summarizeMetadata extracts displayable metadata rows from JSON.
 func summarizeMetadata(raw json.RawMessage) []metadataRow {
 	if len(raw) == 0 {

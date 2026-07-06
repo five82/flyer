@@ -131,6 +131,9 @@ func (t Task) IsFailed() bool  { return t.State == "failed" }
 // ParsedStartedAt returns the task's start time when it parses.
 func (t Task) ParsedStartedAt() time.Time { return parseTime(t.StartedAt) }
 
+// ParsedFinishedAt returns the task's finish time when it parses.
+func (t Task) ParsedFinishedAt() time.Time { return parseTime(t.FinishedAt) }
+
 // Duration returns the task's run duration when both timestamps parse.
 func (t Task) Duration() time.Duration {
 	start, end := parseTime(t.StartedAt), parseTime(t.FinishedAt)

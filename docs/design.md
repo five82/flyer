@@ -18,14 +18,21 @@ layer.
 
 Invariants worth defending:
 
-- The inspector Overview is a **fixed section skeleton** — Meta, Pipeline,
-  Attention, Media, Output, Episodes — in the same order for every item
-  state. Rows appear or disappear by data presence, never by state
+- The inspector Overview is a **fixed section skeleton** — Attention,
+  Pipeline, Media, Output, Episodes, Meta — in the same order for every
+  item state. Rows appear or disappear by data presence, never by state
   branching, so positions stay learnable (tests assert the order).
+  Attention leads: the moment an item needs the operator is exactly when
+  the problem should hold the top of the screen. The accepted cost is
+  that Pipeline shifts down when Attention appears.
+- The inspector Problems tab label carries a `⚠` marker when the item
+  actually has problems — the glyph marks presence, the label carries the
+  meaning — so the operator never tabs into an empty view blind.
 - The NOW band always renders the drive segment (FREE / PAUSED / holder):
   "insert the next disc" is the single most useful signal this UI carries.
-- Header segments and footer hints carry drop-priority ranks; overflowing
-  lines shed whole segments, never crop mid-segment.
+- Header segments, footer hints, and inspector item-band segments carry
+  drop-priority ranks; overflowing lines shed whole segments, never crop
+  mid-segment.
 - Queue selection is item-ID-sticky across refreshes, not row-index-sticky.
 
 ## Layout

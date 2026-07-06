@@ -47,12 +47,12 @@ func (w fieldWriter) fieldStyled(label string, labelStyle lipgloss.Style, value 
 // fixed skeleton -- same sections, same order, for every item state; rows
 // appear or disappear by data presence, never by state branching:
 //
-//	Meta      timestamps
+//	Attention review/error/warning details (only when something needs the operator)
 //	Pipeline  scheduler task board
-//	Attention review/error details (only when something needs the operator)
 //	Media     source, video, audio, crop, encoder config, identification
-//	Output    size estimate/result, encode stats, validation, subtitles
+//	Output    size estimate/result, encode stats, validation, subtitles, path
 //	Episodes  batch summary (full list lives on the Episodes tab)
+//	Meta      absolute timestamps (faint footer; the item band carries the age)
 func (m *Model) renderDetailContent(item spindle.QueueItem, width int) string {
 	if width <= 0 {
 		width = m.width
@@ -61,38 +61,37 @@ func (m *Model) renderDetailContent(item spindle.QueueItem, width int) string {
 	var b strings.Builder
 	w := fieldWriter{b: &b, styles: styles, width: width}
 
-	// Meta line: timestamps (title/chips/id live in the inspector item line).
-	m.renderDetailMeta(&b, item, styles)
+	m.renderAttention(w, item, styles)
 
 	m.writeSection(&b, "Pipeline", styles, width)
 	m.renderTaskBoard(&b, item, styles, width)
 
-	m.renderAttention(w, item, styles)
 	m.renderMedia(w, item, styles)
 	m.renderOutput(w, item, styles)
 	m.renderEpisodeSummarySection(&b, item, styles)
 
-	return b.String()
+	m.renderDetailMeta(&b, item, styles)
+
+	return strings.TrimPrefix(b.String(), "\n")
 }
 
-// renderDetailMeta renders the created/updated timestamp line.
+// renderDetailMeta renders the absolute created/updated timestamps as a
+// faint footer; the item band already carries the live "updated Xm ago".
 func (m *Model) renderDetailMeta(b *strings.Builder, item spindle.QueueItem, styles Styles) {
 	now := time.Now()
 	var parts []string
 
 	if created := parseTimestamp(item.CreatedAt); !created.IsZero() {
-		parts = append(parts,
-			styles.FaintText.Render("created")+" "+styles.Text.Render(formatTimestamp(created, now)))
+		parts = append(parts, "created "+formatTimestamp(created, now))
 	}
 	if updated := parseTimestamp(item.UpdatedAt); !updated.IsZero() {
-		parts = append(parts,
-			styles.FaintText.Render("updated")+" "+styles.Text.Render(formatTimestamp(updated, now))+" "+
-				styles.MutedText.Render("("+humanizeDuration(now.Sub(updated))+")"))
+		parts = append(parts, "updated "+formatTimestamp(updated, now))
 	}
 	if len(parts) == 0 {
 		return
 	}
-	b.WriteString(strings.Join(parts, styles.FaintText.Render(" • ")))
+	b.WriteString("\n")
+	b.WriteString(styles.FaintText.Render(strings.Join(parts, " · ")))
 	b.WriteString("\n")
 }
 
@@ -127,6 +126,11 @@ func (m *Model) renderStatusChips(item spindle.QueueItem, styles Styles) string 
 	// Error badge
 	if strings.TrimSpace(item.ErrorMessage) != "" {
 		chips = append(chips, chip("ERROR", m.theme.Danger, m.theme))
+	}
+
+	// Operator-stopped badge: a deliberate stop must not read as a stall.
+	if item.UserStopped {
+		chips = append(chips, chip("STOPPED", m.theme.Muted, m.theme))
 	}
 
 	// CACHE badge (rip cache hit, reported via the ripping task's message)
@@ -168,6 +172,9 @@ func needsAttention(item spindle.QueueItem) bool {
 		return true
 	}
 	if item.Encoding != nil && item.Encoding.Error != nil {
+		return true
+	}
+	if item.Encoding != nil && strings.TrimSpace(item.Encoding.Warning) != "" {
 		return true
 	}
 	if v := itemValidation(item); v != nil && !v.Passed && len(v.Steps) > 0 {
@@ -213,6 +220,16 @@ func (m *Model) renderAttention(w fieldWriter, item spindle.QueueItem, styles St
 		}
 		w.field("Context", strings.TrimSpace(err.Context), styles.Text)
 		w.field("Suggest", strings.TrimSpace(err.Suggestion), styles.SuccessText)
+	}
+
+	// Non-fatal encoder warning (e.g. a fallback Reel took mid-encode).
+	if item.Encoding != nil {
+		w.fieldStyled("Warning", styles.WarningText, strings.TrimSpace(item.Encoding.Warning), styles.Text)
+	}
+
+	// Failure position for items whose task board can't show it.
+	if stage := strings.TrimSpace(item.FailedAtStage); stage != "" && len(item.Tasks) == 0 {
+		w.fieldStyled("Failed", styles.DangerText, stageDisplay(stage).label, styles.Text)
 	}
 
 	// Leftover file state helps recovery decisions after a failure.
@@ -279,7 +296,9 @@ func (m *Model) renderMedia(w fieldWriter, item spindle.QueueItem, styles Styles
 // for keys already carried by the item line and chips.
 func metadataFieldLabel(key string) string {
 	switch strings.ToLower(strings.TrimSpace(key)) {
-	case "title", "show_title", "media_type":
+	case "title", "show_title", "media_type", "year":
+		// Year is identity, not metadata: it lives in the item band
+		// (or inside the display title itself).
 		return ""
 	case "id":
 		return "TMDB"
@@ -301,6 +320,7 @@ func (m *Model) renderOutput(w fieldWriter, item spindle.QueueItem, styles Style
 	renderEncodeStats(inner, item)
 	renderValidationSummary(inner, item)
 	renderSubtitleSummary(inner, item)
+	renderFinalPath(inner, item)
 	if !strings.EqualFold(item.Stage, "failed") {
 		inner.field("Files", m.describeItemFileStates(item), styles.Text)
 	}
