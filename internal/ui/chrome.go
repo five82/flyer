@@ -38,15 +38,16 @@ func panelInnerWidth(width int) int {
 }
 
 // renderPanel wraps content in a Level 1 single-line bordered panel with the
-// title embedded in the top border (guide elevation model):
+// title embedded in the top border and an optional footer (scroll position,
+// counts) right-aligned in the bottom border (guide elevation model):
 //
 //	┌── Title ────────┐
 //	│ content         │
-//	└─────────────────┘
+//	└──── 3-9 of 40 ──┘
 //
 // Content lines are padded to the interior width; callers size their content
 // to panelInnerWidth(width).
-func renderPanel(title, content string, width int, styles Styles) string {
+func renderPanel(title, content, footer string, width int, styles Styles) string {
 	inner := panelInnerWidth(width)
 
 	var b strings.Builder
@@ -69,7 +70,14 @@ func renderPanel(title, content string, width int, styles Styles) string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(styles.RuleText.Render("└" + strings.Repeat("─", max(width-2, 0)) + "┘"))
+	if footer != "" && lipgloss.Width(footer)+7 <= width {
+		fw := lipgloss.Width(footer)
+		b.WriteString(styles.RuleText.Render("└" + strings.Repeat("─", width-5-fw) + " "))
+		b.WriteString(styles.FaintText.Render(footer))
+		b.WriteString(styles.RuleText.Render(" ─┘"))
+	} else {
+		b.WriteString(styles.RuleText.Render("└" + strings.Repeat("─", max(width-2, 0)) + "┘"))
+	}
 	return b.String()
 }
 

@@ -83,6 +83,7 @@ func (m Model) renderProblems() string {
 	items := m.getTriageItems()
 
 	var lines []string
+	footer := ""
 	if len(items) == 0 {
 		lines = append(lines, styles.SuccessText.Render("No failed or review items"))
 	} else {
@@ -91,13 +92,14 @@ func (m Model) renderProblems() string {
 		for i := scroll; i < end; i++ {
 			lines = append(lines, m.renderTriageRow(items[i], i == m.problemsRow, styles))
 		}
+		footer = scrollRangeFooter(scroll, end, len(items), visibleRows)
 	}
 	for len(lines) < visibleRows {
 		lines = append(lines, "")
 	}
 
 	title := fmt.Sprintf("Problems (%d)", len(items))
-	return renderPanel(title, strings.Join(lines, "\n"), m.width, styles)
+	return renderPanel(title, strings.Join(lines, "\n"), footer, m.width, styles)
 }
 
 // renderTriageRow renders one triage list row: marker, id, title, reason.

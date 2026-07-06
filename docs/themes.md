@@ -4,7 +4,7 @@ Flyer supports multiple color themes defined in `internal/ui/theme.go`. When mod
 
 1. **Use official palettes only** - do not invent colors
 2. **Follow established UI hierarchies** - reference canonical implementations
-3. **Maintain proper contrast** - text colors must read against the terminal's default background
+3. **Maintain proper contrast** - text colors must hold >= 3:1 against both the terminal's default background and the theme's Surface tone (chrome bands); body text ideally 4.5:1
 
 Content renders on the terminal's default background; chrome bands (header,
 NOW band, footer, inspector tab bar) fill with the Surface tone (see
@@ -50,7 +50,7 @@ NOW band, footer, inspector tab bar) fill with the Surface tone (see
 | sumiInk6 | `#54546D` | Rules/borders |
 | fujiWhite | `#DCD7BA` | Primary text (warm parchment) |
 | oldWhite | `#C8C093` | Muted text (7.6:1 contrast) |
-| fujiGray | `#727169` | Dimmest text (2.8:1 contrast) |
+| katanaGray | `#717C7C` | Dimmest text (4.2:1 on bg, 3.3:1 on Surface) |
 | crystalBlue | `#7E9CD8` | Accent |
 | springBlue | `#7FB4CA` | Info |
 | springGreen | `#98BB6C` | Success |

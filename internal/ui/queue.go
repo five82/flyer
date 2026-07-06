@@ -180,6 +180,7 @@ func (m Model) renderQueue() string {
 	cols := computeQueueColumns(items, m.width)
 	lines = append(lines, renderQueueHeaderRow(cols, styles))
 
+	footer := ""
 	if len(items) == 0 {
 		msg := "No items in queue"
 		switch {
@@ -198,6 +199,7 @@ func (m Model) renderQueue() string {
 		for i := scroll; i < end; i++ {
 			lines = append(lines, m.renderQueueRow(items[i], cols, i == m.selectedRow, styles))
 		}
+		footer = scrollRangeFooter(scroll, end, len(items), visibleRows)
 	}
 
 	// Fill the panel to a stable height so the frame does not jump as the
@@ -206,7 +208,16 @@ func (m Model) renderQueue() string {
 		lines = append(lines, "")
 	}
 
-	return renderPanel(m.getQueueTitle(), strings.Join(lines, "\n"), m.width, styles)
+	return renderPanel(m.getQueueTitle(), strings.Join(lines, "\n"), footer, m.width, styles)
+}
+
+// scrollRangeFooter formats a "start-end of total" panel footer, empty when
+// everything fits.
+func scrollRangeFooter(scroll, end, total, visible int) string {
+	if total <= visible {
+		return ""
+	}
+	return fmt.Sprintf("%d-%d of %d", scroll+1, end, total)
 }
 
 // boolToInt converts a bool to 0 or 1.

@@ -179,7 +179,7 @@ func kanagawaTheme() Theme {
 
 		Text:    "#DCD7BA", // fujiWhite (warm parchment)
 		Muted:   "#C8C093", // oldWhite (7.6:1 contrast)
-		Faint:   "#727169", // fujiGray (2.8:1 contrast)
+		Faint:   "#717C7C", // katanaGray (4.2:1 on bg, 3.3:1 on Surface)
 		Accent:  "#7E9CD8", // crystalBlue
 		Success: "#98BB6C", // springGreen
 		Warning: "#E6C384", // carpYellow

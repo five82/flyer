@@ -66,7 +66,9 @@ func (h *HelpModal) View(theme Theme, width, height int) string {
 	title := styles.Text.Bold(true).Render("Keyboard Shortcuts") + "\n" +
 		styles.FaintText.Render(strings.Repeat("─", 30))
 
-	const colWidth = 34
+	// 32-col columns keep the two-column modal within the guide's 72-col
+	// dialog maximum.
+	const colWidth = 32
 	body := strings.Join(blocks, "\n\n")
 	modalWidth := 40
 	vPad := 1

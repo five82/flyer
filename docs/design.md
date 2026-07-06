@@ -46,6 +46,12 @@ The panel fills the vertical slack so the frame is stable while data changes
 `panelInnerWidth(width)` = terminal width - 4 (borders plus one space of
 padding per side).
 
+Scroll visibility: when panel content overflows, the scroll position renders
+right-aligned in the bottom border — a `start-end of total` range for lists,
+a percentage for viewports; log views show the percentage in their status
+line while follow is paused. The inspector's item line leads with a
+breadcrumb (`Queue › ` or `Problems › `) naming the view Esc returns to.
+
 Breakpoints: below 80 columns the queue drops its AGE column and header
 labels abbreviate; at >= 100 columns the queue's percent column gains an
 inline progress bar. 80x24 MUST stay functional — verify layout changes
@@ -73,6 +79,10 @@ scrim).
   every rendered run — including space and punctuation glue — must carry the
   Surface background or the band shows holes; use `styles.Band.Render(...)`
   for glue and `padBand` to extend the band to full width.
+- Text roles must hold >= 3:1 contrast against **both** the theme background
+  and Surface (guide §9.5; body text ideally 4.5:1). When adding or changing
+  a theme color, check it against both backdrops — the band migration caught
+  Kanagawa's original Faint at 2.9:1 on Surface.
 - The selection bar and status chips keep their own fills.
 
 ## Keyboard
@@ -96,3 +106,9 @@ not be required to complete a task.
   single-operator tool.
 - **Menus, action bar, F-keys, mouse:** interactive-app machinery out of
   scope for a read-only TUI.
+- **Entry-field fill characters (§4.4):** bubbles' textinput placeholder
+  already communicates the field's presence; underscore fill would mean
+  fighting the component for no daily-use gain.
+- **User-controllable sort (§11.1 `s`):** the queue's fixed priority order
+  (review, failed, live work, then ID) is the operator's priority order;
+  re-sorting would mostly create ways to hide problems.

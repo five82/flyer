@@ -130,7 +130,7 @@ func (m *Model) updateLogViewport() {
 // renderLogs renders the log view as a Level 1 panel with a status line.
 func (m Model) renderLogs() string {
 	styles := m.theme.Styles()
-	panel := renderPanel(m.getLogTitle(), m.logViewport.View(), m.width, styles)
+	panel := renderPanel(m.getLogTitle(), m.logViewport.View(), "", m.width, styles)
 	return panel + "\n" + m.renderLogStatus(styles)
 }
 
@@ -191,6 +191,11 @@ func (m *Model) renderLogStatus(styles Styles) string {
 
 	var parts []string
 	parts = append(parts, styles.FaintText.Render(status))
+
+	// Scroll position while not following, so "where am I" stays visible.
+	if !m.logState.follow && m.logViewport.TotalLineCount() > m.logViewport.VisibleLineCount() {
+		parts = append(parts, styles.MutedText.Render(fmt.Sprintf("%d%%", int(m.logViewport.ScrollPercent()*100))))
+	}
 
 	// Search input mode
 	if m.logState.searchActive {

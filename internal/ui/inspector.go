@@ -213,24 +213,35 @@ func (m Model) renderInspector() string {
 
 	title := inspectorTabLabels[m.inspectorTab]
 	if m.inspectorTab == tabLogs {
-		b.WriteString(renderPanel(title, m.logViewport.View(), m.width, styles))
+		b.WriteString(renderPanel(title, m.logViewport.View(), "", m.width, styles))
 		b.WriteString("\n")
 		b.WriteString(m.renderLogStatus(styles))
 	} else {
-		b.WriteString(renderPanel(title, m.inspectorViewport.View(), m.width, styles))
+		footer := ""
+		if m.inspectorViewport.TotalLineCount() > m.inspectorViewport.VisibleLineCount() {
+			footer = fmt.Sprintf("%d%%", int(m.inspectorViewport.ScrollPercent()*100))
+		}
+		b.WriteString(renderPanel(title, m.inspectorViewport.View(), footer, m.width, styles))
 	}
 	return b.String()
 }
 
-// renderInspectorItemLine renders the persistent item identity line.
+// renderInspectorItemLine renders the persistent item identity line, led by
+// a breadcrumb back to the view Esc returns to (guide drill-down pattern).
 func (m Model) renderInspectorItemLine(styles Styles) string {
+	crumb := "Queue"
+	if m.returnView == ViewProblems {
+		crumb = "Problems"
+	}
+	prefix := styles.FaintText.Render(crumb + " › ")
+
 	item := m.getInspectedItem()
 	if item == nil {
-		return styles.MutedText.Render(fmt.Sprintf("Item #%d (gone)", m.inspectedID))
+		return prefix + styles.MutedText.Render(fmt.Sprintf("Item #%d (gone)", m.inspectedID))
 	}
 
 	parts := []string{
-		styles.Text.Bold(true).Render(composeTitle(*item)),
+		prefix + styles.Text.Bold(true).Render(composeTitle(*item)),
 		m.renderStatusChips(*item, styles),
 		styles.MutedText.Render(fmt.Sprintf("#%d", item.ID)),
 	}
