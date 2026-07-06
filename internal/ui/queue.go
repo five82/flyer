@@ -119,9 +119,9 @@ type queueColumns struct {
 }
 
 // computeQueueColumns derives column widths from the item set and terminal
-// width. The title column absorbs the slack. Below 80 columns the age
-// column is dropped; at or above the compact threshold the pct column
-// gains an inline progress bar.
+// width; the title column absorbs the slack of the panel interior. Below 80
+// terminal columns the age column is dropped; at or above the compact
+// threshold the pct column gains an inline progress bar.
 func computeQueueColumns(items []spindle.QueueItem, width int) queueColumns {
 	cols := queueColumns{strip: 1, id: 2, stage: 12, pct: 4, ago: 8}
 	if width < 80 {
@@ -146,7 +146,7 @@ func computeQueueColumns(items []spindle.QueueItem, width int) queueColumns {
 	if cols.ago > 0 {
 		fixed += cols.ago + 2
 	}
-	cols.title = max(width-fixed, 10)
+	cols.title = max(panelInnerWidth(width)-fixed, 10)
 	return cols
 }
 
@@ -156,34 +156,29 @@ func (m *Model) queueFilterLineVisible() bool {
 }
 
 // queueVisibleRows returns the item rows available to the queue table.
-// Fixed chrome: header, NOW band, title rule, column header, footer
-// (+ the filter prompt row when shown).
+// Fixed chrome: header band, NOW band, panel borders, column header, footer
+// band (+ the filter prompt row when shown).
 func (m *Model) queueVisibleRows() int {
-	rows := m.height - 5
+	rows := m.height - 6
 	if m.queueFilterLineVisible() {
 		rows--
 	}
 	return max(rows, 1)
 }
 
-// renderQueue renders the dashboard queue table (full width).
+// renderQueue renders the dashboard queue table as a Level 1 panel.
 func (m Model) renderQueue() string {
 	styles := m.theme.Styles()
 	visibleRows := m.queueVisibleRows()
 
-	var b strings.Builder
-	b.WriteString(renderRule(m.getQueueTitle(), m.width, styles))
-	b.WriteString("\n")
-
+	var lines []string
 	if m.queueFilterLineVisible() {
-		b.WriteString(m.renderQueueFilterLine(styles))
-		b.WriteString("\n")
+		lines = append(lines, m.renderQueueFilterLine(styles))
 	}
 
 	items := m.getSortedItems()
 	cols := computeQueueColumns(items, m.width)
-	b.WriteString(renderQueueHeaderRow(cols, styles))
-	b.WriteString("\n")
+	lines = append(lines, renderQueueHeaderRow(cols, styles))
 
 	if len(items) == 0 {
 		msg := "No items in queue"
@@ -193,23 +188,33 @@ func (m Model) renderQueue() string {
 		case m.filterMode != FilterAll:
 			msg = "No items match filter: " + m.filterLabel()
 		}
-		b.WriteString(styles.MutedText.Render(msg))
-		return b.String()
-	}
-
-	// Keep the selection visible within the scroll window. The stored
-	// offset is maintained on key handling; re-derive here defensively so a
-	// resize between keypresses cannot hide the selection.
-	scroll := clampQueueScroll(m.queueScroll, m.selectedRow, visibleRows, len(items))
-
-	end := min(scroll+visibleRows, len(items))
-	for i := scroll; i < end; i++ {
-		b.WriteString(m.renderQueueRow(items[i], cols, i == m.selectedRow, styles))
-		if i < end-1 {
-			b.WriteString("\n")
+		lines = append(lines, styles.MutedText.Render(msg))
+	} else {
+		// Keep the selection visible within the scroll window. The stored
+		// offset is maintained on key handling; re-derive here defensively
+		// so a resize between keypresses cannot hide the selection.
+		scroll := clampQueueScroll(m.queueScroll, m.selectedRow, visibleRows, len(items))
+		end := min(scroll+visibleRows, len(items))
+		for i := scroll; i < end; i++ {
+			lines = append(lines, m.renderQueueRow(items[i], cols, i == m.selectedRow, styles))
 		}
 	}
-	return b.String()
+
+	// Fill the panel to a stable height so the frame does not jump as the
+	// queue grows and shrinks.
+	for len(lines) < visibleRows+1+boolToInt(m.queueFilterLineVisible()) {
+		lines = append(lines, "")
+	}
+
+	return renderPanel(m.getQueueTitle(), strings.Join(lines, "\n"), m.width, styles)
+}
+
+// boolToInt converts a bool to 0 or 1.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // renderQueueFilterLine renders the "/" filter prompt or the applied query.
@@ -300,7 +305,7 @@ func (m Model) renderQueueRow(item spindle.QueueItem, cols queueColumns, selecte
 			fields = append(fields, ago)
 		}
 		line := strings.Join(fields, "  ")
-		if n := m.width - lipgloss.Width(line); n > 0 {
+		if n := panelInnerWidth(m.width) - lipgloss.Width(line); n > 0 {
 			line += strings.Repeat(" ", n)
 		}
 		return styles.Selected.Render(line)

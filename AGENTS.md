@@ -10,7 +10,7 @@ This file provides guidance when working with code in this repository.
 
 ## Project
 
-Flyer is a **read-only TUI** for monitoring Spindle. Single-developer hobby project.
+Flyer is a **read-only TUI** for monitoring Spindle. Single-developer hobby project. The UI visual language follows the Monospace Design TUI standard as mapped in [docs/design.md](docs/design.md).
 
 ## Related Repos
 

@@ -134,7 +134,7 @@ func (m *Model) renderStatusChips(item spindle.QueueItem, styles Styles) string 
 		chips = append(chips, chip("CACHE", m.theme.Info, m.theme))
 	}
 
-	return strings.Join(chips, " ")
+	return strings.Join(chips, styles.Band.Render(" "))
 }
 
 // isRipCacheHit reports whether any task's progress message indicates a rip

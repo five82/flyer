@@ -7,22 +7,27 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
-// renderNowBand renders the live resource occupancy line under the header:
+// renderNowBand renders the live resource occupancy band under the header:
 // which task of which item holds each scheduler resource, with live percent
 // and fps/ETA where available. The drive segment always renders -- "insert
 // the next disc" is the single most useful signal this UI carries.
 func (m Model) renderNowBand() string {
-	styles := m.theme.Styles()
+	styles := m.theme.BandStyles()
+	return padBand(m.nowBandContent(styles), m.width, styles.Band)
+}
+
+// nowBandContent composes the NOW band segments.
+func (m Model) nowBandContent(styles Styles) string {
 	compact := m.width < compactWidthThreshold
 
 	label := styles.FaintText.Bold(true).Render("NOW ")
-	sep := " " + styles.RuleText.Render("|") + " "
+	sep := styles.Band.Render(" ") + styles.RuleText.Render("|") + styles.Band.Render(" ")
 
 	sched := m.snapshot.Status.Scheduler
 	if sched == nil || len(sched.Resources) == 0 {
 		// Old daemon or no scheduler info: fall back to a bare active count.
 		if n := m.countProcessingItems(); n > 0 {
-			return label + styles.MutedText.Render("Active:") + " " +
+			return label + styles.MutedText.Render("Active: ") +
 				styles.AccentText.Render(fmt.Sprintf("%d", n))
 		}
 		return label + styles.FaintText.Render("idle")
@@ -40,7 +45,7 @@ func (m Model) renderNowBand() string {
 				if disc := m.snapshot.Status.Disc; disc != nil && disc.Paused {
 					state, style = "PAUSED", styles.WarningText
 				}
-				parts = append(parts, styles.MutedText.Render(rlabel+":")+" "+
+				parts = append(parts, styles.MutedText.Render(rlabel+": ")+
 					style.Bold(true).Render(state))
 			}
 			continue
@@ -48,12 +53,12 @@ func (m Model) renderNowBand() string {
 
 		for _, h := range res.Holders {
 			info := stageDisplay(h.Task)
-			seg := styles.MutedText.Render(rlabel+":") + " " +
-				styles.Text.Render(fmt.Sprintf("#%d", h.ItemID)) + " " +
+			seg := styles.MutedText.Render(rlabel+": ") +
+				styles.Text.Render(fmt.Sprintf("#%d ", h.ItemID)) +
 				roleStyle(info.role, styles).Render(strings.ToLower(info.label))
 			if !compact {
 				for _, extra := range m.holderExtras(h) {
-					seg += " " + styles.AccentText.Render(extra)
+					seg += styles.AccentText.Render(" " + extra)
 				}
 			}
 			parts = append(parts, seg)

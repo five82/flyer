@@ -25,9 +25,9 @@ type headerPart struct {
 	rank int
 }
 
-// renderHeader renders the top status line.
+// renderHeader renders the top status band (Surface-filled).
 func (m Model) renderHeader() string {
-	styles := m.theme.Styles()
+	styles := m.theme.BandStyles()
 
 	if !m.snapshot.HasStatus || m.snapshot.IsOffline() {
 		return m.renderConnectingHeader(styles)
@@ -48,7 +48,7 @@ func (m Model) renderHeader() string {
 
 	// Queue count
 	parts = append(parts, headerPart{
-		styles.MutedText.Render("Queue:") + " " + styles.Text.Render(fmt.Sprintf("%d", len(m.snapshot.Queue))),
+		styles.MutedText.Render("Queue: ") + styles.Text.Render(fmt.Sprintf("%d", len(m.snapshot.Queue))),
 		3,
 	})
 
@@ -72,47 +72,47 @@ func (m Model) renderHeader() string {
 		parts = append(parts, headerPart{p, 1})
 	}
 
-	return joinHeaderParts(parts, m.width)
+	return padBand(joinHeaderParts(parts, m.width, styles.Band), m.width, styles.Band)
 }
 
-// joinHeaderParts joins parts with two-space separators, dropping the
-// highest-rank parts until the line fits the width.
-func joinHeaderParts(parts []headerPart, width int) string {
-	const sep = "  "
-	for rank := 4; rank >= 1; rank-- {
-		if headerPartsWidth(parts, sep) <= width {
-			break
-		}
-		kept := parts[:0]
-		for _, p := range parts {
-			if p.rank < rank {
-				kept = append(kept, p)
+// joinHeaderParts joins parts with two-space separators rendered in the fill
+// style. When the line overflows, parts are dropped one at a time — highest
+// rank first, rightmost within a rank — until it fits. Rank 0 never drops.
+func joinHeaderParts(parts []headerPart, width int, fill lipgloss.Style) string {
+	for headerPartsWidth(parts) > width {
+		drop := -1
+		for i, p := range parts {
+			if p.rank > 0 && (drop == -1 || p.rank >= parts[drop].rank) {
+				drop = i
 			}
 		}
-		parts = kept
+		if drop == -1 {
+			break
+		}
+		parts = append(parts[:drop], parts[drop+1:]...)
 	}
 
 	texts := make([]string, len(parts))
 	for i, p := range parts {
 		texts[i] = p.text
 	}
-	return strings.Join(texts, sep)
+	return strings.Join(texts, fill.Render("  "))
 }
 
-func headerPartsWidth(parts []headerPart, sep string) int {
+func headerPartsWidth(parts []headerPart) int {
 	w := 0
 	for i, p := range parts {
 		if i > 0 {
-			w += len(sep)
+			w += 2
 		}
 		w += lipgloss.Width(p.text)
 	}
 	return w
 }
 
-// renderConnectingHeader shows the connecting/error state.
+// renderConnectingHeader shows the connecting/error state as a band.
 func (m Model) renderConnectingHeader(styles Styles) string {
-	const sep = "  "
+	sep := styles.Band.Render("  ")
 
 	if m.snapshot.LastError != nil {
 		last := "soon"
@@ -133,15 +133,16 @@ func (m Model) renderConnectingHeader(styles Styles) string {
 			if logPath := m.config.DaemonLogPath(); logPath != "" {
 				displayPath := truncateMiddle(logPath, 50)
 				parts = append(parts,
-					styles.FaintText.Render("logs")+" "+styles.MutedText.Render(displayPath))
+					styles.FaintText.Render("logs ")+styles.MutedText.Render(displayPath))
 			}
 		}
 
-		return strings.Join(parts, sep)
+		return padBand(strings.Join(parts, sep), m.width, styles.Band)
 	}
 
-	return styles.Logo.Render("flyer") + sep +
-		styles.WarningText.Bold(true).Render(m.spinnerGlyph()+" Connecting to Spindle...")
+	return padBand(styles.Logo.Render("flyer")+sep+
+		styles.WarningText.Bold(true).Render(m.spinnerGlyph()+" Connecting to Spindle..."),
+		m.width, styles.Band)
 }
 
 // countProcessingItems returns the number of items with running tasks.
@@ -178,9 +179,9 @@ func (m Model) buildProblemCountsPart(compact bool, failed, review int, styles S
 		reviewLabel = "R:"
 	}
 
-	return styles.MutedText.Render(failedLabel) + " " + failedStyle.Render(fmt.Sprintf("%d", failed)) +
-		"  " + styles.FaintText.Render("•") + "  " +
-		styles.MutedText.Render(reviewLabel) + " " + reviewStyle.Render(fmt.Sprintf("%d", review))
+	return styles.MutedText.Render(failedLabel+" ") + failedStyle.Render(fmt.Sprintf("%d", failed)) +
+		styles.FaintText.Render("  •  ") +
+		styles.MutedText.Render(reviewLabel+" ") + reviewStyle.Render(fmt.Sprintf("%d", review))
 }
 
 // buildErrorParts builds error indicator parts for the header.
@@ -190,18 +191,18 @@ func (m Model) buildErrorParts(compact bool, styles Styles) []string {
 	if workflowErr := strings.TrimSpace(m.snapshot.Status.Workflow.LastError); workflowErr != "" {
 		errText := truncate(workflowErr, maxLen(compact, 80, 40))
 		parts = append(parts,
-			styles.DangerText.Bold(true).Render("WORKFLOW")+" "+styles.DangerText.Render(errText))
+			styles.DangerText.Bold(true).Render("WORKFLOW")+styles.DangerText.Render(" "+errText))
 	}
 
 	if m.snapshot.LastError != nil {
 		errText := truncate(fmt.Sprintf("%v", m.snapshot.LastError), maxLen(compact, 80, 40))
 		parts = append(parts,
-			styles.DangerText.Bold(true).Render("ERROR")+" "+styles.DangerText.Render(errText))
+			styles.DangerText.Bold(true).Render("ERROR")+styles.DangerText.Render(" "+errText))
 	}
 
 	if m.errorMsg != "" {
 		parts = append(parts,
-			styles.WarningText.Bold(true).Render("!")+" "+styles.WarningText.Render(m.errorMsg))
+			styles.WarningText.Bold(true).Render("!")+styles.WarningText.Render(" "+m.errorMsg))
 	}
 
 	return parts
@@ -269,7 +270,7 @@ func (m Model) formatHealthWarning(compact bool, styles Styles) string {
 	}
 	detail = truncate(detail, maxLen(compact, 80, 40))
 
-	return styles.DangerText.Bold(true).Render("HEALTH") + " " + styles.DangerText.Render(detail)
+	return styles.DangerText.Bold(true).Render("HEALTH") + styles.DangerText.Render(" "+detail)
 }
 
 // classifyConnectionError returns a short description of the connection error.
@@ -291,11 +292,11 @@ func classifyConnectionError(err error) string {
 }
 
 // renderCommandBar renders the footer key strip: context-sensitive key
-// hints for the focused surface, pinned to the bottom row. Hints carry drop
-// ranks so lower-priority ones vanish first on narrow terminals instead of
-// being cropped mid-hint.
+// hints for the focused surface, pinned to the bottom row as a
+// Surface-filled band. Hints carry drop ranks so lower-priority ones vanish
+// first on narrow terminals instead of being cropped mid-hint.
 func (m Model) renderCommandBar() string {
-	styles := m.theme.Styles()
+	styles := m.theme.BandStyles()
 
 	type cmd struct {
 		key, desc string
@@ -364,7 +365,7 @@ func (m Model) renderCommandBar() string {
 	parts := make([]headerPart, 0, len(commands)+2)
 	for _, c := range commands {
 		parts = append(parts, headerPart{
-			styles.AccentText.Render(c.key) + ":" + styles.MutedText.Render(c.desc),
+			styles.AccentText.Render(c.key) + styles.MutedText.Render(":"+c.desc),
 			c.rank,
 		})
 	}
@@ -378,11 +379,11 @@ func (m Model) renderCommandBar() string {
 
 	// Add theme indicator
 	parts = append(parts, headerPart{
-		styles.AccentText.Render("T") + ":" + styles.FaintText.Render(m.theme.Name),
+		styles.AccentText.Render("T") + styles.FaintText.Render(":"+m.theme.Name),
 		4,
 	})
 
-	return joinHeaderParts(parts, m.width)
+	return padBand(joinHeaderParts(parts, m.width, styles.Band), m.width, styles.Band)
 }
 
 // maxLen returns compactLen if compact is true, otherwise normalLen.

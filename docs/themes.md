@@ -6,14 +6,16 @@ Flyer supports multiple color themes defined in `internal/ui/theme.go`. When mod
 2. **Follow established UI hierarchies** - reference canonical implementations
 3. **Maintain proper contrast** - text colors must read against the terminal's default background
 
-Content renders on the terminal's default background (no filled panels). Each
-theme supplies:
+Content renders on the terminal's default background; chrome bands (header,
+NOW band, footer, inspector tab bar) fill with the Surface tone (see
+[design.md](design.md)). Each theme supplies:
 
 | Theme role | Usage |
 |------------|-------|
 | Background | Approximates the terminal background; chip text color against colored fills |
+| Surface | Chrome band fill, one elevation step above the terminal background |
 | SelectionBg / SelectionText | The selected-row bar |
-| Border | Rules and structural lines |
+| Border | Rules, panel borders, structural lines |
 | Text / Muted / Faint | Text hierarchy |
 | Accent / Success / Warning / Danger / Info | Semantic color roles |
 
@@ -24,6 +26,7 @@ theme supplies:
 | Role | Hex | Usage |
 |------|-----|-------|
 | bg0 | `#131a24` | Background (chip text) |
+| bg2 | `#212e3f` | Surface (chrome bands) |
 | sel0 | `#2b3b51` | Selection bar |
 | bg4 | `#39506d` | Rules/borders |
 | fg1 | `#cdcecf` | Primary text (cool gray) |
@@ -42,6 +45,7 @@ theme supplies:
 | Role | Hex | Usage |
 |------|-----|-------|
 | sumiInk0 | `#16161D` | Background (chip text) |
+| sumiInk4 | `#2A2A37` | Surface (chrome bands) |
 | waveBlue1 | `#2D4F67` | Selection bar |
 | sumiInk6 | `#54546D` | Rules/borders |
 | fujiWhite | `#DCD7BA` | Primary text (warm parchment) |
@@ -60,6 +64,7 @@ theme supplies:
 | Role | Tailwind | Hex | Usage |
 |------|----------|-----|-------|
 | Background | slate-950 | `#020617` | Background (chip text) |
+| Surface | slate-800 | `#1e293b` | Surface (chrome bands) |
 | SelectionBg | sky-600 | `#0284c7` | Selection bar |
 | Border | slate-700 | `#334155` | Rules/borders |
 | Text | slate-100 | `#f1f5f9` | Primary text |

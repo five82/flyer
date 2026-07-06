@@ -155,16 +155,23 @@ func (m *Model) toggleInspectedEpisodes() {
 	m.updateInspectorViewport()
 }
 
+// inspectorViewportHeight returns the panel interior height for inspector
+// content. Chrome: header band, item band, tab band, panel borders, footer
+// (+ log status line on the Logs tab).
+func (m *Model) inspectorViewportHeight() int {
+	return max(m.height-6, 1)
+}
+
 // initInspectorViewport initializes the inspector viewport.
 func (m *Model) initInspectorViewport() {
 	m.inspectorViewport = viewport.New(
-		viewport.WithWidth(m.width),
-		viewport.WithHeight(max(m.height-4, 1)),
+		viewport.WithWidth(panelInnerWidth(m.width)),
+		viewport.WithHeight(m.inspectorViewportHeight()),
 	)
 }
 
 // updateInspectorViewport refreshes the inspector viewport content for the
-// active tab. Chrome around it: header, command bar, item line, tab bar.
+// active tab.
 func (m *Model) updateInspectorViewport() {
 	if !m.inspecting {
 		return
@@ -172,8 +179,9 @@ func (m *Model) updateInspectorViewport() {
 	if m.inspectorViewport.Width() == 0 {
 		m.initInspectorViewport()
 	}
-	m.inspectorViewport.SetWidth(m.width)
-	m.inspectorViewport.SetHeight(max(m.height-4, 1))
+	inner := panelInnerWidth(m.width)
+	m.inspectorViewport.SetWidth(inner)
+	m.inspectorViewport.SetHeight(m.inspectorViewportHeight())
 
 	item := m.getInspectedItem()
 	if item == nil {
@@ -187,26 +195,29 @@ func (m *Model) updateInspectorViewport() {
 	case tabProblems:
 		m.inspectorViewport.SetContent(m.renderItemProblems(item))
 	default:
-		m.inspectorViewport.SetContent(m.renderDetailContent(*item, m.width))
+		m.inspectorViewport.SetContent(m.renderDetailContent(*item, inner))
 	}
 }
 
-// renderInspector renders the full inspector: item line, tab bar, content.
+// renderInspector renders the full inspector: item band, tab band, and the
+// active tab's content in a Level 1 panel.
 func (m Model) renderInspector() string {
 	styles := m.theme.Styles()
+	band := m.theme.BandStyles()
 
 	var b strings.Builder
-	b.WriteString(m.renderInspectorItemLine(styles))
+	b.WriteString(padBand(m.renderInspectorItemLine(band), m.width, band.Band))
 	b.WriteString("\n")
-	b.WriteString(m.renderInspectorTabBar(styles))
+	b.WriteString(padBand(m.renderInspectorTabBar(band), m.width, band.Band))
 	b.WriteString("\n")
 
+	title := inspectorTabLabels[m.inspectorTab]
 	if m.inspectorTab == tabLogs {
-		b.WriteString(m.logViewport.View())
+		b.WriteString(renderPanel(title, m.logViewport.View(), m.width, styles))
 		b.WriteString("\n")
 		b.WriteString(m.renderLogStatus(styles))
 	} else {
-		b.WriteString(m.inspectorViewport.View())
+		b.WriteString(renderPanel(title, m.inspectorViewport.View(), m.width, styles))
 	}
 	return b.String()
 }
@@ -226,7 +237,7 @@ func (m Model) renderInspectorItemLine(styles Styles) string {
 	if updated := parseTimestamp(item.UpdatedAt); !updated.IsZero() {
 		parts = append(parts, styles.FaintText.Render(humanizeDuration(time.Since(updated))))
 	}
-	return strings.Join(parts, "  ")
+	return strings.Join(parts, styles.Band.Render("  "))
 }
 
 // renderInspectorTabBar renders the numbered tab bar.

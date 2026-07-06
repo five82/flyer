@@ -5,13 +5,18 @@ import (
 )
 
 // Theme defines colors for the UI. Content renders on the terminal's default
-// background; the only filled regions are the selection bar and status chips.
+// background; chrome bands (header, NOW band, footer, tab bar) fill with the
+// Surface tone, and the selection bar and status chips carry their own fills.
 type Theme struct {
 	Name string
 
 	// Background approximates the terminal background; chips use it as
 	// their text color against colored fills.
 	Background string
+
+	// Surface fills chrome bands, one elevation step above the terminal
+	// background (guide two-tone background model).
+	Surface string
 
 	// Selection bar
 	SelectionBg   string
@@ -70,7 +75,25 @@ func (t Theme) Styles() Styles {
 		Selected: lipgloss.NewStyle().
 			Background(lipgloss.Color(t.SelectionBg)).
 			Foreground(lipgloss.Color(t.SelectionText)),
+
+		Band: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(t.Text)),
 	}
+}
+
+// BandStyles returns the theme styles painted onto the Surface background,
+// for chrome bands. Band renders separator/padding cells of the fill.
+func (t Theme) BandStyles() Styles {
+	s := t.Styles()
+	bg := lipgloss.Color(t.Surface)
+	for _, style := range []*lipgloss.Style{
+		&s.Text, &s.MutedText, &s.FaintText, &s.AccentText,
+		&s.SuccessText, &s.WarningText, &s.DangerText, &s.InfoText,
+		&s.RuleText, &s.Logo, &s.Band,
+	} {
+		*style = style.Background(bg)
+	}
+	return s
 }
 
 // Styles contains pre-built Lipgloss styles for the theme.
@@ -86,6 +109,7 @@ type Styles struct {
 	RuleText    lipgloss.Style
 	Logo        lipgloss.Style
 	Selected    lipgloss.Style
+	Band        lipgloss.Style
 }
 
 // Theme definitions
@@ -122,6 +146,7 @@ func nightfoxTheme() Theme {
 		Name: "Nightfox",
 
 		Background: "#131a24", // bg0
+		Surface:    "#212e3f", // bg2
 
 		SelectionBg:   "#2b3b51", // sel0
 		SelectionText: "#cdcecf", // fg1
@@ -145,6 +170,7 @@ func kanagawaTheme() Theme {
 		Name: "Kanagawa",
 
 		Background: "#16161D", // sumiInk0
+		Surface:    "#2A2A37", // sumiInk4
 
 		SelectionBg:   "#2D4F67", // waveBlue1
 		SelectionText: "#DCD7BA", // fujiWhite
@@ -168,6 +194,7 @@ func slateTheme() Theme {
 		Name: "Slate",
 
 		Background: "#020617", // slate-950
+		Surface:    "#1e293b", // slate-800
 
 		SelectionBg:   "#0284c7", // sky-600
 		SelectionText: "#f8fafc", // slate-50

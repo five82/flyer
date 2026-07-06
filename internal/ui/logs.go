@@ -82,21 +82,20 @@ func (m *Model) initLogState() {
 	m.logState.searchInput = ti
 }
 
-// logViewportHeight returns the height left for log lines. The daemon view
-// surrounds the viewport with header, command bar, title rule, and status
-// line; the inspector logs tab swaps the rule for its item and tab lines,
-// costing one extra row.
+// logViewportHeight returns the panel interior height for log lines. The
+// daemon view surrounds the panel with header band, status line, and footer
+// band; the inspector logs tab adds its item and tab bands.
 func (m *Model) logViewportHeight() int {
 	if m.inspecting {
-		return max(m.height-5, 1)
+		return max(m.height-7, 1)
 	}
-	return max(m.height-4, 1)
+	return max(m.height-5, 1)
 }
 
 // initLogViewport initializes the log viewport.
 func (m *Model) initLogViewport() {
 	m.logViewport = viewport.New(
-		viewport.WithWidth(m.width),
+		viewport.WithWidth(panelInnerWidth(m.width)),
 		viewport.WithHeight(m.logViewportHeight()),
 	)
 	m.logViewport.Style = lipgloss.NewStyle()
@@ -108,7 +107,7 @@ func (m *Model) updateLogViewport() {
 		m.initLogViewport()
 	}
 
-	m.logViewport.SetWidth(m.width)
+	m.logViewport.SetWidth(panelInnerWidth(m.width))
 	m.logViewport.SetHeight(m.logViewportHeight())
 	m.logViewport.Style = lipgloss.NewStyle()
 
@@ -128,12 +127,11 @@ func (m *Model) updateLogViewport() {
 	}
 }
 
-// renderLogs renders the log view.
+// renderLogs renders the log view as a Level 1 panel with a status line.
 func (m Model) renderLogs() string {
 	styles := m.theme.Styles()
-	rule := renderRule(m.getLogTitle(), m.width, styles)
-	status := m.renderLogStatus(styles)
-	return rule + "\n" + m.logViewport.View() + "\n" + status
+	panel := renderPanel(m.getLogTitle(), m.logViewport.View(), m.width, styles)
+	return panel + "\n" + m.renderLogStatus(styles)
 }
 
 // getLogTitle returns the plain text title for the log view. This view now
@@ -936,9 +934,10 @@ func (m Model) renderLogFilters() string {
 	// View().
 	content := b.String()
 
+	// Level 4 modal: double-line border per the guide's elevation model.
 	modalWidth := 50
 	modal := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		Border(lipgloss.DoubleBorder()).
 		BorderForeground(lipgloss.Color(m.theme.Accent)).
 		Padding(1, 2).
 		Width(modalWidth)

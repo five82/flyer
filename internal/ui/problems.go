@@ -67,32 +67,37 @@ func (m *Model) clampProblemsRow() {
 	}
 }
 
-// renderProblems renders the global triage list: every failed/review item
-// with its lead reason. Enter drills into the item's Problems tab.
+// problemsVisibleRows returns the item rows available to the triage panel.
+// Fixed chrome: header band, panel borders, footer band.
+func (m *Model) problemsVisibleRows() int {
+	return max(m.height-4, 1)
+}
+
+// renderProblems renders the global triage list as a Level 1 panel: every
+// failed/review item with its lead reason. Enter drills into the item's
+// Problems tab.
 func (m Model) renderProblems() string {
 	styles := m.theme.Styles()
-	visibleRows := max(m.height-3, 1) // header + cmdbar + rule
+	visibleRows := m.problemsVisibleRows()
 
 	items := m.getTriageItems()
 
-	var b strings.Builder
-	b.WriteString(renderRule(fmt.Sprintf("Problems (%d)", len(items)), m.width, styles))
-	b.WriteString("\n")
-
+	var lines []string
 	if len(items) == 0 {
-		b.WriteString(styles.SuccessText.Render("No failed or review items"))
-		return b.String()
-	}
-
-	scroll := clampQueueScroll(m.problemsScroll, m.problemsRow, visibleRows, len(items))
-	end := min(scroll+visibleRows, len(items))
-	for i := scroll; i < end; i++ {
-		b.WriteString(m.renderTriageRow(items[i], i == m.problemsRow, styles))
-		if i < end-1 {
-			b.WriteString("\n")
+		lines = append(lines, styles.SuccessText.Render("No failed or review items"))
+	} else {
+		scroll := clampQueueScroll(m.problemsScroll, m.problemsRow, visibleRows, len(items))
+		end := min(scroll+visibleRows, len(items))
+		for i := scroll; i < end; i++ {
+			lines = append(lines, m.renderTriageRow(items[i], i == m.problemsRow, styles))
 		}
 	}
-	return b.String()
+	for len(lines) < visibleRows {
+		lines = append(lines, "")
+	}
+
+	title := fmt.Sprintf("Problems (%d)", len(items))
+	return renderPanel(title, strings.Join(lines, "\n"), m.width, styles)
 }
 
 // renderTriageRow renders one triage list row: marker, id, title, reason.
@@ -102,14 +107,15 @@ func (m Model) renderTriageRow(item spindle.QueueItem, selected bool, styles Sty
 		marker, markerStyle = "✗", styles.DangerText
 	}
 
+	inner := panelInnerWidth(m.width)
 	idStr := fmt.Sprintf("#%d", item.ID)
 	title := truncate(composeTitle(item), 40)
-	reasonWidth := max(m.width-(2+len(idStr)+1+lipgloss.Width(title)+2), 10)
+	reasonWidth := max(inner-(2+len(idStr)+1+lipgloss.Width(title)+2), 10)
 	reason := truncate(triageLeadReason(item), reasonWidth)
 
 	if selected {
 		line := fmt.Sprintf("%s %s %s  %s", marker, idStr, title, reason)
-		if n := m.width - lipgloss.Width(line); n > 0 {
+		if n := inner - lipgloss.Width(line); n > 0 {
 			line += strings.Repeat(" ", n)
 		}
 		return m.theme.Styles().Selected.Render(line)
@@ -178,7 +184,7 @@ func (m Model) handleProblemsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Bottom):
 		m.problemsRow = len(items) - 1
 	}
-	m.problemsScroll = clampQueueScroll(m.problemsScroll, m.problemsRow, max(m.height-3, 1), len(items))
+	m.problemsScroll = clampQueueScroll(m.problemsScroll, m.problemsRow, m.problemsVisibleRows(), len(items))
 
 	return m, nil
 }

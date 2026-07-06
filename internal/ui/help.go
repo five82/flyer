@@ -97,8 +97,9 @@ func (h *HelpModal) View(theme Theme, width, height int) string {
 		vPad = 0
 	}
 
+	// Level 4 modal: double-line border per the guide's elevation model.
 	modal := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		Border(lipgloss.DoubleBorder()).
 		BorderForeground(lipgloss.Color(theme.Accent)).
 		Padding(vPad, 2).
 		Width(modalWidth)

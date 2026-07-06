@@ -22,6 +22,57 @@ func renderRule(title string, width int, styles Styles) string {
 	return line
 }
 
+// padBand pads a chrome band line with background-filled cells to the full
+// terminal width, so the band reads as one solid strip.
+func padBand(line string, width int, band lipgloss.Style) string {
+	if n := width - lipgloss.Width(line); n > 0 {
+		line += band.Render(strings.Repeat(" ", n))
+	}
+	return line
+}
+
+// panelInnerWidth returns the content width inside a Level 1 panel:
+// terminal width minus the border columns and one space of padding per side.
+func panelInnerWidth(width int) int {
+	return max(width-4, 1)
+}
+
+// renderPanel wraps content in a Level 1 single-line bordered panel with the
+// title embedded in the top border (guide elevation model):
+//
+//	┌── Title ────────┐
+//	│ content         │
+//	└─────────────────┘
+//
+// Content lines are padded to the interior width; callers size their content
+// to panelInnerWidth(width).
+func renderPanel(title, content string, width int, styles Styles) string {
+	inner := panelInnerWidth(width)
+
+	var b strings.Builder
+	b.WriteString(styles.RuleText.Render("┌── "))
+	dashes := width - 5
+	if title != "" {
+		b.WriteString(styles.Text.Bold(true).Render(title))
+		b.WriteString(styles.RuleText.Render(" "))
+		dashes = width - 6 - lipgloss.Width(title)
+	}
+	b.WriteString(styles.RuleText.Render(strings.Repeat("─", max(dashes, 0)) + "┐"))
+	b.WriteString("\n")
+
+	edge := styles.RuleText.Render("│")
+	for _, line := range strings.Split(content, "\n") {
+		if n := inner - lipgloss.Width(line); n > 0 {
+			line += strings.Repeat(" ", n)
+		}
+		b.WriteString(edge + " " + line + " " + edge)
+		b.WriteString("\n")
+	}
+
+	b.WriteString(styles.RuleText.Render("└" + strings.Repeat("─", max(width-2, 0)) + "┘"))
+	return b.String()
+}
+
 // chip renders a status badge: theme background color text on a colored fill.
 func chip(label, colorHex string, theme Theme) string {
 	return lipgloss.NewStyle().
