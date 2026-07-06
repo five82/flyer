@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/five82/flyer/internal/config"
 	"github.com/five82/flyer/internal/prefs"
@@ -61,6 +62,10 @@ type Options struct {
 	PollTick  time.Duration
 	ThemeName string
 	PrefsPath string
+
+	// Refresh forces an immediate poll of the Spindle API, updating the
+	// store. Used by the manual refresh key.
+	Refresh func() error
 }
 
 // Model is the root application state for Bubble Tea.
@@ -72,6 +77,7 @@ type Model struct {
 	config    *config.Config
 	prefsPath string
 	pollTick  time.Duration
+	refreshFn func() error
 
 	// Key bindings
 	keys keyMap
@@ -91,6 +97,15 @@ type Model struct {
 	selectedRow int
 	queueScroll int
 	filterMode  QueueFilter
+
+	// Queue text filter ("/" in the queue view)
+	queueFilterActive bool // input is capturing keys
+	queueFilterQuery  string
+	queueFilterInput  textinput.Model
+
+	// Spinner shown while connecting/offline
+	spinnerFrame int
+	spinnerOn    bool
 
 	// Inspector state (full-screen single-item view)
 	inspecting        bool
@@ -144,16 +159,24 @@ func New(opts Options) Model {
 		prefsPath = prefs.DefaultPath()
 	}
 
+	filterInput := textinput.New()
+	filterInput.Prompt = "" // the filter line renders its own "/" prefix
+	filterInput.Placeholder = "title or #id"
+	filterInput.CharLimit = 80
+
 	return Model{
-		ctx:         ctx,
-		client:      opts.Client,
-		store:       opts.Store,
-		config:      opts.Config,
-		prefsPath:   prefsPath,
-		pollTick:    pollTick,
-		keys:        DefaultKeyMap(),
-		theme:       GetTheme(themeName),
-		currentView: ViewQueue,
+		ctx:              ctx,
+		client:           opts.Client,
+		store:            opts.Store,
+		config:           opts.Config,
+		prefsPath:        prefsPath,
+		pollTick:         pollTick,
+		refreshFn:        opts.Refresh,
+		keys:             DefaultKeyMap(),
+		theme:            GetTheme(themeName),
+		currentView:      ViewQueue,
+		queueFilterInput: filterInput,
+		spinnerOn:        true,
 		detailState: detailState{
 			episodeCollapsed: make(map[int64]bool),
 		},
@@ -164,6 +187,7 @@ func New(opts Options) Model {
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		tickCmd(m.pollTick),
+		spinnerTickCmd(),
 	}
 	// Fetch snapshot immediately on start
 	if m.store != nil {
@@ -196,12 +220,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		return m.handleTick()
 
+	case spinnerTickMsg:
+		if m.spinnerActive() {
+			m.spinnerFrame++
+			return m, spinnerTickCmd()
+		}
+		m.spinnerOn = false
+		return m, nil
+
 	case snapshotMsg:
 		m.snapshot = state.Snapshot(msg)
 		m.lastUpdated = time.Now()
 		m.updateQueueTable()
 		m.clampProblemsRow()
 		m.updateInspectorViewport()
+		// Restart the spinner if the daemon went offline while it was idle.
+		if m.spinnerActive() && !m.spinnerOn {
+			m.spinnerOn = true
+			return m, spinnerTickCmd()
+		}
 		return m, nil
 
 	case logBatchMsg:
@@ -229,22 +266,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View implements tea.Model.
 func (m Model) View() tea.View {
 	var v tea.View
+	styles := m.theme.Styles()
+
 	if !m.ready {
-		v = tea.NewView("Loading...")
+		v = tea.NewView(styles.AccentText.Render(m.spinnerGlyph()) + " " +
+			styles.Text.Render("Starting flyer..."))
 		v.AltScreen = true
 		return v
 	}
 
-	// Show modal overlay if active
+	// Modal overlays render centered over the dimmed main view (scrim).
 	if m.activeModal != nil {
-		v = tea.NewView(m.activeModal.View(m.theme, m.width, m.height))
+		v = tea.NewView(overlayCenter(m.renderMain(), m.activeModal.View(m.theme, m.width, m.height), m.width, m.height, styles))
 		v.AltScreen = true
 		return v
 	}
 
-	// Show log filters modal if active
 	if m.showLogFilters {
-		v = tea.NewView(m.renderLogFilters())
+		v = tea.NewView(overlayCenter(m.renderMain(), m.renderLogFilters(), m.width, m.height, styles))
 		v.AltScreen = true
 		return v
 	}
@@ -272,9 +311,14 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleLogFiltersKey(msg)
 	}
 
-	// Log search input captures keys before global bindings ('q', 'e', ...).
+	// Log search input captures keys before global bindings ('q', 'd', ...).
 	if m.logSearchCapturing() {
 		return m.handleLogsKey(msg)
+	}
+
+	// Queue filter input captures keys the same way.
+	if m.queueFilterCapturing() {
+		return m.handleQueueFilterKey(msg)
 	}
 
 	// Global keys
@@ -283,8 +327,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case key.Matches(msg, m.keys.Help):
-		m.activeModal = NewHelpModal(m.keys)
+		m.activeModal = NewHelpModal(m.keys, m.helpContext())
 		return m, nil
+
+	case key.Matches(msg, m.keys.Refresh):
+		return m, m.manualRefreshCmds()
 
 	case key.Matches(msg, m.keys.CycleTheme):
 		m.theme = GetTheme(NextTheme(m.theme.Name))
@@ -390,6 +437,18 @@ func (m Model) handleQueueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.updateQueueTable()
 		return m, nil
 
+	case key.Matches(msg, m.keys.Filter):
+		m.queueFilterActive = true
+		m.queueFilterInput.SetValue(m.queueFilterQuery)
+		m.queueFilterInput.Focus()
+		return m, nil
+
+	case key.Matches(msg, m.keys.Escape):
+		if m.queueFilterQuery != "" {
+			m.clearQueueFilter()
+		}
+		return m, nil
+
 	case key.Matches(msg, m.keys.Inspect):
 		return m.openInspector(tabOverview)
 
@@ -471,7 +530,8 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// renderMain renders the full UI.
+// renderMain renders the full UI: header, content, and the command bar as
+// a footer key strip pinned to the bottom row of the terminal.
 func (m Model) renderMain() string {
 	var b strings.Builder
 
@@ -485,14 +545,14 @@ func (m Model) renderMain() string {
 		b.WriteString("\n")
 	}
 
-	// Command bar
-	b.WriteString(m.renderCommandBar())
-	b.WriteString("\n")
-
 	// Main content
 	b.WriteString(m.renderContent())
 
-	return b.String()
+	body := b.String()
+	if pad := m.height - 1 - lipgloss.Height(body); pad > 0 {
+		body += strings.Repeat("\n", pad)
+	}
+	return body + "\n" + m.renderCommandBar()
 }
 
 // renderContent renders the main content area based on current view.
@@ -512,9 +572,107 @@ func (m Model) renderContent() string {
 	}
 }
 
+// queueFilterCapturing reports whether the queue filter input is consuming keys.
+func (m Model) queueFilterCapturing() bool {
+	return m.queueFilterActive && m.currentView == ViewQueue && !m.inspecting
+}
+
+// handleQueueFilterKey handles keys while the queue filter input is active.
+// The filter applies live as the query is typed.
+func (m Model) handleQueueFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.Confirm):
+		m.queueFilterQuery = strings.TrimSpace(m.queueFilterInput.Value())
+		m.queueFilterActive = false
+		m.queueFilterInput.Blur()
+		m.updateQueueTable()
+		return m, nil
+
+	case key.Matches(msg, m.keys.Escape):
+		m.clearQueueFilter()
+		return m, nil
+	}
+
+	var cmd tea.Cmd
+	m.queueFilterInput, cmd = m.queueFilterInput.Update(msg)
+	m.queueFilterQuery = strings.TrimSpace(m.queueFilterInput.Value())
+	m.updateQueueTable()
+	return m, cmd
+}
+
+// clearQueueFilter drops the queue text filter entirely.
+func (m *Model) clearQueueFilter() {
+	m.queueFilterActive = false
+	m.queueFilterQuery = ""
+	m.queueFilterInput.SetValue("")
+	m.queueFilterInput.Blur()
+	m.updateQueueTable()
+}
+
+// helpContext names the help section for the surface the user is on, so the
+// help modal can list it first.
+func (m Model) helpContext() string {
+	if m.inspecting {
+		if m.inspectorTab == tabLogs {
+			return "Logs"
+		}
+		return "Inspector"
+	}
+	switch m.currentView {
+	case ViewLogs:
+		return "Logs"
+	case ViewProblems:
+		return "Views"
+	default:
+		return "Queue"
+	}
+}
+
+// spinnerFrames animate the connecting/offline indicator.
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+// spinnerGlyph returns the current spinner frame.
+func (m Model) spinnerGlyph() string {
+	return spinnerFrames[m.spinnerFrame%len(spinnerFrames)]
+}
+
+// spinnerActive reports whether the spinner should keep animating: while
+// starting up, or whenever the daemon is unreachable.
+func (m Model) spinnerActive() bool {
+	return !m.ready || !m.snapshot.HasStatus || m.snapshot.IsOffline()
+}
+
+// manualRefreshCmds forces an immediate API poll plus a log refresh when a
+// log surface is visible.
+func (m Model) manualRefreshCmds() tea.Cmd {
+	refreshFn, store := m.refreshFn, m.store
+	cmds := []tea.Cmd{func() tea.Msg {
+		if refreshFn != nil {
+			_ = refreshFn()
+		}
+		if store != nil {
+			return snapshotMsg(store.Snapshot())
+		}
+		return nil
+	}}
+
+	if m.inspecting && m.inspectorTab == tabLogs {
+		if cmd := m.refreshLogs(m.getInspectedItem()); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	} else if !m.inspecting && m.currentView == ViewLogs {
+		if cmd := m.refreshLogs(nil); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+	return tea.Batch(cmds...)
+}
+
 // Messages
 
 type tickMsg time.Time
+
+type spinnerTickMsg struct{}
 
 type snapshotMsg state.Snapshot
 
@@ -523,6 +681,12 @@ type snapshotMsg state.Snapshot
 func tickCmd(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(t time.Time) tea.Msg {
 		return tickMsg(t)
+	})
+}
+
+func spinnerTickCmd() tea.Cmd {
+	return tea.Tick(120*time.Millisecond, func(time.Time) tea.Msg {
+		return spinnerTickMsg{}
 	})
 }
 

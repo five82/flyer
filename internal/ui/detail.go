@@ -64,7 +64,7 @@ func (m *Model) renderDetailContent(item spindle.QueueItem, width int) string {
 	// Meta line: timestamps (title/chips/id live in the inspector item line).
 	m.renderDetailMeta(&b, item, styles)
 
-	m.writeSection(&b, "Pipeline", styles)
+	m.writeSection(&b, "Pipeline", styles, width)
 	m.renderTaskBoard(&b, item, styles, width)
 
 	m.renderAttention(w, item, styles)
@@ -148,12 +148,14 @@ func isRipCacheHit(item spindle.QueueItem) bool {
 	return false
 }
 
-// writeSection writes a section header.
-func (m *Model) writeSection(b *strings.Builder, title string, styles Styles) {
+// writeSection writes a section header as a width-adaptive titled rule,
+// matching the top-level view rules.
+func (m *Model) writeSection(b *strings.Builder, title string, styles Styles, width int) {
+	if width <= 0 {
+		width = m.width
+	}
 	b.WriteString("\n")
-	b.WriteString(styles.MutedText.Bold(true).Render(titleCase(title)))
-	b.WriteString("\n")
-	b.WriteString(styles.RuleText.Render(strings.Repeat("─", 24)))
+	b.WriteString(renderRule(titleCase(title), width, styles))
 	b.WriteString("\n")
 }
 
@@ -187,7 +189,7 @@ func (m *Model) renderAttention(w fieldWriter, item spindle.QueueItem, styles St
 	if !needsAttention(item) {
 		return
 	}
-	m.writeSection(w.b, "Attention", styles)
+	m.writeSection(w.b, "Attention", styles, w.width)
 
 	// Review reason(s)
 	if item.NeedsReview {
@@ -269,7 +271,7 @@ func (m *Model) renderMedia(w fieldWriter, item spindle.QueueItem, styles Styles
 	if b.Len() == 0 {
 		return
 	}
-	m.writeSection(w.b, "Media", styles)
+	m.writeSection(w.b, "Media", styles, w.width)
 	w.b.WriteString(b.String())
 }
 
@@ -306,7 +308,7 @@ func (m *Model) renderOutput(w fieldWriter, item spindle.QueueItem, styles Style
 	if b.Len() == 0 {
 		return
 	}
-	m.writeSection(w.b, "Output", styles)
+	m.writeSection(w.b, "Output", styles, w.width)
 	w.b.WriteString(b.String())
 }
 
@@ -318,7 +320,7 @@ func (m *Model) renderEpisodeSummarySection(b *strings.Builder, item spindle.Que
 		return
 	}
 
-	m.writeSection(b, "Episodes", styles)
+	m.writeSection(b, "Episodes", styles, 0)
 	m.renderEpisodeSummary(b, item, episodes, totals, styles)
 	if matched := matchedEpisodeCount(item, episodes); matched > 0 && matched < len(episodes) {
 		b.WriteString(styles.WarningText.Render("⚠ Episode numbers not confirmed"))

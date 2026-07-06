@@ -7,14 +7,17 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// HelpModal displays keyboard shortcuts.
+// HelpModal displays keyboard shortcuts. The section matching the surface
+// the user opened help from is listed first.
 type HelpModal struct {
-	keys keyMap
+	keys    keyMap
+	context string
 }
 
-// NewHelpModal creates a new help modal.
-func NewHelpModal(keys keyMap) *HelpModal {
-	return &HelpModal{keys: keys}
+// NewHelpModal creates a new help modal. context names the section to list
+// first (e.g. "Queue", "Logs").
+func NewHelpModal(keys keyMap, context string) *HelpModal {
+	return &HelpModal{keys: keys, context: context}
 }
 
 // Update handles input for the help modal. Any key closes it.
@@ -25,67 +28,80 @@ func (h *HelpModal) Update(msg tea.Msg, keys keyMap) (Modal, tea.Cmd, bool) {
 	return h, nil, false
 }
 
-// View renders the help modal.
+// View renders the help modal box; placement over the dimmed backdrop
+// happens in the root View(). When one column would not fit the terminal
+// height, the sections flow into two columns instead.
 func (h *HelpModal) View(theme Theme, width, height int) string {
 	styles := theme.Styles()
 
-	// Build help content from keyMap
-	var b strings.Builder
-
-	// Title
-	title := styles.Text.Bold(true).Render("Keyboard Shortcuts")
-	b.WriteString(title)
-	b.WriteString("\n")
-	b.WriteString(styles.FaintText.Render(strings.Repeat("─", 30)))
-	b.WriteString("\n\n")
-
 	sections := h.keys.HelpSections()
+	// List the current surface's section first.
 	for i, section := range sections {
-		// Section title
-		b.WriteString(styles.AccentText.Bold(true).Render(section.Title))
-		b.WriteString("\n")
-
-		for _, binding := range section.Bindings {
-			help := binding.Help()
-			// Key
-			keyStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color(theme.Warning)).
-				Width(12)
-			b.WriteString(keyStyle.Render(help.Key))
-			// Description
-			b.WriteString(styles.Text.Render(help.Desc))
-			b.WriteString("\n")
-		}
-
-		if i < len(sections)-1 {
-			b.WriteString("\n")
+		if section.Title == h.context && i > 0 {
+			reordered := make([]HelpSection, 0, len(sections))
+			reordered = append(reordered, section)
+			reordered = append(reordered, sections[:i]...)
+			reordered = append(reordered, sections[i+1:]...)
+			sections = reordered
+			break
 		}
 	}
 
-	// Build the modal
-	content := b.String()
+	blocks := make([]string, len(sections))
+	for i, section := range sections {
+		var sb strings.Builder
+		sb.WriteString(styles.AccentText.Bold(true).Render(section.Title))
+		for _, binding := range section.Bindings {
+			help := binding.Help()
+			keyStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color(theme.Warning)).
+				Width(12)
+			sb.WriteString("\n")
+			sb.WriteString(keyStyle.Render(help.Key))
+			sb.WriteString(styles.Text.Render(help.Desc))
+		}
+		blocks[i] = sb.String()
+	}
 
-	// Calculate modal dimensions
+	title := styles.Text.Bold(true).Render("Keyboard Shortcuts") + "\n" +
+		styles.FaintText.Render(strings.Repeat("─", 30))
+
+	const colWidth = 34
+	body := strings.Join(blocks, "\n\n")
 	modalWidth := 40
+	vPad := 1
 
-	// Modal style
+	// Two-column layout when a single column would overflow the terminal.
+	// The compact variant drops the title underline and vertical padding so
+	// it fits the 80x24 minimum terminal.
+	oneColRows := lipgloss.Height(title) + 1 + lipgloss.Height(body) + 4 // padding + border
+	if oneColRows > height && width >= 2*colWidth+12 {
+		split, rows := 0, 0
+		total := lipgloss.Height(body)
+		for i, block := range blocks {
+			rows += lipgloss.Height(block) + 1
+			split = i + 1
+			if rows >= total/2 {
+				break
+			}
+		}
+		col := lipgloss.NewStyle().Width(colWidth)
+		body = lipgloss.JoinHorizontal(lipgloss.Top,
+			col.Render(strings.Join(blocks[:split], "\n\n")),
+			"  ",
+			col.Render(strings.Join(blocks[split:], "\n\n")))
+		// Style.Width includes padding, so add it to keep the joined
+		// columns from re-wrapping.
+		modalWidth = 2*colWidth + 2 + 4
+		title = styles.Text.Bold(true).Render("Keyboard Shortcuts")
+		vPad = 0
+	}
+
 	modal := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(theme.Accent)).
-		Padding(1, 2).
+		Padding(vPad, 2).
 		Width(modalWidth)
 
-	// Center the modal
-	modalContent := modal.Render(content)
-
-	// Create overlay
-	return lipgloss.Place(
-		width,
-		height,
-		lipgloss.Center,
-		lipgloss.Center,
-		modalContent,
-		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Background))),
-	)
+	return modal.Render(title + "\n\n" + body)
 }

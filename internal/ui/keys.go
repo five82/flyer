@@ -15,6 +15,9 @@ type keyMap struct {
 	ViewDaemonLogs key.Binding
 	ViewProblems   key.Binding
 
+	// Data refresh
+	Refresh key.Binding
+
 	// Inspector
 	Inspect     key.Binding
 	InspectLogs key.Binding
@@ -27,6 +30,7 @@ type keyMap struct {
 
 	// Queue actions
 	CycleFilter    key.Binding
+	Filter         key.Binding
 	ToggleEpisodes key.Binding
 
 	// Navigation
@@ -55,8 +59,8 @@ func DefaultKeyMap() keyMap {
 	return keyMap{
 		// Global
 		Quit: key.NewBinding(
-			key.WithKeys("ctrl+c", "e"),
-			key.WithHelp("e", "Quit"),
+			key.WithKeys("q", "Q", "ctrl+c"),
+			key.WithHelp("q", "Quit"),
 		),
 		Help: key.NewBinding(
 			key.WithKeys("h", "?"),
@@ -73,16 +77,22 @@ func DefaultKeyMap() keyMap {
 
 		// View switching
 		ViewQueue: key.NewBinding(
-			key.WithKeys("q"),
-			key.WithHelp("q", "Queue"),
+			key.WithKeys("d", "D"),
+			key.WithHelp("d", "Queue (dashboard)"),
 		),
 		ViewDaemonLogs: key.NewBinding(
-			key.WithKeys("l"),
+			key.WithKeys("l", "L"),
 			key.WithHelp("l", "Daemon logs"),
 		),
 		ViewProblems: key.NewBinding(
-			key.WithKeys("p"),
+			key.WithKeys("p", "P"),
 			key.WithHelp("p", "Problems"),
+		),
+
+		// Data refresh
+		Refresh: key.NewBinding(
+			key.WithKeys("r", "R"),
+			key.WithHelp("r", "Refresh now"),
 		),
 
 		// Inspector
@@ -91,7 +101,7 @@ func DefaultKeyMap() keyMap {
 			key.WithHelp("Enter", "Inspect item"),
 		),
 		InspectLogs: key.NewBinding(
-			key.WithKeys("i"),
+			key.WithKeys("i", "I"),
 			key.WithHelp("i", "Item logs"),
 		),
 		Tab: key.NewBinding(
@@ -121,9 +131,14 @@ func DefaultKeyMap() keyMap {
 
 		// Queue actions
 		CycleFilter: key.NewBinding(
-			key.WithKeys("f"),
+			key.WithKeys("f", "F"),
 			key.WithHelp("f", "Cycle filter"),
 		),
+		Filter: key.NewBinding(
+			key.WithKeys("/"),
+			key.WithHelp("/", "Filter by title"),
+		),
+		// "t" only: "T" cycles the theme (documented case exception).
 		ToggleEpisodes: key.NewBinding(
 			key.WithKeys("t"),
 			key.WithHelp("t", "Toggle episodes"),
@@ -181,8 +196,8 @@ func DefaultKeyMap() keyMap {
 			key.WithHelp("N", "Previous match"),
 		),
 		LogFilters: key.NewBinding(
-			key.WithKeys("F"),
-			key.WithHelp("F", "Log filters"),
+			key.WithKeys("f", "F"),
+			key.WithHelp("f", "Log filters"),
 		),
 
 		// Search/input
@@ -222,7 +237,7 @@ func (k keyMap) HelpSections() []HelpSection {
 		},
 		{
 			Title:    "Queue",
-			Bindings: []key.Binding{k.CycleFilter, k.ToggleEpisodes},
+			Bindings: []key.Binding{k.Filter, k.CycleFilter, k.ToggleEpisodes},
 		},
 		{
 			Title:    "Logs",
@@ -230,7 +245,7 @@ func (k keyMap) HelpSections() []HelpSection {
 		},
 		{
 			Title:    "General",
-			Bindings: []key.Binding{k.CycleTheme, k.Help, k.Quit},
+			Bindings: []key.Binding{k.Refresh, k.CycleTheme, k.Help, k.Quit},
 		},
 	}
 }

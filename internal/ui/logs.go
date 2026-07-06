@@ -932,10 +932,10 @@ func (m Model) renderLogFilters() string {
 	// Buttons hint
 	b.WriteString(styles.FaintText.Render("Enter: Apply  •  Esc: Cancel  •  Ctrl+C: Clear"))
 
-	// Build the modal
+	// Build the modal box; placement over the dimmed backdrop happens in
+	// View().
 	content := b.String()
 
-	// Modal style
 	modalWidth := 50
 	modal := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -943,16 +943,5 @@ func (m Model) renderLogFilters() string {
 		Padding(1, 2).
 		Width(modalWidth)
 
-	modalContent := modal.Render(content)
-
-	// Center the modal
-	return lipgloss.Place(
-		m.width,
-		m.height,
-		lipgloss.Center,
-		lipgloss.Center,
-		modalContent,
-		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Background))),
-	)
+	return modal.Render(content)
 }

@@ -68,6 +68,7 @@ func Run(ctx context.Context, opts Options) error {
 		PollTick:  interval,
 		ThemeName: userPrefs.Theme,
 		PrefsPath: opts.PrefsPath,
+		Refresh:   func() error { return refresh(ctx, store, client) },
 	}
 	return ui.Run(uiOpts)
 }

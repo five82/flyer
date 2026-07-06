@@ -80,7 +80,7 @@ func (m *Model) renderTaskRow(b *strings.Builder, item spindle.QueueItem, task s
 	switch task.State {
 	case "running":
 		b.WriteString("  ")
-		b.WriteString(renderProgressBar(task.Progress.Percent, 20, styles))
+		b.WriteString(renderProgressBar(task.Progress.Percent, 20, roleStyle(info.role, styles), styles))
 		b.WriteString(" ")
 		b.WriteString(styles.Text.Render(fmt.Sprintf("%3.0f%%", clampPercent(task.Progress.Percent))))
 		for _, extra := range taskExtras(item, task, totals) {
@@ -228,13 +228,4 @@ func taskETA(item spindle.QueueItem, task spindle.Task, totals spindle.EpisodeTo
 		return ""
 	}
 	return "ETA " + formatDuration(remaining)
-}
-
-// renderProgressBar renders a text-based progress bar without percentage
-// text. Callers add percentage display as needed.
-func renderProgressBar(percent float64, width int, styles Styles) string {
-	percent = clampPercent(percent)
-	filled := min(int(float64(width)*percent/100), width)
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
-	return styles.AccentText.Render(bar)
 }

@@ -56,6 +56,7 @@ func (m *Model) getSelectedItem() *spindle.QueueItem {
 // getSortedItems returns queue items filtered and sorted by priority.
 func (m *Model) getSortedItems() []spindle.QueueItem {
 	items := make([]spindle.QueueItem, 0, len(m.snapshot.Queue))
+	query := strings.ToLower(m.queueFilterQuery)
 
 	// Apply filter
 	for _, item := range m.snapshot.Queue {
@@ -73,6 +74,9 @@ func (m *Model) getSortedItems() []spindle.QueueItem {
 				continue
 			}
 		}
+		if query != "" && !queueItemMatches(item, query) {
+			continue
+		}
 		items = append(items, item)
 	}
 
@@ -89,7 +93,21 @@ func (m *Model) getSortedItems() []spindle.QueueItem {
 	return items
 }
 
+// queueItemMatches reports whether an item matches the lowercase text query
+// (substring of the display title or the "#id" form).
+func queueItemMatches(item spindle.QueueItem, query string) bool {
+	if strings.Contains(strings.ToLower(composeTitle(item)), query) {
+		return true
+	}
+	return strings.Contains(fmt.Sprintf("#%d", item.ID), query)
+}
+
+// queueBarWidth is the inline progress bar width in the pct column (wide
+// terminals only).
+const queueBarWidth = 8
+
 // queueColumns holds the computed fixed column widths for the queue table.
+// ago == 0 hides the age column (compact terminals).
 type queueColumns struct {
 	strip int
 	id    int
@@ -97,12 +115,22 @@ type queueColumns struct {
 	pct   int
 	ago   int
 	title int
+	bar   bool // pct column includes an inline progress bar
 }
 
 // computeQueueColumns derives column widths from the item set and terminal
-// width. The title column absorbs the slack.
+// width. The title column absorbs the slack. Below 80 columns the age
+// column is dropped; at or above the compact threshold the pct column
+// gains an inline progress bar.
 func computeQueueColumns(items []spindle.QueueItem, width int) queueColumns {
 	cols := queueColumns{strip: 1, id: 2, stage: 12, pct: 4, ago: 8}
+	if width < 80 {
+		cols.ago = 0
+	}
+	if width >= compactWidthThreshold {
+		cols.bar = true
+		cols.pct = queueBarWidth + 1 + 4 // bar + space + "100%"
+	}
 	for _, item := range items {
 		if n := len(item.Tasks); n > cols.strip {
 			cols.strip = n
@@ -113,26 +141,56 @@ func computeQueueColumns(items []spindle.QueueItem, width int) queueColumns {
 		}
 	}
 
-	// strip + id + stage + pct + ago + 5 separators (2 spaces each)
-	fixed := cols.strip + cols.id + cols.stage + cols.pct + cols.ago + 10
+	// Fixed columns plus 2-space separators between all columns.
+	fixed := cols.strip + cols.id + cols.stage + cols.pct + 8
+	if cols.ago > 0 {
+		fixed += cols.ago + 2
+	}
 	cols.title = max(width-fixed, 10)
 	return cols
 }
 
+// queueFilterLineVisible reports whether the queue filter prompt row is shown.
+func (m *Model) queueFilterLineVisible() bool {
+	return m.queueFilterActive || m.queueFilterQuery != ""
+}
+
+// queueVisibleRows returns the item rows available to the queue table.
+// Fixed chrome: header, NOW band, title rule, column header, footer
+// (+ the filter prompt row when shown).
+func (m *Model) queueVisibleRows() int {
+	rows := m.height - 5
+	if m.queueFilterLineVisible() {
+		rows--
+	}
+	return max(rows, 1)
+}
+
 // renderQueue renders the dashboard queue table (full width).
-// Chrome above: header, NOW band, command bar; plus the title rule here.
 func (m Model) renderQueue() string {
 	styles := m.theme.Styles()
-	visibleRows := max(m.height-4, 1)
+	visibleRows := m.queueVisibleRows()
 
 	var b strings.Builder
 	b.WriteString(renderRule(m.getQueueTitle(), m.width, styles))
 	b.WriteString("\n")
 
+	if m.queueFilterLineVisible() {
+		b.WriteString(m.renderQueueFilterLine(styles))
+		b.WriteString("\n")
+	}
+
 	items := m.getSortedItems()
+	cols := computeQueueColumns(items, m.width)
+	b.WriteString(renderQueueHeaderRow(cols, styles))
+	b.WriteString("\n")
+
 	if len(items) == 0 {
 		msg := "No items in queue"
-		if m.filterMode != FilterAll {
+		switch {
+		case m.queueFilterQuery != "":
+			msg = "No items match: " + m.queueFilterQuery
+		case m.filterMode != FilterAll:
 			msg = "No items match filter: " + m.filterLabel()
 		}
 		b.WriteString(styles.MutedText.Render(msg))
@@ -144,7 +202,6 @@ func (m Model) renderQueue() string {
 	// resize between keypresses cannot hide the selection.
 	scroll := clampQueueScroll(m.queueScroll, m.selectedRow, visibleRows, len(items))
 
-	cols := computeQueueColumns(items, m.width)
 	end := min(scroll+visibleRows, len(items))
 	for i := scroll; i < end; i++ {
 		b.WriteString(m.renderQueueRow(items[i], cols, i == m.selectedRow, styles))
@@ -153,6 +210,40 @@ func (m Model) renderQueue() string {
 		}
 	}
 	return b.String()
+}
+
+// renderQueueFilterLine renders the "/" filter prompt or the applied query.
+func (m Model) renderQueueFilterLine(styles Styles) string {
+	if m.queueFilterActive {
+		return styles.AccentText.Render("/") + m.queueFilterInput.View()
+	}
+	return styles.AccentText.Render("/"+m.queueFilterQuery) +
+		"  " + styles.FaintText.Render("Esc to clear")
+}
+
+// renderQueueHeaderRow renders the dim column header line.
+func renderQueueHeaderRow(cols queueColumns, styles Styles) string {
+	pad := func(s string, w int) string {
+		if n := w - len(s); n > 0 {
+			return s + strings.Repeat(" ", n)
+		}
+		return s
+	}
+	pctLabel := "%"
+	if cols.bar {
+		pctLabel = "PROGRESS"
+	}
+	parts := []string{
+		pad("", cols.strip),
+		pad("ID", cols.id),
+		pad("TITLE", cols.title),
+		pad("STAGE", cols.stage),
+		pad(pctLabel, cols.pct),
+	}
+	if cols.ago > 0 {
+		parts = append(parts, "AGE")
+	}
+	return styles.FaintText.Render(strings.Join(parts, "  "))
 }
 
 // clampQueueScroll adjusts a scroll offset so the selection stays visible
@@ -169,8 +260,7 @@ func clampQueueScroll(scroll, selected, visible, total int) int {
 
 // ensureQueueVisible updates the stored scroll offset after selection moves.
 func (m *Model) ensureQueueVisible() {
-	visible := max(m.height-4, 1)
-	m.queueScroll = clampQueueScroll(m.queueScroll, m.selectedRow, visible, len(m.getSortedItems()))
+	m.queueScroll = clampQueueScroll(m.queueScroll, m.selectedRow, m.queueVisibleRows(), len(m.getSortedItems()))
 }
 
 // renderQueueRow renders one queue table row:
@@ -184,10 +274,11 @@ func (m Model) renderQueueRow(item spindle.QueueItem, cols queueColumns, selecte
 	}
 	title := truncate(composeTitle(item), cols.title)
 	stage, stageStyle := queueStageCell(item, styles)
-	pct := queuePercentCell(item)
 	ago := ""
-	if updated := parseTimestamp(item.UpdatedAt); !updated.IsZero() {
-		ago = humanizeDuration(time.Since(updated))
+	if cols.ago > 0 {
+		if updated := parseTimestamp(item.UpdatedAt); !updated.IsZero() {
+			ago = humanizeDuration(time.Since(updated))
+		}
 	}
 
 	pad := func(s string, w int) string {
@@ -198,13 +289,17 @@ func (m Model) renderQueueRow(item spindle.QueueItem, cols queueColumns, selecte
 	}
 
 	if selected {
-		line := fmt.Sprintf("%s  %s  %s  %s  %s  %s",
+		fields := []string{
 			pad(plainTaskStrip(item), cols.strip),
 			pad(idStr, cols.id),
 			pad(title, cols.title),
 			pad(stage, cols.stage),
-			pad(pct, cols.pct),
-			ago)
+			pad(m.queueProgressCell(item, cols, stageStyle, styles, true), cols.pct),
+		}
+		if cols.ago > 0 {
+			fields = append(fields, ago)
+		}
+		line := strings.Join(fields, "  ")
 		if n := m.width - lipgloss.Width(line); n > 0 {
 			line += strings.Repeat(" ", n)
 		}
@@ -221,10 +316,45 @@ func (m Model) renderQueueRow(item spindle.QueueItem, cols queueColumns, selecte
 		idStyle.Render(pad(idStr, cols.id)),
 		styles.Text.Render(pad(title, cols.title)),
 		stageStyle.Render(pad(stage, cols.stage)),
-		styles.AccentText.Render(pad(pct, cols.pct)),
-		styles.FaintText.Render(ago),
+		pad(m.queueProgressCell(item, cols, stageStyle, styles, false), cols.pct),
+	}
+	if cols.ago > 0 {
+		parts = append(parts, styles.FaintText.Render(ago))
 	}
 	return strings.Join(parts, "  ")
+}
+
+// queueProgressCell renders the progress column: an inline bar plus percent
+// on wide terminals, percent only otherwise. Plain output (no styling) is
+// used inside the selection bar.
+func (m Model) queueProgressCell(item spindle.QueueItem, cols queueColumns, stageStyle lipgloss.Style, styles Styles, plain bool) string {
+	pct := queuePercentCell(item)
+	if !cols.bar {
+		if plain || pct == "" {
+			return pct
+		}
+		return styles.AccentText.Render(pct)
+	}
+	if pct == "" {
+		return ""
+	}
+	percent := runningTaskPercent(item)
+	if plain {
+		filled, empty := progressBlocks(percent, queueBarWidth)
+		return filled + empty + " " + pct
+	}
+	return renderProgressBar(percent, queueBarWidth, stageStyle, styles) +
+		" " + styles.AccentText.Render(pct)
+}
+
+// runningTaskPercent returns the primary running task's percent.
+func runningTaskPercent(item spindle.QueueItem) float64 {
+	for _, t := range item.Tasks {
+		if t.IsRunning() && t.Progress.Percent > 0 {
+			return clampPercent(t.Progress.Percent)
+		}
+	}
+	return 0
 }
 
 // queueStageCell returns the stage column text and style for an item.
@@ -328,6 +458,9 @@ func (m Model) getQueueTitle() string {
 	visible := len(items)
 
 	if m.filterMode == FilterAll {
+		if m.queueFilterQuery != "" {
+			return fmt.Sprintf("Queue (%d/%d)", visible, total)
+		}
 		return fmt.Sprintf("Queue (%d)", total)
 	}
 

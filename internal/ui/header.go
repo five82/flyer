@@ -124,7 +124,7 @@ func (m Model) renderConnectingHeader(styles Styles) string {
 		parts := []string{
 			styles.Logo.Render("flyer"),
 			styles.DangerText.Bold(true).Render("SPINDLE " + errorMsg),
-			styles.WarningText.Bold(true).Render("Retrying..."),
+			styles.WarningText.Bold(true).Render(m.spinnerGlyph() + " Retrying..."),
 			styles.MutedText.Render(last),
 		}
 
@@ -141,7 +141,7 @@ func (m Model) renderConnectingHeader(styles Styles) string {
 	}
 
 	return styles.Logo.Render("flyer") + sep +
-		styles.WarningText.Bold(true).Render("Connecting to Spindle...")
+		styles.WarningText.Bold(true).Render(m.spinnerGlyph()+" Connecting to Spindle...")
 }
 
 // countProcessingItems returns the number of items with running tasks.
@@ -290,19 +290,25 @@ func classifyConnectionError(err error) string {
 	}
 }
 
-// renderCommandBar renders the command hints bar.
+// renderCommandBar renders the footer key strip: context-sensitive key
+// hints for the focused surface, pinned to the bottom row. Hints carry drop
+// ranks so lower-priority ones vanish first on narrow terminals instead of
+// being cropped mid-hint.
 func (m Model) renderCommandBar() string {
 	styles := m.theme.Styles()
 
-	type cmd struct{ key, desc string }
+	type cmd struct {
+		key, desc string
+		rank      int
+	}
 	var commands []cmd
 
 	switch {
 	case m.inspecting:
 		commands = []cmd{
-			{"1-4", "Tabs"},
-			{"Tab", "Next tab"},
-			{"j/k", "Scroll"},
+			{"1-4", "Tabs", 2},
+			{"Tab", "Next tab", 3},
+			{"j/k", "Scroll", 3},
 		}
 		if m.inspectorTab == tabLogs {
 			followLabel := "Pause"
@@ -310,15 +316,15 @@ func (m Model) renderCommandBar() string {
 				followLabel = "Follow"
 			}
 			commands = append(commands,
-				cmd{"Space", followLabel},
-				cmd{"/", "Search"},
-				cmd{"F", "Filters"},
+				cmd{"Space", followLabel, 2},
+				cmd{"/", "Search", 2},
+				cmd{"f", "Filters", 3},
 			)
 		}
 		if m.inspectorTab == tabOverview || m.inspectorTab == tabEpisodes {
-			commands = append(commands, cmd{"t", "Episodes"})
+			commands = append(commands, cmd{"t", "Episodes", 3})
 		}
-		commands = append(commands, cmd{"Esc", "Back"}, cmd{"?", "More"})
+		commands = append(commands, cmd{"Esc", "Back", 1})
 
 	case m.currentView == ViewLogs:
 		followLabel := "Pause"
@@ -326,52 +332,57 @@ func (m Model) renderCommandBar() string {
 			followLabel = "Follow"
 		}
 		commands = []cmd{
-			{"Space", followLabel},
-			{"/", "Search"},
-			{"n/N", "Next/Prev"},
-			{"F", "Filters"},
-			{"q", "Queue"},
-			{"?", "More"},
+			{"Space", followLabel, 2},
+			{"/", "Search", 2},
+			{"n/N", "Next/Prev", 3},
+			{"f", "Filters", 3},
+			{"Esc", "Queue", 1},
 		}
 
 	case m.currentView == ViewProblems:
 		commands = []cmd{
-			{"j/k", "Navigate"},
-			{"Enter", "Inspect"},
-			{"q", "Queue"},
-			{"?", "More"},
+			{"j/k", "Navigate", 3},
+			{"Enter", "Inspect", 2},
+			{"Esc", "Queue", 1},
 		}
 
 	default: // ViewQueue
 		commands = []cmd{
-			{"f", m.filterLabel()}, // Shows current filter state
-			{"j/k", "Navigate"},
-			{"Enter", "Inspect"},
-			{"i", "Item logs"},
-			{"l", "Daemon"},
-			{"p", "Problems"},
-			{"?", "More"},
+			{"/", "Filter", 2},
+			{"f", m.filterLabel(), 2}, // Shows current filter state
+			{"j/k", "Navigate", 3},
+			{"Enter", "Inspect", 2},
+			{"i", "Item logs", 3},
+			{"l", "Daemon", 3},
+			{"p", "Problems", 3},
+			{"r", "Refresh", 3},
 		}
 	}
 
-	segments := make([]string, 0, len(commands)+2)
+	commands = append(commands, cmd{"q", "Quit", 1}, cmd{"?", "More", 1})
+
+	parts := make([]headerPart, 0, len(commands)+2)
 	for _, c := range commands {
-		segments = append(segments,
-			styles.AccentText.Render(c.key)+":"+styles.MutedText.Render(c.desc))
+		parts = append(parts, headerPart{
+			styles.AccentText.Render(c.key) + ":" + styles.MutedText.Render(c.desc),
+			c.rank,
+		})
 	}
 
 	// Show active log search pattern
 	logsActive := (m.currentView == ViewLogs && !m.inspecting) || (m.inspecting && m.inspectorTab == tabLogs)
 	if logsActive && m.logState.searchQuery != "" {
 		pattern := truncate(m.logState.searchQuery, 18)
-		segments = append(segments, styles.AccentText.Render("/"+pattern))
+		parts = append(parts, headerPart{styles.AccentText.Render("/" + pattern), 2})
 	}
 
 	// Add theme indicator
-	segments = append(segments,
-		styles.AccentText.Render("T")+":"+styles.FaintText.Render(m.theme.Name))
+	parts = append(parts, headerPart{
+		styles.AccentText.Render("T") + ":" + styles.FaintText.Render(m.theme.Name),
+		4,
+	})
 
-	return strings.Join(segments, "  ")
+	return joinHeaderParts(parts, m.width)
 }
 
 // maxLen returns compactLen if compact is true, otherwise normalLen.
