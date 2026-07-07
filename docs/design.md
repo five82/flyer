@@ -88,8 +88,8 @@ scrim).
   for glue and `padBand` to extend the band to full width.
 - Text roles must hold >= 3:1 contrast against **both** the theme background
   and Surface (guide §9.5; body text ideally 4.5:1). When adding or changing
-  a theme color, check it against both backdrops — the band migration caught
-  Kanagawa's original Faint at 2.9:1 on Surface.
+  a theme color, check it against both backdrops — a Faint tone that passes
+  on the background can fall under 3:1 on Surface.
 - The selection bar and status chips keep their own fills.
 
 ## Keyboard

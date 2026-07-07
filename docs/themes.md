@@ -38,25 +38,6 @@ NOW band, footer, inspector tab bar) fill with the Surface tone (see
 | yellow | `#dbc074` | Warning |
 | red | `#c94f6d` | Error/danger |
 
-## Kanagawa
-
-**Spec**: https://github.com/rebelot/kanagawa.nvim
-
-| Role | Hex | Usage |
-|------|-----|-------|
-| sumiInk0 | `#16161D` | Background (chip text) |
-| sumiInk4 | `#2A2A37` | Surface (chrome bands) |
-| waveBlue1 | `#2D4F67` | Selection bar |
-| sumiInk6 | `#54546D` | Rules/borders |
-| fujiWhite | `#DCD7BA` | Primary text (warm parchment) |
-| oldWhite | `#C8C093` | Muted text (7.6:1 contrast) |
-| katanaGray | `#717C7C` | Dimmest text (4.2:1 on bg, 3.3:1 on Surface) |
-| crystalBlue | `#7E9CD8` | Accent |
-| springBlue | `#7FB4CA` | Info |
-| springGreen | `#98BB6C` | Success |
-| carpYellow | `#E6C384` | Warning |
-| waveRed | `#E46876` | Error/danger |
-
 ## Slate
 
 **Palette**: https://tailwindcss.com/docs/colors

@@ -18,7 +18,7 @@ type Prefs struct {
 
 const (
 	defaultPrefsPath = "~/.config/flyer/prefs.toml"
-	defaultTheme     = "Nightfox"
+	defaultTheme     = "Slate"
 )
 
 // DefaultPath returns the default preferences file path.

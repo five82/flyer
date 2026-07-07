@@ -21,7 +21,7 @@ This repository is shared as is. Flyer is a personal tool I built for my own wor
 - **Log viewer** — daemon and per-item logs with syntax highlighting
 - **Problems triage** — every failed/review item with its lead reason, one keypress from the details
 - **Search** — vim-style `/` search with `n`/`N` navigation and regex support
-- **Themes** — Nightfox, Kanagawa, and Slate color schemes
+- **Themes** — Slate and Nightfox color schemes
 
 ## Installation
 

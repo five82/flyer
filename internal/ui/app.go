@@ -151,7 +151,7 @@ func New(opts Options) Model {
 
 	themeName := opts.ThemeName
 	if themeName == "" {
-		themeName = "Nightfox"
+		themeName = "Slate"
 	}
 
 	prefsPath := opts.PrefsPath

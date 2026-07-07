@@ -116,18 +116,17 @@ type Styles struct {
 
 var themes = map[string]Theme{
 	"Nightfox": nightfoxTheme(),
-	"Kanagawa": kanagawaTheme(),
 	"Slate":    slateTheme(),
 }
 
-var themeOrder = []string{"Nightfox", "Kanagawa", "Slate"}
+var themeOrder = []string{"Slate", "Nightfox"}
 
 // GetTheme returns a theme by name.
 func GetTheme(name string) Theme {
 	if t, ok := themes[name]; ok {
 		return t
 	}
-	return nightfoxTheme()
+	return slateTheme()
 }
 
 // NextTheme returns the next theme name in the cycle.
@@ -161,30 +160,6 @@ func nightfoxTheme() Theme {
 		Warning: "#dbc074", // yellow
 		Danger:  "#c94f6d", // red
 		Info:    "#63cdcf", // cyan
-	}
-}
-
-func kanagawaTheme() Theme {
-	// Kanagawa palette: https://github.com/rebelot/kanagawa.nvim
-	return Theme{
-		Name: "Kanagawa",
-
-		Background: "#16161D", // sumiInk0
-		Surface:    "#2A2A37", // sumiInk4
-
-		SelectionBg:   "#2D4F67", // waveBlue1
-		SelectionText: "#DCD7BA", // fujiWhite
-
-		Border: "#54546D", // sumiInk6
-
-		Text:    "#DCD7BA", // fujiWhite (warm parchment)
-		Muted:   "#C8C093", // oldWhite (7.6:1 contrast)
-		Faint:   "#717C7C", // katanaGray (4.2:1 on bg, 3.3:1 on Surface)
-		Accent:  "#7E9CD8", // crystalBlue
-		Success: "#98BB6C", // springGreen
-		Warning: "#E6C384", // carpYellow
-		Danger:  "#E46876", // waveRed
-		Info:    "#7FB4CA", // springBlue
 	}
 }
 
