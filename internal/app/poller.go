@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/five82/flyer/internal/spindle"
@@ -71,17 +73,47 @@ func calculateBackoff(failures int, baseInterval time.Duration) time.Duration {
 	return backoff
 }
 
+// refresh fetches status and queue concurrently and applies both to the
+// store atomically: only when both fetches succeed does the store see new
+// data, matching the prior sequential behavior where a failure on either
+// endpoint left the store untouched.
 func refresh(ctx context.Context, store *state.Store, client *spindle.Client) error {
-	status, err := client.FetchStatus(ctx)
-	if err != nil {
+	var wg sync.WaitGroup
+	var status *spindle.StatusResponse
+	var queue []spindle.QueueItem
+	var statusErr, queueErr error
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		status, statusErr = client.FetchStatus(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		queue, queueErr = client.FetchQueue(ctx)
+	}()
+	wg.Wait()
+
+	if statusErr != nil || queueErr != nil {
+		err := combineFetchErrors(statusErr, queueErr)
 		store.Update(nil, nil, err)
 		return err
 	}
-	queue, err := client.FetchQueue(ctx)
-	if err != nil {
-		store.Update(nil, nil, err)
-		return err
-	}
+
 	store.Update(status, queue, nil)
 	return nil
+}
+
+// combineFetchErrors merges the status and queue fetch errors into a single
+// reported failure. When both fail, both messages are included so neither
+// failure is silently dropped.
+func combineFetchErrors(statusErr, queueErr error) error {
+	switch {
+	case statusErr != nil && queueErr != nil:
+		return fmt.Errorf("status: %w; queue: %v", statusErr, queueErr)
+	case statusErr != nil:
+		return statusErr
+	default:
+		return queueErr
+	}
 }

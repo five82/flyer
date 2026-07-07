@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-const spindleTimestampLayout = "2006-01-02 15:04:05"
-
 // StatusResponse mirrors the payload returned by /api/status.
 type StatusResponse struct {
 	Running      bool               `json:"running"`
@@ -346,26 +344,20 @@ func (q QueueItem) EpisodeSnapshot() ([]EpisodeStatus, EpisodeTotals) {
 
 // LogEvent represents a single log entry from /api/logs.
 type LogEvent struct {
-	Sequence  uint64        `json:"seq"`
-	Timestamp string        `json:"ts"`
-	Level     string        `json:"level"`
-	Message   string        `json:"msg"`
-	Component string        `json:"component"`
-	Stage     string        `json:"stage"`
-	ItemID    int64         `json:"item_id"`
-	Lane      string        `json:"lane"`
-	Details   []DetailField `json:"details"`
+	Sequence  uint64            `json:"seq"`
+	Timestamp string            `json:"ts"`
+	Level     string            `json:"level"`
+	Message   string            `json:"msg"`
+	Component string            `json:"component"`
+	Stage     string            `json:"stage"`
+	ItemID    int64             `json:"item_id"`
+	Lane      string            `json:"lane"`
+	Fields    map[string]string `json:"fields"`
 }
 
 // ParsedTime returns the timestamp as time.Time when possible.
 func (e LogEvent) ParsedTime() time.Time {
 	return parseTime(e.Timestamp)
-}
-
-// DetailField mirrors the API detail payloads.
-type DetailField struct {
-	Label string `json:"label"`
-	Value string `json:"value"`
 }
 
 // LogBatch aggregates a slice of log events with the next sequence cursor.
@@ -392,9 +384,6 @@ func parseTime(value string) time.Time {
 		if t, err := time.Parse(layout, value); err == nil {
 			return t
 		}
-	}
-	if t, err := time.ParseInLocation(spindleTimestampLayout, value, time.Local); err == nil {
-		return t
 	}
 	return time.Time{}
 }

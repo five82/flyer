@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -92,7 +93,6 @@ func (c *Client) FetchQueue(ctx context.Context) ([]QueueItem, error) {
 type LogQuery struct {
 	Since      uint64
 	Limit      int
-	Follow     bool
 	Tail       bool
 	ItemID     int64
 	Level      string
@@ -113,9 +113,6 @@ func (c *Client) FetchLogs(ctx context.Context, query LogQuery) (LogBatch, error
 	}
 	if query.Limit > 0 {
 		values.Set("limit", strconv.Itoa(query.Limit))
-	}
-	if query.Follow {
-		values.Set("follow", "1")
 	}
 	if query.Tail {
 		values.Set("tail", "1")
@@ -170,7 +167,7 @@ func (c *Client) doURL(ctx context.Context, method string, rel *url.URL, dest an
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("api %s returned status %d", rel.String(), resp.StatusCode)
+		return apiStatusError(rel, resp)
 	}
 	if dest == nil {
 		return nil
@@ -180,6 +177,26 @@ func (c *Client) doURL(ctx context.Context, method string, rel *url.URL, dest an
 		return fmt.Errorf("decode response: %w", err)
 	}
 	return nil
+}
+
+// apiErrorBodyLimit caps how much of an error response body is read when
+// looking for a structured {"error":"..."} message.
+const apiErrorBodyLimit = 4 * 1024
+
+// apiStatusError builds the error for an HTTP status >= 400, preferring the
+// server's structured {"error":"..."} message when the body provides one and
+// falling back to a status-only error otherwise.
+func apiStatusError(rel *url.URL, resp *http.Response) error {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, apiErrorBodyLimit))
+	var payload struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &payload); err == nil {
+		if msg := strings.TrimSpace(payload.Error); msg != "" {
+			return fmt.Errorf("api %s returned status %d: %s", rel.String(), resp.StatusCode, msg)
+		}
+	}
+	return fmt.Errorf("api %s returned status %d", rel.String(), resp.StatusCode)
 }
 
 func parseBaseURL(apiBind string) (*url.URL, error) {

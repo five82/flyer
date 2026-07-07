@@ -16,16 +16,27 @@ func TestEncodingHelpers(t *testing.T) {
 
 func TestParseTimeLayouts(t *testing.T) {
 	rfc := "2025-12-13T10:11:12Z"
-	if parseTime(rfc).IsZero() {
-		t.Fatalf("parseTime should parse RFC3339")
-	}
-	custom := "2025-12-13 10:11:12"
-	got := parseTime(custom)
+	got := parseTime(rfc)
 	if got.IsZero() {
-		t.Fatalf("parseTime should parse spindle timestamp")
+		t.Fatalf("parseTime should parse RFC3339")
 	}
 	if got.Year() != 2025 || got.Month() != time.December || got.Day() != 13 {
 		t.Fatalf("parseTime = %v, want 2025-12-13", got)
+	}
+
+	nano := "2025-12-13T10:11:12.123456789Z"
+	if parseTime(nano).IsZero() {
+		t.Fatalf("parseTime should parse RFC3339Nano")
+	}
+
+	// Spindle no longer emits the bare "2006-01-02 15:04:05" layout; it is
+	// not a supported input and should not parse.
+	if got := parseTime("2025-12-13 10:11:12"); !got.IsZero() {
+		t.Fatalf("parseTime(%q) = %v, want zero time (unsupported layout)", "2025-12-13 10:11:12", got)
+	}
+
+	if !parseTime("").IsZero() {
+		t.Fatalf("parseTime(\"\") should be zero time")
 	}
 }
 

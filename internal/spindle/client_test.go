@@ -77,7 +77,6 @@ func TestClient_FetchesEndpointsAndEncodesQueries(t *testing.T) {
 	_, err = c.FetchLogs(ctx, LogQuery{
 		Since:     7,
 		Limit:     13,
-		Follow:    true,
 		Tail:      true,
 		ItemID:    101,
 		Level:     "warn",
@@ -90,7 +89,6 @@ func TestClient_FetchesEndpointsAndEncodesQueries(t *testing.T) {
 	}
 	if gotLogsQuery.Get("since") != "7" ||
 		gotLogsQuery.Get("limit") != "13" ||
-		gotLogsQuery.Get("follow") != "1" ||
 		gotLogsQuery.Get("tail") != "1" ||
 		gotLogsQuery.Get("item") != "101" ||
 		gotLogsQuery.Get("level") != "warn" ||
@@ -134,5 +132,26 @@ func TestClient_HTTPErrorAndDecodeError(t *testing.T) {
 	_, err = c.FetchQueue(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "returned status 500") {
 		t.Fatalf("FetchQueue error = %v, want status 500 error", err)
+	}
+}
+
+func TestClient_HTTPErrorIncludesStructuredMessage(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "item 7 not found"})
+	}))
+	t.Cleanup(server.Close)
+
+	c, err := NewClient(server.URL)
+	if err != nil {
+		t.Fatalf("NewClient returned error: %v", err)
+	}
+
+	_, err = c.FetchStatus(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "item 7 not found") || !strings.Contains(err.Error(), "status 400") {
+		t.Fatalf("FetchStatus error = %v, want status 400 with structured message", err)
 	}
 }

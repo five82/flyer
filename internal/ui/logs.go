@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -37,7 +38,7 @@ type logState struct {
 	mode logSource
 	// rawLines holds the structured log events backing the current view, one
 	// entry per displayed block (a block may span multiple visual rows via
-	// Details). formatLogEvent derives the plain text form on demand for
+	// Fields). formatLogEvent derives the plain text form on demand for
 	// search matching and copy.
 	rawLines    []spindle.LogEvent
 	follow      bool
@@ -277,7 +278,7 @@ func (m *Model) renderLogContent() string {
 		default:
 			// Normal line: styled directly from the structured event fields
 			lineContent = styles.FaintText.Render(fmt.Sprintf("%4d │ ", lineNum)) +
-				m.styleLogEvent(evt, styles)
+				m.styleLogEvent(evt, styles, false)
 		}
 
 		b.WriteString(lineContent)
@@ -304,14 +305,16 @@ func (m *Model) colorizeLineWithHighlight(line string, styles Styles) string {
 
 // styleLogEvent builds the styled log line directly from the structured
 // LogEvent fields: timestamp muted, level colored by severity, the item/stage
-// subject highlighted, message in normal text, and details appended below,
-// matching the visual treatment previously produced by re-parsing
-// formatLogEvent's output with regexes.
-func (m *Model) styleLogEvent(evt spindle.LogEvent, styles Styles) string {
+// subject highlighted, message in normal text, and structured fields
+// appended below, matching the visual treatment previously produced by
+// re-parsing formatLogEvent's output with regexes.
+//
+// highlightErrorHint makes the error_hint field (when present) stand out
+// with the warning/danger style, matching the level's severity. The daemon
+// log view passes false; the problems view -- where error_hint is the most
+// direct answer to "what broke" -- passes true.
+func (m *Model) styleLogEvent(evt spindle.LogEvent, styles Styles, highlightErrorHint bool) string {
 	level := strings.ToUpper(strings.TrimSpace(evt.Level))
-	if level == "" {
-		level = "INFO"
-	}
 
 	var result strings.Builder
 	result.WriteString(styles.FaintText.Render(logEventTimestamp(evt)))
@@ -333,17 +336,74 @@ func (m *Model) styleLogEvent(evt spindle.LogEvent, styles Styles) string {
 		result.WriteString(styles.Text.Render(message))
 	}
 
-	for _, detail := range evt.Details {
-		label := strings.TrimSpace(detail.Label)
-		value := strings.TrimSpace(detail.Value)
-		if label == "" || value == "" {
+	for _, key := range orderedFieldKeys(evt.Fields) {
+		value := strings.TrimSpace(evt.Fields[key])
+		if value == "" {
 			continue
 		}
 		result.WriteString("\n")
-		result.WriteString(styles.Text.Render(fmt.Sprintf("    - %s: %s", label, value)))
+		result.WriteString(styleLogFieldRow(key, value, styles, level, highlightErrorHint))
 	}
 
 	return result.String()
+}
+
+// knownLogFieldOrder is the priority order for well-known structured log
+// fields; any remaining keys in a LogEvent's Fields map are appended after
+// these, sorted alphabetically.
+var knownLogFieldOrder = []string{
+	"decision_type", "decision_result", "decision_reason",
+	"event_type", "error_hint", "impact", "stage_duration",
+}
+
+// orderedFieldKeys returns fields' keys in display order: the known keys
+// above (only when present), then any remaining keys sorted alphabetically.
+func orderedFieldKeys(fields map[string]string) []string {
+	if len(fields) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(fields))
+	keys := make([]string, 0, len(fields))
+	for _, key := range knownLogFieldOrder {
+		if _, ok := fields[key]; ok {
+			keys = append(keys, key)
+			seen[key] = true
+		}
+	}
+	rest := make([]string, 0, len(fields)-len(keys))
+	for key := range fields {
+		if !seen[key] {
+			rest = append(rest, key)
+		}
+	}
+	sort.Strings(rest)
+	return append(keys, rest...)
+}
+
+// styleLogFieldRow renders one "    - key: value" row for a structured log
+// field. decision_* fields get a distinct accent treatment (label accented,
+// decision_result value bold-accented) so the decision they represent stands
+// out from plain diagnostic fields. When highlightErrorHint is set, the
+// error_hint field is rendered in the warning or danger style matching the
+// event's level, so it stands out as the direct answer to "what broke".
+func styleLogFieldRow(key, value string, styles Styles, level string, highlightErrorHint bool) string {
+	labelStyle := styles.Text
+	valueStyle := styles.Text
+	if strings.HasPrefix(key, "decision_") {
+		labelStyle = styles.AccentText
+	}
+	if key == "decision_result" {
+		valueStyle = styles.AccentText.Bold(true)
+	}
+	if highlightErrorHint && key == "error_hint" {
+		hint := styles.WarningText
+		if level == "ERROR" {
+			hint = styles.DangerText
+		}
+		labelStyle = hint
+		valueStyle = hint.Bold(true)
+	}
+	return fmt.Sprintf("    - %s: %s", labelStyle.Render(key), valueStyle.Render(value))
 }
 
 // getLevelStyle returns the style for a log level.
@@ -708,8 +768,26 @@ func (m *Model) handleLogBatch(msg logBatchMsg) {
 		m.logState.streamCursor = msg.next
 	}
 
-	if len(msg.events) > 0 {
-		m.logState.rawLines = append(m.logState.rawLines, msg.events...)
+	// Guard against duplicate/overlapping batches: only append events whose
+	// Seq is strictly greater than the last one already appended. rawLines
+	// already tracks the active mode's events (cleared on item switch), so
+	// its last entry's Sequence doubles as the dedup cursor without needing
+	// a separate field.
+	var lastSeq uint64
+	if n := len(m.logState.rawLines); n > 0 {
+		lastSeq = m.logState.rawLines[n-1].Sequence
+	}
+	var newEvents []spindle.LogEvent
+	for _, evt := range msg.events {
+		if evt.Sequence <= lastSeq {
+			continue
+		}
+		newEvents = append(newEvents, evt)
+		lastSeq = evt.Sequence
+	}
+
+	if len(newEvents) > 0 {
+		m.logState.rawLines = append(m.logState.rawLines, newEvents...)
 		m.logState.rawLines = trimLogBuffer(m.logState.rawLines, logBufferLimit)
 		m.logState.contentVersion++ // Mark content changed
 		m.updateLogViewport()
@@ -729,9 +807,6 @@ func logEventTimestamp(evt spindle.LogEvent) string {
 func formatLogEvent(evt spindle.LogEvent) string {
 	ts := logEventTimestamp(evt)
 	level := strings.ToUpper(strings.TrimSpace(evt.Level))
-	if level == "" {
-		level = "INFO"
-	}
 	parts := []string{ts, level}
 	if component := strings.TrimSpace(evt.Component); component != "" {
 		parts = append(parts, fmt.Sprintf("[%s]", component))
@@ -745,23 +820,19 @@ func formatLogEvent(evt spindle.LogEvent) string {
 	if message != "" {
 		header += " – " + message
 	}
-	if len(evt.Details) == 0 {
-		return header
-	}
-	var builder strings.Builder
-	builder.WriteString(header)
-	for _, detail := range evt.Details {
-		label := strings.TrimSpace(detail.Label)
-		value := strings.TrimSpace(detail.Value)
-		if label == "" || value == "" {
+
+	var fieldParts []string
+	for _, key := range orderedFieldKeys(evt.Fields) {
+		value := strings.TrimSpace(evt.Fields[key])
+		if value == "" {
 			continue
 		}
-		builder.WriteString("\n    - ")
-		builder.WriteString(label)
-		builder.WriteString(": ")
-		builder.WriteString(value)
+		fieldParts = append(fieldParts, fmt.Sprintf("%s=%s", key, value))
 	}
-	return builder.String()
+	if len(fieldParts) == 0 {
+		return header
+	}
+	return header + " " + strings.Join(fieldParts, " ")
 }
 
 // composeLogSubject creates the subject line for a log event.

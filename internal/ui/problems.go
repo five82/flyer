@@ -211,7 +211,7 @@ func (m *Model) renderItemProblems(item *spindle.QueueItem) string {
 
 		for i, evt := range m.problemsState.logLines {
 			b.WriteString(styles.FaintText.Render(fmt.Sprintf("%4d │ ", i+1)))
-			b.WriteString(m.styleLogEvent(evt, styles))
+			b.WriteString(m.styleLogEvent(evt, styles, true))
 			b.WriteString("\n")
 		}
 	}
@@ -478,8 +478,24 @@ func (m *Model) handleProblemsLogBatch(msg problemsLogBatchMsg) {
 	// Update cursor for this item
 	m.problemsState.logCursor = msg.next
 
-	if len(msg.events) > 0 {
-		m.problemsState.logLines = append(m.problemsState.logLines, msg.events...)
+	// Guard against duplicate/overlapping batches: only append events whose
+	// Seq is strictly greater than the last one already appended (mirrors
+	// handleLogBatch's guard in logs.go).
+	var lastSeq uint64
+	if n := len(m.problemsState.logLines); n > 0 {
+		lastSeq = m.problemsState.logLines[n-1].Sequence
+	}
+	var newEvents []spindle.LogEvent
+	for _, evt := range msg.events {
+		if evt.Sequence <= lastSeq {
+			continue
+		}
+		newEvents = append(newEvents, evt)
+		lastSeq = evt.Sequence
+	}
+
+	if len(newEvents) > 0 {
+		m.problemsState.logLines = append(m.problemsState.logLines, newEvents...)
 		m.problemsState.logLines = trimLogBuffer(m.problemsState.logLines, problemsBufferLimit)
 		m.updateInspectorViewport()
 	}
