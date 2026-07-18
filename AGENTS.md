@@ -17,7 +17,7 @@ Flyer is a **read-only TUI** for monitoring Spindle. Single-developer hobby proj
 | Repo | Path | Role |
 |------|------|------|
 | flyer | `~/projects/flyer/` | Read-only TUI for Spindle (this repo) |
-| spindle | `~/projects/spindle/` | Daemon + CLI; Flyer polls its `api_bind` endpoint |
+| spindle | `~/projects/spindle/` | Daemon + CLI; Flyer polls its `[api].bind` endpoint |
 | reel | `~/projects/reel/` | Encoder invoked by Spindle; Flyer does not call directly |
 
 GitHub: [flyer](https://github.com/five82/flyer) | [spindle](https://github.com/five82/spindle) | [reel](https://codeberg.org/five82/reel)
@@ -49,6 +49,6 @@ golangci-lint run      # Lint
 
 Flyer is intentionally limited:
 - **Read-only**: No queue mutations, retries, or clears
-- **Single operator**: No auth, no multi-profile
+- **Single operator**: Passes Spindle's bearer token but has no accounts or profiles
 
 When considering features, ask: "Does this solve a real problem for daily use?" If not, skip it.

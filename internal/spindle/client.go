@@ -46,9 +46,9 @@ const (
 	requestTimeout   = 5 * time.Second
 )
 
-// NewClient builds a Client using the provided apiBind host:port value.
-func NewClient(apiBind string, opts ...ClientOption) (*Client, error) {
-	base, err := parseBaseURL(apiBind)
+// NewClient builds a client for a Spindle TCP API endpoint.
+func NewClient(apiEndpoint string, opts ...ClientOption) (*Client, error) {
+	base, err := parseBaseURL(apiEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -199,17 +199,17 @@ func apiStatusError(rel *url.URL, resp *http.Response) error {
 	return fmt.Errorf("api %s returned status %d", rel.String(), resp.StatusCode)
 }
 
-func parseBaseURL(apiBind string) (*url.URL, error) {
-	trimmed := strings.TrimSpace(apiBind)
+func parseBaseURL(apiEndpoint string) (*url.URL, error) {
+	trimmed := strings.TrimSpace(apiEndpoint)
 	if trimmed == "" {
-		return nil, fmt.Errorf("api_bind is empty")
+		return nil, fmt.Errorf("API endpoint is empty; configure Spindle [api].bind or pass --api")
 	}
 	if !strings.Contains(trimmed, "://") {
 		trimmed = "http://" + trimmed
 	}
 	u, err := url.Parse(trimmed)
 	if err != nil {
-		return nil, fmt.Errorf("parse api_bind %q: %w", apiBind, err)
+		return nil, fmt.Errorf("parse API endpoint %q: %w", apiEndpoint, err)
 	}
 	u.Path = ""
 	u.RawQuery = ""

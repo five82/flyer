@@ -30,16 +30,19 @@ func Run(ctx context.Context, opts Options) error {
 
 	userPrefs := prefs.Load(opts.PrefsPath)
 
-	// Determine API endpoint: explicit option > config file discovery
+	// Explicit CLI/environment values win over local Spindle config.
 	apiEndpoint := opts.APIEndpoint
 	if apiEndpoint == "" {
 		apiEndpoint = cfg.APIBind
 	}
+	apiToken := opts.APIToken
+	if apiToken == "" {
+		apiToken = cfg.APIToken
+	}
 
-	// Build client options
 	var clientOpts []spindle.ClientOption
-	if opts.APIToken != "" {
-		clientOpts = append(clientOpts, spindle.WithToken(opts.APIToken))
+	if apiToken != "" {
+		clientOpts = append(clientOpts, spindle.WithToken(apiToken))
 	}
 
 	client, err := spindle.NewClient(apiEndpoint, clientOpts...)

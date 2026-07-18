@@ -11,80 +11,79 @@ import (
 	toml "github.com/pelletier/go-toml/v2"
 )
 
-// Config captures the minimal fields Flyer needs from spindle's config.
+// Config contains the Spindle settings Flyer needs for API discovery and
+// diagnostics.
 type Config struct {
-	APIBind    string
-	LogDir     string
-	SocketPath string
+	APIBind  string
+	APIToken string
+	StateDir string
 }
 
-const (
-	defaultConfigPath = "~/.config/spindle/config.toml"
-	defaultLogDir     = "~/.local/share/spindle/logs"
-	defaultAPIBind    = "127.0.0.1:7487"
-)
+const defaultStateDir = "~/.local/state/spindle"
 
-// Load locates and parses the spindle config, falling back to defaults when missing.
+// Load reads Spindle's current [api] and [paths] sections. A missing file is
+// allowed so explicit --api/--token remote access does not require local
+// Spindle configuration.
 func Load(path string) (Config, error) {
 	resolved, err := resolvePath(path)
 	if err != nil {
 		return Config{}, err
 	}
 
-	cfg := Config{APIBind: defaultAPIBind, LogDir: defaultLogDir}
-
+	cfg := Config{StateDir: mustExpand(defaultStateDir)}
 	file, err := os.Open(resolved)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			cfg.LogDir = mustExpand(defaultLogDir)
-			cfg.SocketPath = filepath.Join(cfg.LogDir, "spindle.sock")
 			return cfg, nil
 		}
 		return Config{}, fmt.Errorf("open config: %w", err)
 	}
 	defer func() { _ = file.Close() }()
 
-	bytes, err := io.ReadAll(file)
+	data, err := io.ReadAll(file)
 	if err != nil {
 		return Config{}, fmt.Errorf("read config: %w", err)
 	}
 
 	var raw struct {
-		APIBind string `toml:"api_bind"`
-		LogDir  string `toml:"log_dir"`
+		API struct {
+			Bind  string `toml:"bind"`
+			Token string `toml:"token"`
+		} `toml:"api"`
+		Paths struct {
+			StateDir string `toml:"state_dir"`
+		} `toml:"paths"`
 	}
-	if err := toml.Unmarshal(bytes, &raw); err != nil {
+	if err := toml.Unmarshal(data, &raw); err != nil {
 		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
 
-	cfg.APIBind = strings.TrimSpace(raw.APIBind)
-	if cfg.APIBind == "" {
-		cfg.APIBind = defaultAPIBind
+	cfg.APIBind = strings.TrimSpace(raw.API.Bind)
+	cfg.APIToken = strings.TrimSpace(raw.API.Token)
+	if stateDir := strings.TrimSpace(raw.Paths.StateDir); stateDir != "" {
+		cfg.StateDir = mustExpand(stateDir)
 	}
-
-	cfg.LogDir = strings.TrimSpace(raw.LogDir)
-	if cfg.LogDir == "" {
-		cfg.LogDir = defaultLogDir
-	}
-	cfg.LogDir = mustExpand(cfg.LogDir)
-	cfg.SocketPath = filepath.Join(cfg.LogDir, "spindle.sock")
-
 	return cfg, nil
 }
 
-// DaemonLogPath returns the path to the primary spindle log file.
+// DaemonLogPath returns Spindle's active daemon-log link.
 func (c Config) DaemonLogPath() string {
-	if strings.TrimSpace(c.LogDir) == "" {
-		return mustExpand(defaultLogDir + "/spindle.log")
+	stateDir := strings.TrimSpace(c.StateDir)
+	if stateDir == "" {
+		stateDir = mustExpand(defaultStateDir)
 	}
-	return filepath.Join(c.LogDir, "spindle.log")
+	return filepath.Join(stateDir, "daemon.log")
 }
 
 func resolvePath(path string) (string, error) {
-	if strings.TrimSpace(path) == "" {
-		return expandPath(defaultConfigPath)
+	if strings.TrimSpace(path) != "" {
+		return expandPath(path)
 	}
-	return expandPath(path)
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user config directory: %w", err)
+	}
+	return filepath.Join(configDir, "spindle", "config.toml"), nil
 }
 
 func mustExpand(path string) string {
@@ -100,12 +99,12 @@ func expandPath(path string) (string, error) {
 	if trimmed == "" {
 		return "", fmt.Errorf("path is empty")
 	}
-	if strings.HasPrefix(trimmed, "~") {
+	if trimmed == "~" || strings.HasPrefix(trimmed, "~/") {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("resolve home dir: %w", err)
 		}
-		trimmed = filepath.Join(home, strings.TrimPrefix(trimmed, "~"))
+		trimmed = filepath.Join(home, strings.TrimPrefix(trimmed, "~/"))
 	}
 	return filepath.Abs(trimmed)
 }
