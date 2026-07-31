@@ -82,6 +82,7 @@ func TestToggleEpisodesCollapsed_UsesEffectiveDefaultState(t *testing.T) {
 	item := m.getSelectedItem()
 	if item == nil {
 		t.Fatal("getSelectedItem() = nil")
+		return
 	}
 	episodes, totals := item.EpisodeSnapshot()
 	if !m.isEpisodesCollapsed(*item, episodes, totals) {
@@ -92,6 +93,10 @@ func TestToggleEpisodesCollapsed_UsesEffectiveDefaultState(t *testing.T) {
 	m.toggleInspectedEpisodes()
 
 	item = m.getSelectedItem()
+	if item == nil {
+		t.Fatal("getSelectedItem() after toggle = nil")
+		return
+	}
 	episodes, totals = item.EpisodeSnapshot()
 	if m.isEpisodesCollapsed(*item, episodes, totals) {
 		t.Fatal("isEpisodesCollapsed() after one toggle = true, want false")

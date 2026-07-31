@@ -76,28 +76,29 @@ type QueueListResponse struct {
 // position and LAGS running tasks during overlap windows; Tasks carry the
 // live truth (state and per-task progress).
 type QueueItem struct {
-	ID                      int64           `json:"id"`
-	DiscTitle               string          `json:"discTitle"`
-	DisplayTitle            string          `json:"displayTitle"`
-	Stage                   string          `json:"stage"`
-	InProgress              bool            `json:"inProgress"`
-	FailedAtStage           string          `json:"failedAtStage"`
-	ErrorMessage            string          `json:"errorMessage"`
-	CreatedAt               string          `json:"createdAt"`
-	UpdatedAt               string          `json:"updatedAt"`
-	DiscFingerprint         string          `json:"discFingerprint"`
-	NeedsReview             bool            `json:"needsReview"`
-	UserStopped             bool            `json:"userStopped"`
-	ReviewReasons           []string        `json:"reviewReasons"`
-	Metadata                json.RawMessage `json:"metadata"`
-	Tasks                   []Task          `json:"tasks"`
-	Encoding                *EncodingStatus `json:"encoding"`
-	Episodes                []EpisodeStatus `json:"episodes"`
-	EpisodeIdentifiedCount  int             `json:"episodeIdentifiedCount"`
-	PrimaryAudioDescription string          `json:"primaryAudioDescription"`
-	CommentaryCount         int             `json:"commentaryCount"`
-	ContentID               *ContentID      `json:"contentId"`
-	Source                  *SourceTitle    `json:"source"`
+	ID                      int64                     `json:"id"`
+	DiscTitle               string                    `json:"discTitle"`
+	DisplayTitle            string                    `json:"displayTitle"`
+	Stage                   string                    `json:"stage"`
+	InProgress              bool                      `json:"inProgress"`
+	FailedAtStage           string                    `json:"failedAtStage"`
+	ErrorMessage            string                    `json:"errorMessage"`
+	CreatedAt               string                    `json:"createdAt"`
+	UpdatedAt               string                    `json:"updatedAt"`
+	DiscFingerprint         string                    `json:"discFingerprint"`
+	NeedsReview             bool                      `json:"needsReview"`
+	UserStopped             bool                      `json:"userStopped"`
+	ReviewReasons           []string                  `json:"reviewReasons"`
+	Metadata                json.RawMessage           `json:"metadata"`
+	Tasks                   []Task                    `json:"tasks"`
+	Encoding                *EncodingStatus           `json:"encoding"`
+	Episodes                []EpisodeStatus           `json:"episodes"`
+	EpisodeIdentifiedCount  int                       `json:"episodeIdentifiedCount"`
+	SubtitleGeneration      *SubtitleGenerationStatus `json:"subtitleGeneration"`
+	PrimaryAudioDescription string                    `json:"primaryAudioDescription"`
+	CommentaryCount         int                       `json:"commentaryCount"`
+	ContentID               *ContentID                `json:"contentId"`
+	Source                  *SourceTitle              `json:"source"`
 }
 
 // Task is one scheduler task of an item, in pipeline order.
@@ -191,6 +192,11 @@ func (q QueueItem) ActiveAssetKeys() map[string]bool {
 // IsTerminal reports whether the item reached a terminal stage.
 func (q QueueItem) IsTerminal() bool {
 	return strings.EqualFold(q.Stage, "completed") || strings.EqualFold(q.Stage, "failed")
+}
+
+// SubtitleGenerationStatus summarizes generated display subtitles.
+type SubtitleGenerationStatus struct {
+	WhisperX int `json:"whisperx"`
 }
 
 // ContentID summarizes episode-identification provenance.

@@ -161,6 +161,25 @@ func TestOverviewTVItem_EpisodeSummary(t *testing.T) {
 	}
 }
 
+func TestOverviewSubtitlingThroughputUsesGenerationCount(t *testing.T) {
+	episodes := make([]spindle.EpisodeStatus, 7)
+	got := overviewFor(t, spindle.QueueItem{
+		ID:                 6,
+		Stage:              "encoding",
+		Episodes:           episodes,
+		SubtitleGeneration: &spindle.SubtitleGenerationStatus{WhisperX: 7},
+		Tasks: []spindle.Task{
+			{Type: "subtitling", State: "done"},
+			{Type: "apply", State: "pending"},
+		},
+	})
+
+	normalized := strings.Join(strings.Fields(got), " ")
+	if !strings.Contains(normalized, "Subtitled 7/7") {
+		t.Fatalf("overview subtitle throughput = unexpected, got:\n%s", got)
+	}
+}
+
 func TestWrapText(t *testing.T) {
 	tests := []struct {
 		name  string

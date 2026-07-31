@@ -102,7 +102,7 @@ func (m *Model) renderTaskRow(b *strings.Builder, item spindle.QueueItem, task s
 	b.WriteString(labelStyle.Render(fmt.Sprintf("%-12s", label)))
 
 	// Per-episode throughput count for stages that have one (TV items).
-	if count, ok := stageThroughput(info.totals, totals); ok && totals.Planned > 1 {
+	if count, ok := stageThroughput(info.totals, item, totals); ok && totals.Planned > 1 {
 		b.WriteString(" ")
 		b.WriteString(styles.MutedText.Render(fmt.Sprintf("%*d/%d", countWidth, count, totals.Planned)))
 	}
@@ -181,15 +181,20 @@ func taskEpisodeContext(task spindle.Task, episodes []spindle.EpisodeStatus) str
 	return ""
 }
 
-// stageThroughput maps a catalog totals key to its tallied count.
-func stageThroughput(key string, totals spindle.EpisodeTotals) (int, bool) {
+// stageThroughput maps a catalog totals key to its count. Subtitle generation
+// is distinct from the subtitled asset: generation finishes before apply
+// creates that asset by placing or muxing the generated SRT.
+func stageThroughput(key string, item spindle.QueueItem, totals spindle.EpisodeTotals) (int, bool) {
 	switch key {
 	case "ripped":
 		return totals.Ripped, true
 	case "encoded":
 		return totals.Encoded, true
-	case "subtitled":
-		return totals.Subtitled, true
+	case "subtitle_generated":
+		if item.SubtitleGeneration == nil {
+			return 0, true
+		}
+		return item.SubtitleGeneration.WhisperX, true
 	case "final":
 		return totals.Final, true
 	default:

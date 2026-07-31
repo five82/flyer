@@ -17,7 +17,7 @@ type stageInfo struct {
 	label     string // present tense (running)
 	doneLabel string // past tense (done)
 	role      string // color role: accent, info, warning, success, danger
-	totals    string // EpisodeTotals field measuring this stage's per-episode throughput ("" = item-level)
+	totals    string // per-episode throughput source ("" = item-level)
 }
 
 var stageCatalog = map[string]stageInfo{
@@ -26,7 +26,7 @@ var stageCatalog = map[string]stageInfo{
 	"episode_identification": {"Ep. Matching", "Ep. Matched", "info", ""},
 	"encoding":               {"Encoding", "Encoded", "warning", "encoded"},
 	"analysis":               {"Analyzing", "Analyzed", "info", ""},
-	"subtitling":             {"Subtitling", "Subtitled", "info", "subtitled"},
+	"subtitling":             {"Subtitling", "Subtitled", "info", "subtitle_generated"},
 	"apply":                  {"Applying", "Applied", "info", ""},
 	"organizing":             {"Organizing", "Organized", "success", "final"},
 	// Terminal item stages (not tasks).
