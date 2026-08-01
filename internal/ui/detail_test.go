@@ -143,6 +143,32 @@ func TestOverviewCompletedItem_OutputResults(t *testing.T) {
 	}
 }
 
+func TestOverviewTVItem_ShowsDiscNumber(t *testing.T) {
+	got := overviewFor(t, spindle.QueueItem{
+		ID:         5,
+		Stage:      "ripping",
+		DiscNumber: 2,
+		Metadata:   []byte(`{"media_type":"tv","season_number":1}`),
+	})
+
+	sectionOrder(t, got, "Pipeline", "Media", "Episodes")
+	if !strings.Contains(got, "Disc     2") {
+		t.Fatalf("overview missing disc number, got:\n%s", got)
+	}
+}
+
+func TestOverviewOmitsUnsetDiscNumber(t *testing.T) {
+	got := overviewFor(t, spindle.QueueItem{
+		ID:       6,
+		Stage:    "encoding",
+		Metadata: []byte(`{"media_type":"movie"}`),
+	})
+
+	if strings.Contains(got, "Disc     ") {
+		t.Fatalf("overview unexpectedly shows an unset disc number, got:\n%s", got)
+	}
+}
+
 func TestOverviewTVItem_EpisodeSummary(t *testing.T) {
 	episodes := make([]spindle.EpisodeStatus, 4)
 	for i := range episodes {

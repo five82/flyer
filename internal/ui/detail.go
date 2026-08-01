@@ -267,6 +267,9 @@ func (m *Model) renderMedia(w fieldWriter, item spindle.QueueItem, styles Styles
 	inner := fieldWriter{b: &b, styles: w.styles, width: w.width}
 
 	inner.field("Source", sourceSummary(item.Source), styles.Text)
+	if item.DiscNumber > 0 {
+		inner.field("Disc", fmt.Sprintf("%d", item.DiscNumber), styles.Text)
+	}
 	renderVideoSpecs(inner, item)
 	renderAudioInfo(inner, item)
 	if item.CommentaryCount > 0 {

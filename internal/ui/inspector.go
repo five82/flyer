@@ -229,7 +229,7 @@ func (m Model) renderInspector() string {
 // renderInspectorItemLine renders the persistent item identity line, led by
 // a breadcrumb back to the view Esc returns to (guide drill-down pattern).
 // Segments carry drop ranks so narrow terminals shed whole segments
-// (runtime first, then year, age, id, chips) instead of cropping.
+// (runtime first, then year, age, id, chips, disc) instead of cropping.
 func (m Model) renderInspectorItemLine(styles Styles) string {
 	crumb := "Queue"
 	if m.returnView == ViewProblems {
@@ -248,6 +248,9 @@ func (m Model) renderInspectorItemLine(styles Styles) string {
 	// usually embeds the year already; only fill the gap when it doesn't.
 	if year := metadataYear(item.Metadata); year != "" && !strings.Contains(title, year) {
 		parts = append(parts, headerPart{styles.MutedText.Render("(" + year + ")"), 4})
+	}
+	if item.DiscNumber > 0 {
+		parts = append(parts, headerPart{styles.MutedText.Render(fmt.Sprintf("disc %d", item.DiscNumber)), 1})
 	}
 	if item.Source != nil && item.Source.DurationSeconds > 0 {
 		runtime := humanizeDurationLong(time.Duration(item.Source.DurationSeconds) * time.Second)

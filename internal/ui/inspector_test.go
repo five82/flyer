@@ -47,6 +47,22 @@ func TestInspectorItemLine_IdentitySegments(t *testing.T) {
 	}
 }
 
+func TestInspectorItemLine_TVDiscNumber(t *testing.T) {
+	item := spindle.QueueItem{
+		ID:           9,
+		Stage:        "encoding",
+		DisplayTitle: "The Simpsons Season 06",
+		DiscNumber:   2,
+		Metadata:     json.RawMessage(`{"year":"1989","media_type":"tv"}`),
+	}
+	m := inspectorModelFor(item)
+	got := stripANSI(m.renderInspectorItemLine(m.theme.BandStyles()))
+	normalized := strings.Join(strings.Fields(got), " ")
+	if !strings.Contains(normalized, "The Simpsons Season 06 (1989) disc 2") {
+		t.Fatalf("item line missing TV disc identity, got %q", got)
+	}
+}
+
 func TestInspectorItemLine_NoDuplicateYear(t *testing.T) {
 	item := spindle.QueueItem{
 		ID:           9,
