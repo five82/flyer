@@ -59,8 +59,10 @@ padding per side).
 Scroll visibility: when panel content overflows, the scroll position renders
 right-aligned in the bottom border — a `start-end of total` range for lists,
 a percentage for viewports; log views show the percentage in their status
-line while follow is paused. The inspector's item line leads with a
-breadcrumb (`Queue › ` or `Problems › `) naming the view Esc returns to.
+line while follow is paused. The inspector's item line leads with a breadcrumb
+naming the view Esc returns to, followed by the prominent item number
+(`Queue › ID #1 › Title` or
+`Problems › ID #1 › Title`).
 
 Breakpoints: below 80 columns the queue drops its AGE column and header
 labels abbreviate; at >= 100 columns the queue's percent column gains an

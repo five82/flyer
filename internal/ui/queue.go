@@ -490,7 +490,7 @@ func composeTitle(item spindle.QueueItem) string {
 	if item.DiscTitle != "" {
 		return item.DiscTitle
 	}
-	return fmt.Sprintf("Item #%d", item.ID)
+	return fmt.Sprintf("ID #%d", item.ID)
 }
 
 // getQueueTitle returns the queue rule title with optional filter indicator.

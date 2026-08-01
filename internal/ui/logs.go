@@ -840,9 +840,9 @@ func composeLogSubject(itemID int64, stage string) string {
 	stage = strings.TrimSpace(stage)
 	switch {
 	case itemID > 0 && stage != "":
-		return fmt.Sprintf("Item #%d (%s)", itemID, stage)
+		return fmt.Sprintf("ID #%d (%s)", itemID, stage)
 	case itemID > 0:
-		return fmt.Sprintf("Item #%d", itemID)
+		return fmt.Sprintf("ID #%d", itemID)
 	default:
 		return stage
 	}

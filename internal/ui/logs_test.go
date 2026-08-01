@@ -47,7 +47,7 @@ func TestFormatLogEventIncludesComponentAndFields(t *testing.T) {
 	evt := sampleLogEvent()
 	text := formatLogEvent(evt)
 
-	for _, want := range []string{"WARN", "[ripper]", "Item #42 (ripping)", "disc read retry", "Attempt=2", "Drive=/dev/sr0"} {
+	for _, want := range []string{"WARN", "[ripper]", "ID #42 (ripping)", "disc read retry", "Attempt=2", "Drive=/dev/sr0"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("formatLogEvent() = %q, missing %q", text, want)
 		}
@@ -70,7 +70,7 @@ func TestStyleLogEventMatchesPlainTextContent(t *testing.T) {
 	for _, want := range []string{
 		logEventTimestamp(evt),
 		"WARN",
-		"Item #42 (ripping)",
+		"ID #42 (ripping)",
 		"disc read retry",
 		"- Attempt: 2",
 		"- Drive: /dev/sr0",

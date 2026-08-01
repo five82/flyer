@@ -40,10 +40,13 @@ func TestInspectorItemLine_IdentitySegments(t *testing.T) {
 	}
 	m := inspectorModelFor(item)
 	got := stripANSI(m.renderInspectorItemLine(m.theme.BandStyles()))
-	for _, want := range []string{"The Abyss", "(1989)", "2h 51m", "#9"} {
+	for _, want := range []string{"The Abyss", "(1989)", "2h 51m", "ID #9"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("item line missing %q, got %q", want, got)
 		}
+	}
+	if !strings.HasPrefix(got, "Queue › ID #9 › The Abyss") {
+		t.Fatalf("item line must lead with the item number and title, got %q", got)
 	}
 }
 
@@ -58,8 +61,8 @@ func TestInspectorItemLine_TVDiscNumber(t *testing.T) {
 	m := inspectorModelFor(item)
 	got := stripANSI(m.renderInspectorItemLine(m.theme.BandStyles()))
 	normalized := strings.Join(strings.Fields(got), " ")
-	if !strings.Contains(normalized, "The Simpsons Season 06 (1989) disc 2") {
-		t.Fatalf("item line missing TV disc identity, got %q", got)
+	if !strings.Contains(normalized, "ID #9 › The Simpsons Season 06 (1989) disc 2") {
+		t.Fatalf("item line missing numbered TV disc identity, got %q", got)
 	}
 }
 
@@ -91,7 +94,7 @@ func TestInspectorItemLine_ShedsRuntimeFirstWhenNarrow(t *testing.T) {
 		t.Fatalf("wide item line missing runtime, got %q", wide)
 	}
 
-	m.width = len("Queue › " + item.DisplayTitle + "  (1989)  ENCODING  #9")
+	m.width = len("Queue › ID #9 › " + item.DisplayTitle + "  (1989)  ENCODING")
 	narrow := stripANSI(m.renderInspectorItemLine(m.theme.BandStyles()))
 	if strings.Contains(narrow, "2h 51m") {
 		t.Fatalf("narrow item line must shed runtime first, got %q", narrow)

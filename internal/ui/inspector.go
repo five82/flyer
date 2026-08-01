@@ -229,7 +229,7 @@ func (m Model) renderInspector() string {
 // renderInspectorItemLine renders the persistent item identity line, led by
 // a breadcrumb back to the view Esc returns to (guide drill-down pattern).
 // Segments carry drop ranks so narrow terminals shed whole segments
-// (runtime first, then year, age, id, chips, disc) instead of cropping.
+// (runtime first, then year, age, chips, disc) instead of cropping.
 func (m Model) renderInspectorItemLine(styles Styles) string {
 	crumb := "Queue"
 	if m.returnView == ViewProblems {
@@ -239,11 +239,17 @@ func (m Model) renderInspectorItemLine(styles Styles) string {
 
 	item := m.getInspectedItem()
 	if item == nil {
-		return prefix + styles.MutedText.Render(fmt.Sprintf("Item #%d (gone)", m.inspectedID))
+		return prefix + styles.AccentText.Bold(true).Render(fmt.Sprintf("ID #%d", m.inspectedID)) +
+			styles.MutedText.Render(" (gone)")
 	}
 
+	itemLabel := fmt.Sprintf("ID #%d", item.ID)
+	identity := prefix + styles.AccentText.Bold(true).Render(itemLabel)
 	title := composeTitle(*item)
-	parts := []headerPart{{prefix + styles.Text.Bold(true).Render(title), 0}}
+	if title != itemLabel {
+		identity += styles.FaintText.Render(" › ") + styles.Text.Bold(true).Render(title)
+	}
+	parts := []headerPart{{identity, 0}}
 	// Year and runtime are identity, not metadata. The display title
 	// usually embeds the year already; only fill the gap when it doesn't.
 	if year := metadataYear(item.Metadata); year != "" && !strings.Contains(title, year) {
@@ -256,10 +262,7 @@ func (m Model) renderInspectorItemLine(styles Styles) string {
 		runtime := humanizeDurationLong(time.Duration(item.Source.DurationSeconds) * time.Second)
 		parts = append(parts, headerPart{styles.MutedText.Render(runtime), 5})
 	}
-	parts = append(parts,
-		headerPart{m.renderStatusChips(*item, styles), 1},
-		headerPart{styles.MutedText.Render(fmt.Sprintf("#%d", item.ID)), 2},
-	)
+	parts = append(parts, headerPart{m.renderStatusChips(*item, styles), 1})
 	if updated := parseTimestamp(item.UpdatedAt); !updated.IsZero() {
 		parts = append(parts, headerPart{styles.FaintText.Render(humanizeDuration(time.Since(updated))), 3})
 	}
