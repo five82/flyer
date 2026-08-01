@@ -161,6 +161,39 @@ func TestOverviewTVItem_EpisodeSummary(t *testing.T) {
 	}
 }
 
+func TestOverviewRunningStageCountUsesActiveEpisodePosition(t *testing.T) {
+	episodes := make([]spindle.EpisodeStatus, 6)
+	for i := range episodes {
+		episodes[i].Key = string(rune('a' + i))
+	}
+	episodes[0].RippedPath = "/ripped/a.mkv"
+
+	got := overviewFor(t, spindle.QueueItem{
+		ID:       6,
+		Stage:    "ripping",
+		Episodes: episodes,
+		Tasks: []spindle.Task{
+			{
+				Type:           "ripping",
+				State:          "running",
+				ActiveAssetKey: "b",
+				Progress: spindle.TaskProgress{
+					Percent: 24,
+					Message: "Phase 2/6 - Ripping title 1",
+				},
+			},
+		},
+	})
+
+	normalized := strings.Join(strings.Fields(got), " ")
+	if !strings.Contains(normalized, "Ripping 2/6") {
+		t.Fatalf("overview running count does not follow active episode, got:\n%s", got)
+	}
+	if !strings.Contains(normalized, "6 planned · 1 ripped") {
+		t.Fatalf("overview completion summary should remain completion-based, got:\n%s", got)
+	}
+}
+
 func TestOverviewSubtitlingHidesUnreportedProgress(t *testing.T) {
 	got := overviewFor(t, spindle.QueueItem{
 		ID:    6,

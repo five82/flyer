@@ -101,8 +101,10 @@ func (m *Model) renderTaskRow(b *strings.Builder, item spindle.QueueItem, task s
 	b.WriteString(" ")
 	b.WriteString(labelStyle.Render(fmt.Sprintf("%-12s", label)))
 
-	// Per-episode throughput count for stages that have one (TV items).
-	if count, ok := stageThroughput(info.totals, item, totals); ok && totals.Planned > 1 {
+	// Per-episode position for a running task, or completed throughput for
+	// every other state. This keeps the row aligned with its active episode:
+	// while episode 2 is being ripped the row reads 2/N, not 1/N.
+	if count, ok := stageTaskCount(info.totals, item, task, episodes, totals); ok && totals.Planned > 1 {
 		b.WriteString(" ")
 		b.WriteString(styles.MutedText.Render(fmt.Sprintf("%*d/%d", countWidth, count, totals.Planned)))
 	}
@@ -185,9 +187,31 @@ func taskEpisodeContext(task spindle.Task, episodes []spindle.EpisodeStatus) str
 	return ""
 }
 
-// stageThroughput maps a catalog totals key to its count. Subtitle generation
-// is distinct from the subtitled asset: generation finishes before apply
-// creates that asset by placing or muxing the generated SRT.
+// stageTaskCount returns a task row's per-episode count. Running rows report
+// the one-based position of their active episode; pending, done, and failed
+// rows report completed throughput. The completion count is a floor so a
+// briefly stale active key cannot make the row move backwards.
+func stageTaskCount(key string, item spindle.QueueItem, task spindle.Task, episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals) (int, bool) {
+	completed, ok := stageThroughput(key, item, totals)
+	if !ok || !task.IsRunning() {
+		return completed, ok
+	}
+
+	activeKey := strings.TrimSpace(task.ActiveAssetKey)
+	if activeKey == "" {
+		return completed, true
+	}
+	for i := range episodes {
+		if strings.EqualFold(episodes[i].Key, activeKey) {
+			return min(max(completed, i+1), totals.Planned), true
+		}
+	}
+	return completed, true
+}
+
+// stageThroughput maps a catalog totals key to its completed count. Subtitle
+// generation is distinct from the subtitled asset: generation finishes before
+// apply creates that asset by placing or muxing the generated SRT.
 func stageThroughput(key string, item spindle.QueueItem, totals spindle.EpisodeTotals) (int, bool) {
 	switch key {
 	case "ripped":
