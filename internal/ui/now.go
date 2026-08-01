@@ -7,38 +7,10 @@ import (
 	"github.com/five82/flyer/internal/spindle"
 )
 
-type driveState uint8
-
-const (
-	driveUnknown driveState = iota
-	driveAvailable
-	driveBusy
-	drivePaused
-)
-
-// opticalDriveState reports whether the drive can accept another disc.
-func (m Model) opticalDriveState() driveState {
-	sched := m.snapshot.Status.Scheduler
-	if sched == nil {
-		return driveUnknown
-	}
-	res, ok := sched.Resources["drive"]
-	if !ok {
-		return driveUnknown
-	}
-	if res.Used > 0 {
-		return driveBusy
-	}
-	if disc := m.snapshot.Status.Disc; disc != nil && disc.Paused {
-		return drivePaused
-	}
-	return driveAvailable
-}
-
 // renderNowBand renders the live resource occupancy band under the header:
 // which task of which item holds each scheduler resource, with live percent
-// and fps/ETA where available. The drive segment always renders -- "insert
-// the next disc" is the single most useful signal this UI carries.
+// and fps/ETA where available. Idle resources are omitted; the header carries
+// the optical drive's availability on every view.
 func (m Model) renderNowBand() string {
 	styles := m.theme.BandStyles()
 	return padBand(m.nowBandContent(styles), m.width, styles.Band)
@@ -67,15 +39,6 @@ func (m Model) nowBandContent(styles Styles) string {
 		rlabel := resourceLabel(name)
 
 		if res.Used == 0 {
-			// Idle resources stay quiet, except the drive.
-			if name == "drive" {
-				state, style := "FREE", styles.SuccessText
-				if m.opticalDriveState() == drivePaused {
-					state, style = "PAUSED", styles.WarningText
-				}
-				parts = append(parts, styles.MutedText.Render(rlabel+": ")+
-					style.Bold(true).Render(state))
-			}
 			continue
 		}
 

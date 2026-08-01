@@ -25,6 +25,34 @@ type headerPart struct {
 	rank int
 }
 
+type driveState uint8
+
+const (
+	driveUnknown driveState = iota
+	driveAvailable
+	driveBusy
+	drivePaused
+)
+
+// opticalDriveState reports whether the drive can accept another disc.
+func (m Model) opticalDriveState() driveState {
+	sched := m.snapshot.Status.Scheduler
+	if sched == nil {
+		return driveUnknown
+	}
+	res, ok := sched.Resources["drive"]
+	if !ok {
+		return driveUnknown
+	}
+	if res.Used > 0 {
+		return driveBusy
+	}
+	if disc := m.snapshot.Status.Disc; disc != nil && disc.Paused {
+		return drivePaused
+	}
+	return driveAvailable
+}
+
 // renderHeader renders the top status band (Surface-filled).
 func (m Model) renderHeader() string {
 	styles := m.theme.BandStyles()

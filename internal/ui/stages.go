@@ -76,8 +76,8 @@ func taskStateGlyph(state string) string {
 }
 
 // resourceOrder derives the resource display order from the pipeline
-// template (first appearance wins), so the header strip follows the
-// daemon's own declaration instead of a hardcoded list.
+// template (first appearance wins), so the NOW band follows the daemon's
+// own declaration instead of a hardcoded list.
 func resourceOrder(pipeline []spindle.PipelineStage, resources map[string]spindle.ResourceStatus) []string {
 	var order []string
 	seen := make(map[string]bool)
@@ -99,7 +99,7 @@ func resourceOrder(pipeline []spindle.PipelineStage, resources map[string]spindl
 	return order
 }
 
-// resourceLabel renders a resource name for the header strip.
+// resourceLabel renders a resource name for the NOW band.
 // Mechanical rules only: strip the "encode_" prefix, uppercase short names.
 func resourceLabel(name string) string {
 	name = strings.TrimPrefix(name, "encode_")

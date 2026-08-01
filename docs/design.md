@@ -29,9 +29,10 @@ Invariants worth defending:
   actually has problems — the glyph marks presence, the label carries the
   meaning — so the operator never tabs into an empty view blind.
 - The header always renders reported optical-drive availability (AVAILABLE /
-  BUSY / PAUSED), and the queue's NOW band retains the detailed drive segment
-  (FREE / PAUSED / holder). "Insert the next disc" is the single most useful
-  signal this UI carries.
+  BUSY / PAUSED). The queue's NOW band reports active resource holders only,
+  including the drive holder when busy. "Insert the next disc" is the single
+  most useful signal this UI carries, so availability remains visible on every
+  view without being duplicated when the drive is idle.
 - Header segments, footer hints, and inspector item-band segments carry
   drop-priority ranks; overflowing lines shed whole segments, never crop
   mid-segment.
