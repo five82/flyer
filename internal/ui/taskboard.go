@@ -12,9 +12,9 @@ import (
 )
 
 // renderTaskBoard renders the item's scheduler tasks: one row per task in
-// pipeline order, with inline progress for running tasks. Concurrent
-// branches (rip-and-encode overlap, GPU work during encodes) each show
-// their own live row.
+// pipeline order. Running tasks show inline progress when the daemon reports
+// it. Concurrent branches (rip-and-encode overlap, GPU work during encodes)
+// each show their own live row.
 func (m *Model) renderTaskBoard(b *strings.Builder, item spindle.QueueItem, styles Styles, width int) {
 	if len(item.Tasks) == 0 {
 		info := stageDisplay(itemDisplayStage(item))
@@ -109,10 +109,14 @@ func (m *Model) renderTaskRow(b *strings.Builder, item spindle.QueueItem, task s
 
 	switch task.State {
 	case "running":
-		b.WriteString("  ")
-		b.WriteString(renderProgressBar(task.Progress.Percent, 20, roleStyle(info.role, styles), styles))
-		b.WriteString(" ")
-		b.WriteString(styles.Text.Render(fmt.Sprintf("%3.0f%%", clampPercent(task.Progress.Percent))))
+		// Zero means the daemon has no meaningful progress to report. Keep the
+		// task and its activity message visible without showing a false 0% bar.
+		if task.Progress.Percent > 0 {
+			b.WriteString("  ")
+			b.WriteString(renderProgressBar(task.Progress.Percent, 20, roleStyle(info.role, styles), styles))
+			b.WriteString(" ")
+			b.WriteString(styles.Text.Render(fmt.Sprintf("%3.0f%%", clampPercent(task.Progress.Percent))))
+		}
 		for _, extra := range taskExtras(item, task, totals) {
 			b.WriteString("  ")
 			b.WriteString(styles.MutedText.Render(extra))

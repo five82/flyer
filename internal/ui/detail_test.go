@@ -161,6 +161,47 @@ func TestOverviewTVItem_EpisodeSummary(t *testing.T) {
 	}
 }
 
+func TestOverviewSubtitlingHidesUnreportedProgress(t *testing.T) {
+	got := overviewFor(t, spindle.QueueItem{
+		ID:    6,
+		Stage: "subtitling",
+		Tasks: []spindle.Task{
+			{
+				Type:  "subtitling",
+				State: "running",
+				Progress: spindle.TaskProgress{
+					Message: "Generating subtitles",
+				},
+			},
+		},
+	})
+
+	if !strings.Contains(got, "Subtitling") || !strings.Contains(got, "Generating subtitles") {
+		t.Fatalf("overview missing running subtitle activity, got:\n%s", got)
+	}
+	if strings.Contains(got, "0%") || strings.Contains(got, strings.Repeat("░", 20)) {
+		t.Fatalf("overview shows a false zero-progress subtitle bar, got:\n%s", got)
+	}
+}
+
+func TestOverviewSubtitlingShowsReportedProgress(t *testing.T) {
+	got := overviewFor(t, spindle.QueueItem{
+		ID:    6,
+		Stage: "subtitling",
+		Tasks: []spindle.Task{
+			{
+				Type:     "subtitling",
+				State:    "running",
+				Progress: spindle.TaskProgress{Percent: 35},
+			},
+		},
+	})
+
+	if !strings.Contains(got, "35%") || !strings.Contains(got, "█") {
+		t.Fatalf("overview missing reported subtitle progress, got:\n%s", got)
+	}
+}
+
 func TestOverviewSubtitlingThroughputUsesGenerationCount(t *testing.T) {
 	episodes := make([]spindle.EpisodeStatus, 7)
 	got := overviewFor(t, spindle.QueueItem{
