@@ -40,7 +40,7 @@ func TestClient_FetchesEndpointsAndEncodesQueries(t *testing.T) {
 		case "/api/status":
 			_ = json.NewEncoder(w).Encode(StatusResponse{Running: true, PID: 123})
 		case "/api/queue":
-			_ = json.NewEncoder(w).Encode(QueueListResponse{Items: []QueueItem{{ID: 42, DiscTitle: "Disc"}}})
+			_ = json.NewEncoder(w).Encode(QueueListResponse{Items: []QueueItem{{ID: 42, DiscTitle: "Disc", DiscNumber: 2}}})
 		case "/api/logs":
 			gotLogsQuery = r.URL.Query()
 			_ = json.NewEncoder(w).Encode(LogBatch{Events: nil, Next: 99})
@@ -70,8 +70,8 @@ func TestClient_FetchesEndpointsAndEncodesQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchQueue returned error: %v", err)
 	}
-	if len(items) != 1 || items[0].ID != 42 {
-		t.Fatalf("FetchQueue items = %#v, want 1 item id=42", items)
+	if len(items) != 1 || items[0].ID != 42 || items[0].DiscNumber != 2 {
+		t.Fatalf("FetchQueue items = %#v, want 1 item id=42 discNumber=2", items)
 	}
 
 	_, err = c.FetchLogs(ctx, LogQuery{

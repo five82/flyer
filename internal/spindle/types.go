@@ -79,6 +79,7 @@ type QueueItem struct {
 	ID                      int64                     `json:"id"`
 	DiscTitle               string                    `json:"discTitle"`
 	DisplayTitle            string                    `json:"displayTitle"`
+	DiscNumber              int                       `json:"discNumber"`
 	Stage                   string                    `json:"stage"`
 	InProgress              bool                      `json:"inProgress"`
 	FailedAtStage           string                    `json:"failedAtStage"`

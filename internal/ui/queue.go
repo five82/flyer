@@ -111,6 +111,7 @@ const queueBarWidth = 8
 type queueColumns struct {
 	strip int
 	id    int
+	disc  int
 	stage int
 	pct   int
 	ago   int
@@ -139,10 +140,16 @@ func computeQueueColumns(items []spindle.QueueItem, width int) queueColumns {
 		if idLen > cols.id {
 			cols.id = idLen
 		}
+		if item.DiscNumber > 0 {
+			cols.disc = len("DISC")
+		}
 	}
 
 	// Fixed columns plus 2-space separators between all columns.
 	fixed := cols.strip + cols.id + cols.stage + cols.pct + 8
+	if cols.disc > 0 {
+		fixed += cols.disc + 2
+	}
 	if cols.ago > 0 {
 		fixed += cols.ago + 2
 	}
@@ -253,9 +260,14 @@ func renderQueueHeaderRow(cols queueColumns, styles Styles) string {
 		pad("", cols.strip),
 		pad("ID", cols.id),
 		pad("TITLE", cols.title),
+	}
+	if cols.disc > 0 {
+		parts = append(parts, pad("DISC", cols.disc))
+	}
+	parts = append(parts,
 		pad("STAGE", cols.stage),
 		pad(pctLabel, cols.pct),
-	}
+	)
 	if cols.ago > 0 {
 		parts = append(parts, "AGE")
 	}
@@ -280,7 +292,7 @@ func (m *Model) ensureQueueVisible() {
 }
 
 // renderQueueRow renders one queue table row:
-// strip  id  title  stage  pct  ago
+// strip  id  title  [disc]  stage  pct  ago
 // The selected row renders as one selection-colored bar (no per-cell colors,
 // guaranteeing contrast); other rows use per-cell styling.
 func (m Model) renderQueueRow(item spindle.QueueItem, cols queueColumns, selected bool, styles Styles) string {
@@ -289,6 +301,10 @@ func (m Model) renderQueueRow(item spindle.QueueItem, cols queueColumns, selecte
 		idStr += "?"
 	}
 	title := truncate(composeTitle(item), cols.title)
+	disc := ""
+	if item.DiscNumber > 0 {
+		disc = fmt.Sprintf("%d", item.DiscNumber)
+	}
 	stage, stageStyle := queueStageCell(item, styles)
 	ago := ""
 	if cols.ago > 0 {
@@ -309,9 +325,14 @@ func (m Model) renderQueueRow(item spindle.QueueItem, cols queueColumns, selecte
 			pad(plainTaskStrip(item), cols.strip),
 			pad(idStr, cols.id),
 			pad(title, cols.title),
+		}
+		if cols.disc > 0 {
+			fields = append(fields, pad(disc, cols.disc))
+		}
+		fields = append(fields,
 			pad(stage, cols.stage),
 			pad(m.queueProgressCell(item, cols, stageStyle, styles, true), cols.pct),
-		}
+		)
 		if cols.ago > 0 {
 			fields = append(fields, ago)
 		}
@@ -331,9 +352,14 @@ func (m Model) renderQueueRow(item spindle.QueueItem, cols queueColumns, selecte
 		pad(m.renderTaskStrip(item, styles), cols.strip),
 		idStyle.Render(pad(idStr, cols.id)),
 		styles.Text.Render(pad(title, cols.title)),
+	}
+	if cols.disc > 0 {
+		parts = append(parts, styles.AccentText.Render(pad(disc, cols.disc)))
+	}
+	parts = append(parts,
 		stageStyle.Render(pad(stage, cols.stage)),
 		pad(m.queueProgressCell(item, cols, stageStyle, styles, false), cols.pct),
-	}
+	)
 	if cols.ago > 0 {
 		parts = append(parts, styles.FaintText.Render(ago))
 	}
