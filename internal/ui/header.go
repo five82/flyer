@@ -38,12 +38,15 @@ func (m Model) renderHeader() string {
 
 	var parts []headerPart
 
-	// Logo and daemon status: never dropped.
+	// Logo, daemon status, and drive availability are never dropped.
 	parts = append(parts, headerPart{styles.Logo.Render("flyer"), 0})
 	if m.snapshot.Status.Running {
 		parts = append(parts, headerPart{styles.SuccessText.Render("● ON"), 0})
 	} else {
 		parts = append(parts, headerPart{styles.DangerText.Render("● OFF"), 0})
+	}
+	if drive := m.renderHeaderDriveStatus(styles); drive != "" {
+		parts = append(parts, headerPart{drive, 0})
 	}
 
 	// Queue count
@@ -73,6 +76,28 @@ func (m Model) renderHeader() string {
 	}
 
 	return padBand(joinHeaderParts(parts, m.width, styles.Band), m.width, styles.Band)
+}
+
+// renderHeaderDriveStatus renders the optical drive's operator-facing state.
+// An absent scheduler drive resource means the daemon cannot report it.
+func (m Model) renderHeaderDriveStatus(styles Styles) string {
+	state := m.opticalDriveState()
+	if state == driveUnknown {
+		return ""
+	}
+
+	stateStyle := styles.AccentText
+	label := "BUSY"
+	switch state {
+	case driveAvailable:
+		stateStyle = styles.SuccessText
+		label = "AVAILABLE"
+	case drivePaused:
+		stateStyle = styles.WarningText
+		label = "PAUSED"
+	}
+
+	return styles.MutedText.Render("Drive: ") + stateStyle.Bold(true).Render(label)
 }
 
 // joinHeaderParts joins parts with two-space separators rendered in the fill

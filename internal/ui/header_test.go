@@ -8,6 +8,63 @@ import (
 	"github.com/five82/flyer/internal/state"
 )
 
+func TestRenderHeaderShowsOpticalDriveStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		used   int
+		paused bool
+		want   string
+	}{
+		{name: "available", want: "AVAILABLE"},
+		{name: "busy", used: 1, want: "BUSY"},
+		{name: "paused", paused: true, want: "PAUSED"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			theme := GetTheme("Nightfox")
+			model := Model{
+				width: 80,
+				theme: theme,
+				snapshot: state.Snapshot{
+					HasStatus: true,
+					Status: spindle.StatusResponse{
+						Running: true,
+						Scheduler: &spindle.SchedulerStatus{Resources: map[string]spindle.ResourceStatus{
+							"drive": {Capacity: 1, Used: tt.used},
+						}},
+						Disc: &spindle.DiscStatus{Paused: tt.paused},
+					},
+				},
+			}
+
+			got := model.renderHeader()
+			if !strings.Contains(got, "Drive: ") || !strings.Contains(got, tt.want) {
+				t.Fatalf("renderHeader() missing drive status %q, got %q", tt.want, got)
+			}
+		})
+	}
+}
+
+func TestRenderHeaderOmitsUnknownOpticalDriveStatus(t *testing.T) {
+	theme := GetTheme("Nightfox")
+	model := Model{
+		width: 80,
+		theme: theme,
+		snapshot: state.Snapshot{
+			HasStatus: true,
+			Status: spindle.StatusResponse{
+				Running:   true,
+				Scheduler: &spindle.SchedulerStatus{},
+			},
+		},
+	}
+
+	if got := model.renderHeader(); strings.Contains(got, "Drive:") {
+		t.Fatalf("renderHeader() reported unknown drive status, got %q", got)
+	}
+}
+
 func TestBuildErrorPartsShowsWorkflowLastError(t *testing.T) {
 	theme := GetTheme("Nightfox")
 	styles := theme.Styles()
