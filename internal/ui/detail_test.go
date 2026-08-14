@@ -130,7 +130,8 @@ func TestOverviewCompletedItem_OutputResults(t *testing.T) {
 
 	sectionOrder(t, got, "Pipeline", "Output", "created")
 	for _, want := range []string{
-		"75% reduction", "3.2x avg", "Passed · 1/1 checks",
+		"75% reduction", "3.2x avg", "Passed · 1/1",
+		"✓ duration", // passed runs list the named checks
 		"/library/movies/Avatar (2009)/Avatar (2009).mkv",
 		"Elapsed 2h 30m",
 	} {
@@ -140,6 +141,96 @@ func TestOverviewCompletedItem_OutputResults(t *testing.T) {
 	}
 	if strings.Contains(got, "Attention") {
 		t.Fatalf("completed healthy item must not render Attention, got:\n%s", got)
+	}
+}
+
+func TestOverviewMediaRows_CuratedFormatting(t *testing.T) {
+	got := overviewFor(t, spindle.QueueItem{
+		ID:    7,
+		Stage: "encoding",
+		Encoding: &spindle.EncodingStatus{
+			Resolution:   "3840x2160",
+			DynamicRange: "hdr",
+			CropRequired: true,
+			CropFilter:   "crop=3840:2080:0:40",
+			Encoder:      "SVT-AV1",
+			Preset:       "6",
+			Tune:         "0",
+			Quality:      "CVVDP target 9.15-9.55 JOD (initial CRF 26 with adaptive priors, whole-chunk probes, CRF search 4.25-63.75, metric workers 4)",
+		},
+		PrimaryAudioDescription: "English | opus | 8ch | Surround 7.1",
+	})
+
+	for _, want := range []string{
+		"3840x2160 -> 3840x2080 HDR (cropped)",
+		"SVT-AV1 · Preset 6 · Tune 0",
+		"Quality  CVVDP target 9.15-9.55 JOD",
+		"English · opus · 8ch · Surround 7.1",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("overview missing %q, got:\n%s", want, got)
+		}
+	}
+	for _, reject := range []string{"3840:2080:0:40", "initial CRF", "metric workers"} {
+		if strings.Contains(got, reject) {
+			t.Fatalf("overview must not render %q, got:\n%s", reject, got)
+		}
+	}
+}
+
+func TestSummarizeQuality(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{
+			"CVVDP target 9.15-9.55 JOD (initial CRF 26 with adaptive priors, whole-chunk probes, CRF search 4.25-63.75, metric workers 4)",
+			"CVVDP target 9.15-9.55 JOD",
+		},
+		{
+			"SSIMULACRA2 target 82.0-86.0 (auto for SDR <=1080p; initial CRF 26 with adaptive priors, whole-chunk probes, CRF search 4.25-63.75, metric workers 4)",
+			"SSIMULACRA2 target 82.0-86.0",
+		},
+		// Fixed-CRF mode's parenthetical is the resolution tier, not
+		// search machinery: keep it.
+		{"CRF 26 (UHD)", "CRF 26 (UHD)"},
+		{"", ""},
+	}
+	for _, tc := range tests {
+		if got := summarizeQuality(tc.in); got != tc.want {
+			t.Fatalf("summarizeQuality(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestOverviewSubSecondTaskDuration(t *testing.T) {
+	got := overviewFor(t, spindle.QueueItem{
+		ID:    8,
+		Stage: "encoding",
+		Tasks: []spindle.Task{{
+			Type:       "identifying",
+			State:      "done",
+			StartedAt:  "2026-07-05T10:00:00Z",
+			FinishedAt: "2026-07-05T10:00:00Z",
+		}},
+	})
+
+	if !strings.Contains(got, "<1s") {
+		t.Fatalf("sub-second done task must show <1s, not a blank cell, got:\n%s", got)
+	}
+}
+
+func TestOverviewElapsedMarksOverlappingStages(t *testing.T) {
+	got := overviewFor(t, spindle.QueueItem{
+		ID:        9,
+		Stage:     "completed",
+		CreatedAt: "2026-07-05T10:00:00Z",
+		UpdatedAt: "2026-07-05T12:00:00Z",
+		Tasks: []spindle.Task{
+			{Type: "ripping", State: "done", StartedAt: "2026-07-05T10:00:00Z", FinishedAt: "2026-07-05T11:30:00Z"},
+			{Type: "encoding", State: "done", StartedAt: "2026-07-05T10:30:00Z", FinishedAt: "2026-07-05T12:00:00Z"},
+		},
+	})
+
+	if !strings.Contains(got, "Elapsed 2h 0m (stages overlap)") {
+		t.Fatalf("overlapping task durations must be annotated, got:\n%s", got)
 	}
 }
 

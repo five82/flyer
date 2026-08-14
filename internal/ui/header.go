@@ -375,8 +375,12 @@ func (m Model) renderCommandBar() string {
 				cmd{"f", "Filters", 3},
 			)
 		}
+		// The episode toggle only earns a hint when there is a list to
+		// toggle; movies carry a single internal episode at most.
 		if m.inspectorTab == tabOverview || m.inspectorTab == tabEpisodes {
-			commands = append(commands, cmd{"t", "Episodes", 3})
+			if item := m.getInspectedItem(); item != nil && isEpisodicItem(*item) {
+				commands = append(commands, cmd{"t", "Episodes", 3})
+			}
 		}
 		commands = append(commands, cmd{"Esc", "Back", 1})
 

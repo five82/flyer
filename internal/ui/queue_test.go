@@ -32,6 +32,48 @@ func TestQueueDiscColumnForTVItems(t *testing.T) {
 	}
 }
 
+func TestQueueCompletedStripCollapses(t *testing.T) {
+	doneTasks := make([]spindle.Task, 8)
+	for i := range doneTasks {
+		doneTasks[i].State = "done"
+	}
+	completed := spindle.QueueItem{ID: 10, Stage: "completed", Tasks: doneTasks}
+	if got := plainTaskStrip(completed); got != "✓" {
+		t.Fatalf("completed strip = %q, want single ✓", got)
+	}
+	if got := taskStripWidth(completed); got != 1 {
+		t.Fatalf("completed strip width = %d, want 1", got)
+	}
+
+	// Failed items keep the full strip: the ✗ position carries information.
+	failed := spindle.QueueItem{ID: 11, Stage: "failed", Tasks: []spindle.Task{
+		{State: "done"}, {State: "failed"}, {State: "pending"},
+	}}
+	if got := plainTaskStrip(failed); got != "✓✗○" {
+		t.Fatalf("failed strip = %q, want per-task glyphs", got)
+	}
+}
+
+func TestQueueCompletedItemShowsSizeReduction(t *testing.T) {
+	items := []spindle.QueueItem{{
+		ID:           12,
+		DisplayTitle: "Example Movie",
+		Stage:        "completed",
+		Encoding: &spindle.EncodingStatus{
+			EncodedSize:          5 << 30,
+			SizeReductionPercent: 79,
+		},
+	}}
+	m := New(Options{ThemeName: "slate"})
+	m.width = 120
+	styles := m.theme.Styles()
+	cols := computeQueueColumns(items, 120)
+	row := stripANSI(m.renderQueueRow(items[0], cols, false, styles))
+	if !strings.Contains(row, "-79%") {
+		t.Fatalf("completed row missing size reduction, got %q", row)
+	}
+}
+
 func TestQueueOmitsDiscColumnWithoutDiscNumbers(t *testing.T) {
 	items := []spindle.QueueItem{{ID: 8, DisplayTitle: "Example Movie", Stage: "encoding"}}
 	cols := computeQueueColumns(items, 120)

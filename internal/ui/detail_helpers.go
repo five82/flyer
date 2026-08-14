@@ -27,7 +27,7 @@ func formatTimestamp(t time.Time, now time.Time) string {
 	}
 	local := t.In(time.Local)
 	if local.Year() == now.Year() && local.YearDay() == now.YearDay() {
-		return local.Format("15:04:05")
+		return local.Format("15:04")
 	}
 	return local.Format("Jan 02 15:04")
 }

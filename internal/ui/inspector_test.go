@@ -104,6 +104,29 @@ func TestInspectorItemLine_ShedsRuntimeFirstWhenNarrow(t *testing.T) {
 	}
 }
 
+func TestCommandBarEpisodeHintFollowsEpisodicItems(t *testing.T) {
+	movie := inspectorModelFor(spindle.QueueItem{
+		ID:       9,
+		Stage:    "completed",
+		Episodes: []spindle.EpisodeStatus{{Key: "main"}},
+		Metadata: json.RawMessage(`{"media_type":"movie"}`),
+	})
+	movie.inspecting = true
+	if got := stripANSI(movie.renderCommandBar()); strings.Contains(got, "Episodes") {
+		t.Fatalf("movie inspector must not advertise the episode toggle, got %q", got)
+	}
+
+	tv := inspectorModelFor(spindle.QueueItem{
+		ID:       9,
+		Stage:    "ripping",
+		Metadata: json.RawMessage(`{"media_type":"tv"}`),
+	})
+	tv.inspecting = true
+	if got := stripANSI(tv.renderCommandBar()); !strings.Contains(got, "Episodes") {
+		t.Fatalf("TV inspector must advertise the episode toggle, got %q", got)
+	}
+}
+
 func TestStatusChips_StoppedItem(t *testing.T) {
 	m := New(Options{ThemeName: "slate"})
 	got := stripANSI(m.renderStatusChips(spindle.QueueItem{ID: 7, Stage: "encoding", UserStopped: true}, m.theme.Styles()))

@@ -272,16 +272,23 @@ func (m Model) renderInspectorItemLine(styles Styles) string {
 // renderInspectorTabBar renders the numbered tab bar. The Problems tab
 // carries a warning glyph when the item actually has problems, so the
 // operator never tabs in blind; the glyph marks presence, the label
-// carries the meaning (guide: color/symbol never stands alone).
+// carries the meaning (guide: color/symbol never stands alone). The
+// Episodes tab marks absence the same way: it dims further when the item
+// has no episode list worth visiting (movies), keeping tab positions
+// stable without advertising a dead end.
 func (m Model) renderInspectorTabBar(styles Styles) string {
 	item := m.getInspectedItem()
 	segments := make([]string, 0, tabCount)
 	for i, label := range inspectorTabLabels {
 		num := fmt.Sprintf("%d", i+1)
 		text := num + " " + label
-		if inspectorTab(i) == m.inspectorTab {
+		deadEpisodesTab := inspectorTab(i) == tabEpisodes && item != nil && !isEpisodicItem(*item)
+		switch {
+		case inspectorTab(i) == m.inspectorTab:
 			text = styles.AccentText.Bold(true).Render(text)
-		} else {
+		case deadEpisodesTab:
+			text = styles.FaintText.Faint(true).Render(text)
+		default:
 			text = styles.FaintText.Render(text)
 		}
 		if inspectorTab(i) == tabProblems && item != nil && needsAttention(*item) {

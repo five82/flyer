@@ -47,38 +47,51 @@ func renderSizeResult(w fieldWriter, item spindle.QueueItem) {
 	w.field("Size", value, w.styles.Text)
 }
 
-// renderVideoSpecs renders the video specs line (resolution + HDR status).
+// renderVideoSpecs renders the video specs line: source resolution, the
+// cropped resolution when a crop was applied, and HDR status. One honest
+// row; the raw crop filter stays in the logs.
 func renderVideoSpecs(w fieldWriter, item spindle.QueueItem) {
 	enc := item.Encoding
 	if enc == nil || enc.Resolution == "" {
 		return
 	}
-	var parts []string
 
-	// Show cropped resolution if crop was applied, otherwise source resolution
 	res := enc.Resolution
+	cropped := ""
 	if enc.CropRequired && enc.CropFilter != "" {
 		if dims := strings.TrimPrefix(enc.CropFilter, "crop="); dims != enc.CropFilter {
 			if fields := strings.SplitN(dims, ":", 3); len(fields) >= 2 {
-				res = fields[0] + "x" + fields[1]
+				cropped = fields[0] + "x" + fields[1]
 			}
 		}
 	}
-	parts = append(parts, res)
+
+	var parts []string
+	if cropped != "" && cropped != res {
+		parts = append(parts, res+" -> "+cropped)
+	} else {
+		parts = append(parts, res)
+	}
 	if enc.DynamicRange != "" {
 		parts = append(parts, strings.ToUpper(enc.DynamicRange))
+	}
+	if cropped != "" && cropped != res {
+		parts = append(parts, "(cropped)")
 	}
 
 	w.field("Video", strings.Join(parts, " "), w.styles.AccentText)
 }
 
-// renderAudioInfo renders the source audio format.
+// renderAudioInfo renders the source audio format. The daemon reports it
+// pipe-separated; normalize to the middot the rest of the overview uses.
 func renderAudioInfo(w fieldWriter, item spindle.QueueItem) {
-	w.field("Audio", item.PrimaryAudioDescription, w.styles.Text)
+	desc := strings.ReplaceAll(item.PrimaryAudioDescription, " | ", " · ")
+	desc = strings.ReplaceAll(desc, "|", "·")
+	w.field("Audio", desc, w.styles.Text)
 }
 
-// renderEncodingConfig renders the encoding config line
-// (encoder + preset + quality + tune).
+// renderEncodingConfig renders the encoding config: a scannable headline row
+// (encoder + preset + tune) with reel's verbose quality string on its own row.
 func renderEncodingConfig(w fieldWriter, item spindle.QueueItem) {
 	enc := item.Encoding
 	if enc == nil || enc.Preset == "" {
@@ -90,14 +103,33 @@ func renderEncodingConfig(w fieldWriter, item spindle.QueueItem) {
 		parts = append(parts, enc.Encoder)
 	}
 	parts = append(parts, fmt.Sprintf("Preset %s", enc.Preset))
-	if enc.Quality != "" {
-		parts = append(parts, enc.Quality)
-	}
 	if enc.Tune != "" {
 		parts = append(parts, fmt.Sprintf("Tune %s", enc.Tune))
 	}
 
-	w.field("Config", strings.Join(parts, " • "), w.styles.AccentText)
+	w.field("Config", strings.Join(parts, " · "), w.styles.AccentText)
+	w.field("Quality", summarizeQuality(enc.Quality), w.styles.AccentText)
+}
+
+// summarizeQuality trims reel's quality description to what an operator
+// cares about: the metric and its target band, or the fixed CRF and tier.
+// Target-quality mode appends a parenthetical describing the CRF search
+// machinery (initial CRF, adaptive priors, probe strategy, worker count);
+// that is dropped. Parentheticals without search machinery -- fixed-CRF
+// mode's resolution tier in "CRF 26 (UHD)" -- are kept.
+func summarizeQuality(q string) string {
+	q = strings.TrimSpace(q)
+	open := strings.LastIndex(q, "(")
+	if open <= 0 || !strings.HasSuffix(q, ")") {
+		return q
+	}
+	paren := q[open:]
+	for _, marker := range []string{"initial CRF", "CRF search", "metric workers"} {
+		if strings.Contains(paren, marker) {
+			return strings.TrimSpace(q[:open])
+		}
+	}
+	return q
 }
 
 // renderContentID renders the episode identification summary: method and
@@ -153,7 +185,10 @@ func renderEncodeStats(w fieldWriter, item spindle.QueueItem) {
 	w.field("Encode", strings.Join(parts, " @ "), w.styles.Text)
 }
 
-// renderValidationSummary renders a one-line validation summary.
+// renderValidationSummary renders the validation result. Passed runs also
+// list the named checks -- "what was actually verified" without a tab
+// switch; failing runs get their step list in the Attention section, so
+// only the summary row renders here.
 func renderValidationSummary(w fieldWriter, item spindle.QueueItem) {
 	if item.Encoding == nil || item.Encoding.Validation == nil {
 		return
@@ -171,27 +206,30 @@ func renderValidationSummary(w fieldWriter, item spindle.QueueItem) {
 		}
 	}
 
-	value := fmt.Sprintf("%d/%d checks", passed, total)
-	if v.Passed {
-		w.field("Checks", "Passed · "+value, w.styles.SuccessText)
-	} else {
+	value := fmt.Sprintf("%d/%d", passed, total)
+	if !v.Passed {
 		w.field("Checks", "Failed · "+value, w.styles.DangerText)
-	}
-}
-
-// renderCropInfo renders the crop detection line.
-func renderCropInfo(w fieldWriter, item spindle.QueueItem) {
-	enc := item.Encoding
-	if enc == nil {
 		return
 	}
-
-	if enc.CropRequired && enc.CropFilter != "" {
-		// Strip "crop=" prefix for cleaner display
-		w.field("Crop", strings.TrimPrefix(enc.CropFilter, "crop="), w.styles.AccentText)
-	} else if enc.CropMessage != "" {
-		// Detection complete but no cropping needed
-		w.field("Crop", "None", w.styles.FaintText)
+	w.field("Checks", "Passed · "+value, w.styles.SuccessText)
+	for _, step := range v.Steps {
+		name := strings.TrimSpace(step.Name)
+		if name == "" {
+			continue
+		}
+		icon, iconStyle := "✓", w.styles.SuccessText
+		if !step.Passed {
+			icon, iconStyle = "✗", w.styles.DangerText
+		}
+		w.b.WriteString(strings.Repeat(" ", detailFieldLabelWidth))
+		w.b.WriteString(iconStyle.Render(icon))
+		w.b.WriteString(" ")
+		w.b.WriteString(w.styles.MutedText.Render(name))
+		if details := strings.TrimSpace(step.Details); details != "" {
+			w.b.WriteString(" ")
+			w.b.WriteString(w.styles.FaintText.Render(details))
+		}
+		w.b.WriteString("\n")
 	}
 }
 

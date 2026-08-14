@@ -133,7 +133,7 @@ func computeQueueColumns(items []spindle.QueueItem, width int) queueColumns {
 		cols.pct = queueBarWidth + 1 + 4 // bar + space + "100%"
 	}
 	for _, item := range items {
-		if n := len(item.Tasks); n > cols.strip {
+		if n := taskStripWidth(item); n > cols.strip {
 			cols.strip = n
 		}
 		idLen := len(fmt.Sprintf("#%d", item.ID)) + 1 // room for review "?"
@@ -367,18 +367,24 @@ func (m Model) renderQueueRow(item spindle.QueueItem, cols queueColumns, selecte
 }
 
 // queueProgressCell renders the progress column: an inline bar plus percent
-// on wide terminals, percent only otherwise. Plain output (no styling) is
-// used inside the selection bar.
+// on wide terminals, percent only otherwise. Completed items reuse the
+// otherwise-dead column for their size reduction ("-79%"): how much space
+// an encode bought is the one figure worth glancing at after the fact.
+// Plain output (no styling) is used inside the selection bar.
 func (m Model) queueProgressCell(item spindle.QueueItem, cols queueColumns, stageStyle lipgloss.Style, styles Styles, plain bool) string {
 	pct := queuePercentCell(item)
+	if pct == "" {
+		red := completedReductionCell(item)
+		if red == "" || plain {
+			return red
+		}
+		return styles.MutedText.Render(red)
+	}
 	if !cols.bar {
-		if plain || pct == "" {
+		if plain {
 			return pct
 		}
 		return styles.AccentText.Render(pct)
-	}
-	if pct == "" {
-		return ""
 	}
 	percent := runningTaskPercent(item)
 	if plain {
@@ -387,6 +393,19 @@ func (m Model) queueProgressCell(item spindle.QueueItem, cols queueColumns, stag
 	}
 	return renderProgressBar(percent, queueBarWidth, stageStyle, styles) +
 		" " + styles.AccentText.Render(pct)
+}
+
+// completedReductionCell returns a completed item's size reduction for the
+// progress column ("-79%"), or blank when unknown.
+func completedReductionCell(item spindle.QueueItem) string {
+	if !strings.EqualFold(item.Stage, "completed") {
+		return ""
+	}
+	enc := item.Encoding
+	if enc == nil || enc.EncodedSize <= 0 || enc.SizeReductionPercent <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("-%.0f%%", enc.SizeReductionPercent)
 }
 
 // runningTaskPercent returns the primary running task's percent.
@@ -431,17 +450,46 @@ func queuePercentCell(item spindle.QueueItem) string {
 	return ""
 }
 
+// stripCollapsed reports whether an item's task strip collapses to a single
+// summary glyph. Completed items do: a run of identical green checks per
+// row buries the one strip that matters. Failed items keep the full strip
+// -- the ✗ position answers "where did it fail" at a glance.
+func stripCollapsed(item spindle.QueueItem) bool {
+	return len(item.Tasks) == 0 || strings.EqualFold(item.Stage, "completed")
+}
+
+// taskStripWidth returns the glyph-cell width an item's task strip needs.
+func taskStripWidth(item spindle.QueueItem) int {
+	if stripCollapsed(item) {
+		return 1
+	}
+	return len(item.Tasks)
+}
+
+// collapsedStripGlyph returns the single summary glyph for a collapsed strip.
+func collapsedStripGlyph(item spindle.QueueItem) string {
+	switch {
+	case strings.EqualFold(item.Stage, "completed"):
+		return "✓"
+	case strings.EqualFold(item.Stage, "failed"):
+		return "✗"
+	default:
+		return "○"
+	}
+}
+
 // renderTaskStrip renders one glyph per task, colored by task state (with
-// the running glyph in its stage's role color). Terminal or task-less items
-// collapse to a single summary glyph.
+// the running glyph in its stage's role color). Completed or task-less
+// items collapse to a single summary glyph.
 func (m Model) renderTaskStrip(item spindle.QueueItem, styles Styles) string {
-	if len(item.Tasks) == 0 {
-		glyph, style := "○", styles.FaintText
-		switch {
-		case strings.EqualFold(item.Stage, "completed"):
-			glyph, style = "✓", styles.SuccessText
-		case strings.EqualFold(item.Stage, "failed"):
-			glyph, style = "✗", styles.DangerText
+	if stripCollapsed(item) {
+		glyph := collapsedStripGlyph(item)
+		style := styles.FaintText
+		switch glyph {
+		case "✓":
+			style = styles.SuccessText
+		case "✗":
+			style = styles.DangerText
 		}
 		return style.Render(glyph)
 	}
@@ -464,15 +512,8 @@ func (m Model) renderTaskStrip(item spindle.QueueItem, styles Styles) string {
 
 // plainTaskStrip renders the task strip without styling (for selected rows).
 func plainTaskStrip(item spindle.QueueItem) string {
-	if len(item.Tasks) == 0 {
-		switch {
-		case strings.EqualFold(item.Stage, "completed"):
-			return "✓"
-		case strings.EqualFold(item.Stage, "failed"):
-			return "✗"
-		default:
-			return "○"
-		}
+	if stripCollapsed(item) {
+		return collapsedStripGlyph(item)
 	}
 	var b strings.Builder
 	for _, t := range item.Tasks {

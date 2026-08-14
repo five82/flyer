@@ -18,7 +18,7 @@ type fieldWriter struct {
 }
 
 // detailFieldLabelWidth is the fixed label column of the overview rows,
-// sized so the widest label ("Comment.") keeps a trailing space.
+// sized so the widest labels ("Quality", "Context") keep a trailing space.
 const detailFieldLabelWidth = 9
 
 // field writes one label/value row with a muted label.
@@ -273,9 +273,8 @@ func (m *Model) renderMedia(w fieldWriter, item spindle.QueueItem, styles Styles
 	renderVideoSpecs(inner, item)
 	renderAudioInfo(inner, item)
 	if item.CommentaryCount > 0 {
-		inner.field("Comment.", fmt.Sprintf("%d commentary track(s) detected", item.CommentaryCount), styles.Text)
+		inner.field("Tracks", fmt.Sprintf("%d commentary track(s) detected", item.CommentaryCount), styles.Text)
 	}
-	renderCropInfo(inner, item)
 	renderEncodingConfig(inner, item)
 	renderContentID(inner, item)
 
@@ -335,13 +334,21 @@ func (m *Model) renderOutput(w fieldWriter, item spindle.QueueItem, styles Style
 	w.b.WriteString(b.String())
 }
 
+// isEpisodicItem reports whether the item carries episode-level content
+// worth a list: a multi-episode batch or anything TV. Movies track a single
+// internal "main" episode that has no list value of its own.
+func isEpisodicItem(item spindle.QueueItem) bool {
+	episodes, _ := item.EpisodeSnapshot()
+	return len(episodes) > 1 || detectMediaType(item.Metadata) == "tv"
+}
+
 // renderEpisodeSummarySection renders the episode batch summary; the full
 // per-episode list lives on the Episodes tab.
 func (m *Model) renderEpisodeSummarySection(b *strings.Builder, item spindle.QueueItem, styles Styles) {
-	episodes, totals := item.EpisodeSnapshot()
-	if len(episodes) <= 1 && detectMediaType(item.Metadata) != "tv" {
+	if !isEpisodicItem(item) {
 		return
 	}
+	episodes, totals := item.EpisodeSnapshot()
 
 	m.writeSection(b, "Episodes", styles, 0)
 	m.renderEpisodeSummary(b, item, episodes, totals, styles)

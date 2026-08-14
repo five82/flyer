@@ -42,20 +42,28 @@ func (m *Model) renderTaskBoard(b *strings.Builder, item spindle.QueueItem, styl
 		m.renderTaskRow(b, item, task, episodes, totals, countWidth, styles, width)
 	}
 
-	if elapsed := itemElapsed(item); elapsed != "" {
+	if elapsed := itemElapsed(item); elapsed >= time.Minute {
+		label := "Elapsed " + humanizeDurationLong(elapsed)
+		// Task durations can sum past the wall clock when stages ran
+		// concurrently (rip/encode overlap); say so, or the arithmetic
+		// reads as a bug.
+		if taskDurationSum(item) > elapsed {
+			label += " (stages overlap)"
+		}
 		b.WriteString("  ")
-		b.WriteString(styles.FaintText.Render("Elapsed " + elapsed))
+		b.WriteString(styles.FaintText.Render(label))
 		b.WriteString("\n")
 	}
 }
 
 // itemElapsed reports the item's wall-clock time in the pipeline: creation
 // to the last task finish for terminal items, creation to now otherwise.
-// Empty under a minute -- the figure means nothing that fresh.
-func itemElapsed(item spindle.QueueItem) string {
+// Zero when the creation time is unknown; callers ignore sub-minute values
+// -- the figure means nothing that fresh.
+func itemElapsed(item spindle.QueueItem) time.Duration {
 	created := item.ParsedCreatedAt()
 	if created.IsZero() {
-		return ""
+		return 0
 	}
 	end := time.Now()
 	if item.IsTerminal() {
@@ -66,11 +74,16 @@ func itemElapsed(item spindle.QueueItem) string {
 			}
 		}
 	}
-	d := end.Sub(created)
-	if d < time.Minute {
-		return ""
+	return end.Sub(created)
+}
+
+// taskDurationSum totals the run time of the item's finished tasks.
+func taskDurationSum(item spindle.QueueItem) time.Duration {
+	var sum time.Duration
+	for _, t := range item.Tasks {
+		sum += t.Duration()
 	}
-	return humanizeDurationLong(d)
+	return sum
 }
 
 func (m *Model) renderTaskRow(b *strings.Builder, item spindle.QueueItem, task spindle.Task, episodes []spindle.EpisodeStatus, totals spindle.EpisodeTotals, countWidth int, styles Styles, width int) {
@@ -124,9 +137,14 @@ func (m *Model) renderTaskRow(b *strings.Builder, item spindle.QueueItem, task s
 			b.WriteString(styles.MutedText.Render(extra))
 		}
 	case "done":
+		// Sub-second tasks render "<1s" rather than a blank cell -- a gap
+		// in an otherwise complete duration column reads as missing data.
 		if d := task.Duration(); d > 0 {
 			b.WriteString("  ")
 			b.WriteString(styles.FaintText.Render(formatDuration(d)))
+		} else if !task.ParsedStartedAt().IsZero() && !task.ParsedFinishedAt().IsZero() {
+			b.WriteString("  ")
+			b.WriteString(styles.FaintText.Render("<1s"))
 		}
 	}
 
