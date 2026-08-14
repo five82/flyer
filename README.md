@@ -38,7 +38,7 @@ cd flyer && go build ./cmd/flyer
 
 ## Requirements
 
-- Go 1.26+
+- Go 1.26.6+
 - A running Spindle daemon with `[api].bind` configured
 - For local mode: access to Spindle's user config
 - For remote mode: an API endpoint and token (see [Remote Access](#remote-access))
