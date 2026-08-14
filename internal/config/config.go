@@ -79,9 +79,15 @@ func resolvePath(path string) (string, error) {
 	if strings.TrimSpace(path) != "" {
 		return expandPath(path)
 	}
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve user config directory: %w", err)
+	configDir := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME"))
+	if configDir == "" {
+		var err error
+		configDir, err = os.UserConfigDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve user config directory: %w", err)
+		}
+	} else if !filepath.IsAbs(configDir) {
+		return "", fmt.Errorf("resolve user config directory: XDG_CONFIG_HOME is not an absolute path")
 	}
 	return filepath.Join(configDir, "spindle", "config.toml"), nil
 }
