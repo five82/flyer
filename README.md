@@ -36,6 +36,16 @@ git clone https://github.com/five82/flyer.git
 cd flyer && go build ./cmd/flyer
 ```
 
+To deploy a source checkout over the `flyer` on `PATH`:
+
+```bash
+./check-ci.sh
+./deploy.sh
+```
+
+The deploy script keeps the previous binary beside the installed one and
+verifies the installed copy.
+
 ## Requirements
 
 - Go 1.26.6+
