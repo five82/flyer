@@ -4,6 +4,7 @@ This file provides guidance when working with code in this repository.
 
 ## TL;DR
 
+- Use `./deploy.sh` for deployments; do not reproduce its steps manually.
 - Run `./check-ci.sh` before handing work back.
 - Tests must not read real home directory or Spindle config - use `t.TempDir()` + `t.Setenv("HOME", ...)`.
 
