@@ -81,7 +81,6 @@ type QueueItem struct {
 	DisplayTitle            string                    `json:"displayTitle"`
 	DiscNumber              int                       `json:"discNumber"`
 	Stage                   string                    `json:"stage"`
-	InProgress              bool                      `json:"inProgress"`
 	FailedAtStage           string                    `json:"failedAtStage"`
 	ErrorMessage            string                    `json:"errorMessage"`
 	CreatedAt               string                    `json:"createdAt"`
