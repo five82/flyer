@@ -16,11 +16,12 @@ Flyer is a **read-only TUI** for monitoring Spindle. Single-developer hobby proj
 
 | Repo | Path | Role |
 |------|------|------|
-| flyer | `~/projects/flyer/` | Read-only TUI for Spindle (this repo) |
+| flyer | `~/projects/flyer/` | Read-only terminal UI for Spindle (this repo) |
+| reel | `~/projects/reel/` | AV1 encoder embedded by Spindle; Flyer does not call it directly |
+| shuttle | `~/projects/shuttle/` | Read-only native macOS monitor for Spindle |
 | spindle | `~/projects/spindle/` | Daemon + CLI; Flyer polls its `[api].bind` endpoint |
-| reel | `~/projects/reel/` | Encoder invoked by Spindle; Flyer does not call directly |
 
-GitHub: [flyer](https://github.com/five82/flyer) | [spindle](https://github.com/five82/spindle) | [reel](https://github.com/five82/reel)
+GitHub: [flyer](https://github.com/five82/flyer) | [reel](https://github.com/five82/reel) | [shuttle](https://github.com/five82/shuttle) | [spindle](https://github.com/five82/spindle)
 
 ## Critical Expectations
 
