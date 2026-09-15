@@ -1,22 +1,36 @@
 # flyer
 
-A terminal dashboard for monitoring [Spindle](https://github.com/five82/spindle), the disc-ripping daemon. Flyer polls the Spindle API to display queue status, item details, and logs in a single TUI.
+A terminal dashboard for [Spindle](https://github.com/five82/spindle), the
+disc-ripping daemon. It polls the Spindle API and shows queue status, item
+details, and logs in one TUI.
 
-Flyer is read-only by design — use the Spindle CLI for retries, clears, or other mutations.
+Flyer is read-only. Use the Spindle CLI for retries, clears, and other
+mutations.
 
 ## Expectations
 
-Flyer is a personal tool built for one workflow, hardware setup, and set of preferences — open source in the spirit of sharing rather than as a general-purpose product. Behavior may change as the workflow evolves, and questions or issues may receive a slow response or none; pull requests are welcome when they fit the project's goals. Expect rough edges.
+Flyer is a personal tool tuned to one workflow, one machine, and one set of
+preferences. It is shared in the open rather than maintained as a
+general-purpose product. Behavior changes as that workflow does, and questions
+may get a slow response or none at all. Pull requests are welcome when they fit
+the project's goals. Expect rough edges.
 
 ## Features
 
-- **Dashboard** — queue table with progress and filtering, plus a live NOW band naming the item and task holding each scheduler resource (drive, GPU, encode)
-- **Drive availability** — the header always reports the optical drive as AVAILABLE, BUSY, or PAUSED
-- **Item inspector** — full-screen drill-in per item: Overview, Episodes (TV box sets), Problems, and Logs tabs
-- **Problems triage** — every failed or review item with its lead reason, one keypress from the details
-- **Logs** — daemon and per-item logs with highlighting, follow mode, and level/component/lane/request filters
-- **Search** — regex log search with `n`/`N`; `/` also filters queue rows by title
-- **Themes** — Slate and Nightfox, cycled with `T`
+- **Dashboard.** Queue table with progress and filtering, plus a live NOW band
+  that names the item and task holding each scheduler resource (drive, GPU,
+  encode).
+- **Drive availability.** The header always shows whether the optical drive is
+  AVAILABLE, BUSY, or PAUSED.
+- **Item inspector.** Full-screen drill-in for one item, with Overview,
+  Episodes, Problems, and Logs tabs. Episodes applies to TV box sets.
+- **Problems triage.** Every failed or review item with its lead reason, one
+  keypress away from the details.
+- **Logs.** Daemon and per-item logs with highlighting, follow mode, and filters
+  for level, component, lane, and request.
+- **Search.** Regex log search with `n`/`N`. The queue's `/` filters rows by
+  title.
+- **Themes.** Slate and Nightfox, cycled with `T`.
 
 ## Install
 
@@ -28,11 +42,13 @@ Requirements:
 
 - Go 1.27.1+
 - A running Spindle daemon with `[api].bind` configured
-- Local mode: read access to Spindle's config and state directory (`~/.local/state/spindle` by default) for daemon logs
-- Remote mode: an API endpoint and bearer token (see [Remote Access](#remote-access))
+- Local mode: read access to Spindle's config and state directory
+  (`~/.local/state/spindle` by default), which holds the daemon log
+- Remote mode: an API endpoint and bearer token (see
+  [Remote Access](#remote-access))
 
-Flyer runs anywhere the Spindle API is reachable; only the daemon itself is
-Linux-bound. To build a source checkout instead:
+Flyer runs anywhere it can reach the Spindle API. Only the daemon requires
+Linux. To build from a source checkout instead:
 
 ```bash
 git clone https://github.com/five82/flyer.git
@@ -47,10 +63,10 @@ flyer
 
 | Flag | Default | Purpose |
 |------|---------|---------|
-| `--config` | `$XDG_CONFIG_HOME/spindle/config.toml` | Spindle config to read |
-| `--poll` | `2` | Refresh interval, in seconds |
-| `--api` | - | Spindle API endpoint (remote mode) |
-| `--token` | - | API bearer token (remote mode) |
+| `--config` | `$XDG_CONFIG_HOME/spindle/config.toml` | Spindle config file to read |
+| `--poll` | `2` | Refresh interval in seconds |
+| `--api` | none | Spindle API endpoint (remote mode) |
+| `--token` | none | API bearer token (remote mode) |
 
 Press `h` or `?` in the TUI for keyboard shortcuts.
 
@@ -59,8 +75,8 @@ Press `h` or `?` in the TUI for keyboard shortcuts.
 Flyer reads Spindle's local config by default. Point it at a remote daemon with
 flags or environment variables:
 
-| | Flag | Environment variable |
-|--|------|----------------------|
+| Setting | Flag | Environment variable |
+|---------|------|----------------------|
 | Endpoint | `--api` | `FLYER_API_ENDPOINT` |
 | Token | `--token` | `FLYER_API_TOKEN` |
 
@@ -68,8 +84,8 @@ flags or environment variables:
 flyer --api http://server:7487 --token mysecrettoken
 ```
 
-Resolution order: flags, then environment, then local config. Spindle does not
-enable TCP listening by default, so a local setup needs it configured:
+Flags take precedence, then environment variables, then the local config.
+Spindle does not listen on TCP by default, so a local setup must enable it:
 
 ```toml
 [api]
@@ -77,8 +93,8 @@ bind = "127.0.0.1:7487"
 token = "choose-a-token"
 ```
 
-See the [Spindle operator guide](https://github.com/five82/spindle#configure) for
-server setup.
+See the [Spindle operator guide](https://github.com/five82/spindle#configure)
+for server setup.
 
 ## Development
 
@@ -92,9 +108,9 @@ go test ./...          # run tests
 The deploy script keeps the previous binary beside the installed one and
 verifies the installed copy.
 
-See [AGENTS.md](AGENTS.md) for project structure and workflow, and
-[docs/design.md](docs/design.md) and [docs/themes.md](docs/themes.md) for the UI
-visual language and theme palettes.
+See [AGENTS.md](AGENTS.md) for project structure and workflow. The UI visual
+language and theme palettes live in [docs/design.md](docs/design.md) and
+[docs/themes.md](docs/themes.md).
 
 ## License
 
