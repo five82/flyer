@@ -1,19 +1,10 @@
 # flyer
 
-A terminal dashboard for [Spindle](https://github.com/five82/spindle), the
-disc-ripping daemon. It polls the Spindle API and shows queue status, item
-details, and logs in one TUI.
-
-Flyer is read-only. Use the Spindle CLI for retries, clears, and other
-mutations.
+A read only terminal dashboard for [Spindle](https://github.com/five82/spindle), the disc-ripping daemon. It polls the Spindle API and shows queue status, item details, and logs.
 
 ## Expectations
 
-Flyer is a personal tool tuned to one workflow, one machine, and one set of
-preferences. It is shared in the open rather than maintained as a
-general-purpose product. Behavior changes as that workflow does, and questions
-may get a slow response or none at all. Pull requests are welcome when they fit
-the project's goals. Expect rough edges.
+Flyer is a personal tool. I'm sharing it because I believe in open source but I'm not a maintainer. Pull requests are welcome when they fit the project's goals. Expect rough edges.
 
 ## Features
 
@@ -47,8 +38,7 @@ Requirements:
 - Remote mode: an API endpoint and bearer token (see
   [Remote Access](#remote-access))
 
-Flyer runs anywhere it can reach the Spindle API. Only the daemon requires
-Linux. To build from a source checkout instead:
+Flyer runs anywhere it can reach the Spindle API. To build from a source checkout instead:
 
 ```bash
 git clone https://github.com/five82/flyer.git
@@ -72,8 +62,7 @@ Press `h` or `?` in the TUI for keyboard shortcuts.
 
 ## Remote Access
 
-Flyer reads Spindle's local config by default. Point it at a remote daemon with
-flags or environment variables:
+Flyer reads Spindle's local config by default. Point it at a remote daemon with flags or environment variables:
 
 | Setting | Flag | Environment variable |
 |---------|------|----------------------|
