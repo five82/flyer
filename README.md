@@ -2,88 +2,74 @@
 
 A terminal dashboard for monitoring [Spindle](https://github.com/five82/spindle), the disc-ripping daemon. Flyer polls the Spindle API to display queue status, item details, and logs in a single TUI.
 
-Flyer is read-only by design—use the Spindle CLI for retries, clears, or other mutations.
+Flyer is read-only by design — use the Spindle CLI for retries, clears, or other mutations.
 
 ## Expectations
 
-This repository is shared as is. Flyer is a personal tool I built for my own workflow, hardware, and preferences. I've open sourced it because I believe in sharing but I'm not an active maintainer.
-
-- Personal-first: Things will change and break as I iterate.
-- Best-effort only: This is a part-time hobby project and I work on it when I'm able to. I may be slow to respond to questions or may not respond at all.
-- PRs: Pull requests are welcome if they align with the project's goals but I may be slow to review them or may not accept changes that don't fit my own use case.
-- This project started as and remains an experiment. Expect rough edges.
+Flyer is a personal tool built for one workflow, hardware setup, and set of preferences — open source in the spirit of sharing rather than as a general-purpose product. Behavior may change as the workflow evolves, and questions or issues may receive a slow response or none; pull requests are welcome when they fit the project's goals. Expect rough edges.
 
 ## Features
 
-- **Dashboard** — full-width queue table with a live resource band (drive/GPU/encode occupancy), progress, and filtering
-- **Item inspector** — full-screen drill-in per item with Overview, Episodes, Problems, and Logs tabs
-- **Episode tracker** — per-episode asset grids for TV box sets
-- **Log viewer** — daemon and per-item logs with syntax highlighting
-- **Problems triage** — every failed/review item with its lead reason, one keypress from the details
-- **Search** — vim-style `/` search with `n`/`N` navigation and regex support
-- **Themes** — Slate and Nightfox color schemes
+- **Dashboard** — queue table with progress and filtering, plus a live NOW band naming the item and task holding each scheduler resource (drive, GPU, encode)
+- **Drive availability** — the header always reports the optical drive as AVAILABLE, BUSY, or PAUSED
+- **Item inspector** — full-screen drill-in per item: Overview, Episodes (TV box sets), Problems, and Logs tabs
+- **Problems triage** — every failed or review item with its lead reason, one keypress from the details
+- **Logs** — daemon and per-item logs with highlighting, follow mode, and level/component/lane/request filters
+- **Search** — regex log search with `n`/`N`; `/` also filters queue rows by title
+- **Themes** — Slate and Nightfox, cycled with `T`
 
-## Installation
+## Install
 
 ```bash
 go install github.com/five82/flyer/cmd/flyer@latest
 ```
 
-Or build from source:
+Requirements:
+
+- Go 1.27.1+
+- A running Spindle daemon with `[api].bind` configured
+- Local mode: read access to Spindle's config and state directory (`~/.local/state/spindle` by default) for daemon logs
+- Remote mode: an API endpoint and bearer token (see [Remote Access](#remote-access))
+
+Flyer runs anywhere the Spindle API is reachable; only the daemon itself is
+Linux-bound. To build a source checkout instead:
 
 ```bash
 git clone https://github.com/five82/flyer.git
 cd flyer && go build ./cmd/flyer
 ```
 
-To deploy a source checkout over the `flyer` on `PATH`:
-
-```bash
-./check-ci.sh
-./deploy.sh
-```
-
-The deploy script keeps the previous binary beside the installed one and
-verifies the installed copy.
-
-## Requirements
-
-- Go 1.27.1+
-- A running Spindle daemon with `[api].bind` configured
-- For local mode: access to Spindle's user config
-- For remote mode: an API endpoint and token (see [Remote Access](#remote-access))
-
 ## Usage
 
 ```bash
-flyer                          # uses default Spindle config
-flyer --config /path/to/config.toml  # override config location
-flyer --poll 3                 # set refresh interval (default: 2s)
+flyer
 ```
 
-Press `h` in the TUI for keyboard shortcuts.
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `--config` | `$XDG_CONFIG_HOME/spindle/config.toml` | Spindle config to read |
+| `--poll` | `2` | Refresh interval, in seconds |
+| `--api` | - | Spindle API endpoint (remote mode) |
+| `--token` | - | API bearer token (remote mode) |
+
+Press `h` or `?` in the TUI for keyboard shortcuts.
 
 ## Remote Access
 
-Flyer can connect to a remote Spindle daemon using CLI flags or environment variables.
+Flyer reads Spindle's local config by default. Point it at a remote daemon with
+flags or environment variables:
 
-**CLI flags:**
+| | Flag | Environment variable |
+|--|------|----------------------|
+| Endpoint | `--api` | `FLYER_API_ENDPOINT` |
+| Token | `--token` | `FLYER_API_TOKEN` |
 
 ```bash
 flyer --api http://server:7487 --token mysecrettoken
 ```
 
-**Environment variables:**
-
-```bash
-export FLYER_API_ENDPOINT=http://server:7487
-export FLYER_API_TOKEN=mysecrettoken
-flyer
-```
-
-CLI flags take precedence over environment variables. When neither is set,
-Flyer reads `[api].bind` and `[api].token` from the local Spindle config.
-Spindle does not enable TCP listening by default; a typical local setup is:
+Resolution order: flags, then environment, then local config. Spindle does not
+enable TCP listening by default, so a local setup needs it configured:
 
 ```toml
 [api]
@@ -91,25 +77,24 @@ bind = "127.0.0.1:7487"
 token = "choose-a-token"
 ```
 
-**Precedence order:**
-1. CLI flags (`--api`, `--token`)
-2. Environment variables (`FLYER_API_ENDPOINT`, `FLYER_API_TOKEN`)
-3. Local Spindle config
-
 See the [Spindle operator guide](https://github.com/five82/spindle#configure) for
 server setup.
 
 ## Development
 
-See [AGENTS.md](AGENTS.md) for project structure, development workflow, and contribution guidelines.
-
-Quick commands:
-
 ```bash
-./check-ci.sh              # run local CI checks
-go test ./...              # run tests
-go run ./cmd/flyer         # run without installing
+go run ./cmd/flyer     # run without installing
+go test ./...          # run tests
+./check-ci.sh          # full local CI: tests, race, lint, govulncheck
+./deploy.sh            # build this checkout over the installed binary
 ```
+
+The deploy script keeps the previous binary beside the installed one and
+verifies the installed copy.
+
+See [AGENTS.md](AGENTS.md) for project structure and workflow, and
+[docs/design.md](docs/design.md) and [docs/themes.md](docs/themes.md) for the UI
+visual language and theme palettes.
 
 ## License
 
