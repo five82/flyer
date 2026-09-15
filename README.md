@@ -48,7 +48,7 @@ verifies the installed copy.
 
 ## Requirements
 
-- Go 1.27.0+
+- Go 1.27.1+
 - A running Spindle daemon with `[api].bind` configured
 - For local mode: access to Spindle's user config
 - For remote mode: an API endpoint and token (see [Remote Access](#remote-access))
